@@ -466,6 +466,26 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
           }
           break;
 
+        case 'precise_click':
+          if (step.target) {
+            // PRECISION ENHANCEMENT: More precise clicking with element validation
+            await this.preciseClick(session, step.target, logs);
+          }
+          break;
+
+        case 'analyze_page':
+          // PRECISION ENHANCEMENT: Analyze page structure before actions
+          await this.analyzePage(session, logs);
+          break;
+
+        case 'validate_element':
+          if (step.target) {
+            // PRECISION ENHANCEMENT: Validate element exists and is interactable
+            const isValid = await this.validateElement(session, step.target, logs);
+            step.extractedData = { elementValid: isValid };
+          }
+          break;
+
         case 'type':
           if (step.target && step.value) {
             await session.page.fill(step.target, step.value);
@@ -538,6 +558,134 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
       this.log('❌ Step execution failed', { step: step.action, error: step.error });
       
       // Don't throw - continue with next steps
+    }
+  }
+
+  /**
+   * PRECISION ENHANCEMENT: Analyze page structure for better targeting
+   */
+  private async analyzePage(session: BrowserSession, logs: string[]): Promise<void> {
+    try {
+      // Take screenshot first
+      await session.page.screenshot({ path: 'page-analysis.png', fullPage: false });
+      logs.push(`📸 Page analysis screenshot captured`);
+
+      // Get page title and URL for context
+      const title = await session.page.title();
+      const url = session.page.url();
+      logs.push(`🔍 Page Analysis: ${title} (${url})`);
+
+      // Analyze visible interactive elements
+      const interactiveElements = await session.page.evaluate(() => {
+        const elements = Array.from(document.querySelectorAll('button, a, input, select, [role="button"], [onclick]'));
+        return elements.map(el => ({
+          tagName: el.tagName.toLowerCase(),
+          id: el.id,
+          className: el.className,
+          textContent: el.textContent?.trim().substring(0, 50),
+          visible: el.offsetParent !== null,
+          rect: el.getBoundingClientRect()
+        }));
+      });
+
+      logs.push(`🎯 Found ${interactiveElements.length} interactive elements`);
+      logs.push(`📋 Key elements: ${interactiveElements.slice(0, 5).map(el => `${el.tagName}${el.id ? '#' + el.id : ''}${el.className ? '.' + el.className.split(' ')[0] : ''}`).join(', ')}`);
+
+    } catch (error) {
+      logs.push(`⚠️ Page analysis failed: ${error}`);
+    }
+  }
+
+  /**
+   * PRECISION ENHANCEMENT: Validate element before interaction
+   */
+  private async validateElement(session: BrowserSession, target: string, logs: string[]): Promise<boolean> {
+    try {
+      const element = await session.page.locator(target);
+      
+      // Check if element exists
+      const count = await element.count();
+      if (count === 0) {
+        logs.push(`❌ Element not found: ${target}`);
+        return false;
+      }
+
+      // Check if element is visible
+      const isVisible = await element.isVisible();
+      if (!isVisible) {
+        logs.push(`👻 Element not visible: ${target}`);
+        return false;
+      }
+
+      // Check if element is enabled (for interactive elements)
+      try {
+        const isEnabled = await element.isEnabled();
+        if (!isEnabled) {
+          logs.push(`🚫 Element disabled: ${target}`);
+          return false;
+        }
+      } catch {
+        // Some elements don't have enabled state, that's ok
+      }
+
+      logs.push(`✅ Element validated: ${target}`);
+      return true;
+
+    } catch (error) {
+      logs.push(`⚠️ Element validation failed for ${target}: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * PRECISION ENHANCEMENT: Precise clicking with coordinate validation
+   */
+  private async preciseClick(session: BrowserSession, target: string, logs: string[]): Promise<void> {
+    try {
+      // First validate the element
+      const isValid = await this.validateElement(session, target, logs);
+      if (!isValid) {
+        logs.push(`❌ Precise click aborted - element validation failed: ${target}`);
+        return;
+      }
+
+      const element = await session.page.locator(target);
+      
+      // Get element bounds for precise clicking
+      const boundingBox = await element.boundingBox();
+      if (boundingBox) {
+        // Calculate center coordinates for precise click
+        const centerX = boundingBox.x + boundingBox.width / 2;
+        const centerY = boundingBox.y + boundingBox.height / 2;
+        
+        // Scroll element into view if needed
+        await element.scrollIntoViewIfNeeded();
+        
+        // Wait a moment for any animations to complete
+        await session.page.waitForTimeout(100);
+        
+        // Click at precise coordinates
+        await session.page.mouse.click(centerX, centerY);
+        logs.push(`🎯 Precise click at coordinates (${Math.round(centerX)}, ${Math.round(centerY)}) for: ${target}`);
+        
+      } else {
+        // Fallback to regular click if bounding box not available
+        await element.click();
+        logs.push(`🖱️ Fallback click (no coordinates): ${target}`);
+      }
+
+      // Wait briefly to ensure click was processed
+      await session.page.waitForTimeout(50);
+
+    } catch (error) {
+      logs.push(`❌ Precise click failed for ${target}: ${error}`);
+      // Try regular click as final fallback
+      try {
+        await session.page.click(target);
+        logs.push(`🔄 Fallback to regular click succeeded: ${target}`);
+      } catch (fallbackError) {
+        logs.push(`💥 All click methods failed for ${target}: ${fallbackError}`);
+      }
     }
   }
 

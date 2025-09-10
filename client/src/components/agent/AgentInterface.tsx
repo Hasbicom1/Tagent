@@ -59,6 +59,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [realTimeRemaining, setRealTimeRemaining] = useState(initialTimeRemaining);
   const [historyView, setHistoryView] = useState<'all' | 'chat' | 'commands'>('all');
+  const [precisionMode, setPrecisionMode] = useState(true); // PRECISION ENHANCEMENT: Enable by default
   const { toast } = useToast();
 
   // Fetch session info
@@ -606,6 +607,26 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
               </div>
 
               {/* Command Input */}
+              {/* PRECISION ENHANCEMENT: Precision Mode Toggle */}
+              <div className="flex items-center gap-4 mb-3 px-2">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-primary" />
+                  <label htmlFor="precision-mode" className="text-sm font-mono text-muted-foreground">
+                    Precision Mode
+                  </label>
+                  <input
+                    id="precision-mode"
+                    type="checkbox"
+                    checked={precisionMode}
+                    onChange={(e) => setPrecisionMode(e.target.checked)}
+                    className="rounded border-primary/30 bg-background"
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground font-mono">
+                  {precisionMode ? '🎯 Page analysis + precise clicks enabled' : '⚡ Fast mode - direct actions'}
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <span className="text-primary font-mono text-sm pt-3">$</span>
                 <Input
@@ -617,7 +638,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Type natural language or slash commands (/summarize, /translate, /analyze)..."
+                  placeholder={precisionMode 
+                    ? "Type commands - AI will analyze page first for precision..." 
+                    : "Type natural language or slash commands (/summarize, /translate, /analyze)..."
+                  }
                   disabled={isExecuting}
                   className="flex-1 font-mono bg-background/50 border-primary/20"
                   data-testid="input-command-line"
@@ -630,6 +654,8 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                 >
                   {sendMessageMutation.isPending ? (
                     <Activity className="w-4 h-4 animate-spin" />
+                  ) : precisionMode ? (
+                    <Eye className="w-4 h-4" />
                   ) : (
                     <Send className="w-4 h-4" />
                   )}

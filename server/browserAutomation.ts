@@ -46,8 +46,8 @@ export class BrowserAgent {
       sanitizedLength: safeInstruction.length
     });
     
-    // Use OpenAI to plan the automation steps with sanitized input
-    const steps = await this.planAutomationSteps(safeInstruction);
+    // PRECISION ENHANCEMENT: Add page analysis step at the beginning
+    const steps = await this.planAutomationStepsWithAnalysis(safeInstruction);
     
     const task: AutomationTask = {
       id: taskId,
@@ -92,6 +92,95 @@ export class BrowserAgent {
 
   async getTask(taskId: string): Promise<AutomationTask | undefined> {
     return this.tasks.get(taskId);
+  }
+
+  // PRECISION ENHANCEMENT: New method with page analysis
+  private async planAutomationStepsWithAnalysis(instruction: string): Promise<AutomationStep[]> {
+    try {
+      // SECURITY FIX: Input has already been validated by createTask, but double-check
+      const safeInstruction = validateAIInput(instruction);
+      
+      // PRECISION ENHANCEMENT: Use enhanced prompt with page analysis
+      const promptTemplate = `You are PHOENIX-7742, an advanced precision browser automation agent. Plan the detailed steps to execute this task with maximum precision:
+
+TASK: "{USER_INPUT}"
+
+IMPORTANT: For maximum precision, ALWAYS start with page analysis:
+1. Take screenshot to understand page layout
+2. Analyze page structure and elements
+3. Identify precise selectors for target elements
+4. Use coordinate-based clicking when needed
+5. Validate elements before interaction
+
+Create a step-by-step execution plan starting with analysis, then precise actions:
+[
+  {
+    "action": "analyze_page",
+    "target": "full_page",
+    "description": "Take screenshot and analyze page structure for precise element targeting"
+  },
+  {
+    "action": "screenshot", 
+    "target": "viewport",
+    "description": "Capture current page state for analysis"
+  },
+  {
+    "action": "wait_for_selector",
+    "target": "button[data-testid='submit']",
+    "description": "Wait for target element to be available"
+  },
+  {
+    "action": "validate_element",
+    "target": "button[data-testid='submit']", 
+    "description": "Verify element exists and is clickable"
+  },
+  {
+    "action": "precise_click",
+    "target": "button[data-testid='submit']",
+    "description": "Click with pixel-perfect precision"
+  }
+]
+
+Available actions: analyze_page, screenshot, navigate, precise_click, click, type, scroll, wait, wait_for_selector, extract_text, extract_data, validate_element, press_key
+Always prioritize precision and element validation over speed.`;
+
+      // Create safe prompt with sanitized input
+      const prompt = createSafePrompt(promptTemplate, safeInstruction);
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4", // Using gpt-4 for better compatibility
+        messages: [
+          {
+            role: "system",
+            content: "You are PHOENIX-7742, a precision browser automation expert. Always start with page analysis for maximum accuracy. Plan detailed, executable steps with element validation."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1, // Lower temperature for more precise planning
+        max_tokens: 1200
+      });
+
+      const planning = JSON.parse(response.choices[0].message.content || '{"steps": []}');
+      const steps = (planning.steps || planning || []).map((step: any, index: number) => ({
+        id: `step_${index + 1}`,
+        action: step.description || `${step.action} ${step.target || ''}`.trim(),
+        target: step.target,
+        value: step.value,
+        timestamp: new Date(),
+        status: 'pending' as const
+      }));
+
+      return steps.length > 0 ? steps : this.planAutomationSteps(instruction);
+
+    } catch (error: any) {
+      console.error('AI precision planning error:', error);
+      // Fallback to standard planning
+      return this.planAutomationSteps(instruction);
+    }
   }
 
   private async planAutomationSteps(instruction: string): Promise<AutomationStep[]> {
