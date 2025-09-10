@@ -113,7 +113,8 @@ export type TaskResult = typeof taskResults.$inferSelect;
 
 // SECURITY ENHANCEMENT: Comprehensive API Request/Response Validation Schemas
 export const createCheckoutSessionSchema = z.object({
-  csrfToken: z.string().min(16, "CSRF token required for security")
+  // TEMPORARY: CSRF token made optional until frontend implementation
+  csrfToken: z.string().min(16, "CSRF token required for security").optional()
 });
 
 export const checkoutSuccessSchema = z.object({
@@ -121,7 +122,8 @@ export const checkoutSuccessSchema = z.object({
     .min(20, "Liberation session ID too short")
     .max(200, "Liberation session ID too long")
     .refine(id => /^cs_[a-zA-Z0-9_-]+$/.test(id), "Invalid Stripe session ID format"),
-  csrfToken: z.string().min(16, "CSRF token required for security")
+  // TEMPORARY: CSRF token made optional until frontend implementation  
+  csrfToken: z.string().min(16, "CSRF token required for security").optional()
 });
 
 export const sessionMessageSchema = z.object({
