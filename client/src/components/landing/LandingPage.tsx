@@ -37,7 +37,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">AGENT_HQ</span>
+              <span className="text-lg font-bold">AGENT FOR ALL</span>
               <Badge variant="outline" className="text-xs font-mono border-primary/30">
                 v2.0.1
               </Badge>
@@ -78,7 +78,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   $ ./initialize_agent_session --premium
                 </div>
                 <div className="text-muted-foreground font-mono text-sm space-y-1">
-                  <div>Initializing AI Agent PHOENIX-7742...</div>
+                  <div>Initializing AI Agent UNIVERSAL-1...</div>
                   <div>Loading neural networks... ████████████ 100%</div>
                   <div>Establishing secure connection... ✓</div>
                   <div>Agent status: <span className="text-chart-2">READY</span></div>
@@ -90,11 +90,13 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   <div className="space-y-4">
                     <Badge variant="secondary" className="text-sm font-mono border-primary/30">
                       <Activity className="w-3 h-3 mr-2" />
-                      AUTONOMOUS_AI_AGENT
+                      AI_FOR_EVERYONE
                     </Badge>
                     
                     <h1 className="text-4xl lg:text-6xl font-bold tracking-tight">
-                      <span className="text-foreground">BREAK FREE</span>
+                      <span className="text-primary text-5xl lg:text-7xl">AGENT</span>
+                      <span className="text-foreground"> FOR </span>
+                      <span className="text-primary text-5xl lg:text-7xl">ALL</span>
                       <br />
                       <span className="text-foreground">PAY </span>
                       <span className="text-primary text-5xl lg:text-7xl">$1</span>
@@ -106,19 +108,19 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </div>
                   
                   <p className="text-lg text-muted-foreground max-w-3xl mx-auto font-sans">
-                    Tired of Big Tech subscription traps? Get <span className="text-primary font-mono">PHOENIX-7742</span> — 
-                    a fully autonomous AI agent that's <strong>yours</strong> for 24 hours. No monthly fees, no vendor lock-in, just raw AI power.
+                    AI belongs to <strong>everyone</strong>, not just Silicon Valley elites. Get <span className="text-primary font-mono">UNIVERSAL-1</span> — 
+                    your personal AI agent that's <strong>yours</strong> for 24 hours. Break free from subscription slavery. AI democracy starts with $1.
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
                     <Button 
                       size="lg" 
-                      className="text-lg px-8 py-6 font-mono hover-elevate group"
+                      className="text-lg px-8 py-6 font-mono group"
                       onClick={onStartPayment}
                       data-testid="button-deploy-agent"
                     >
                       <Terminal className="w-5 h-5 mr-2" />
-BREAK FREE • PAY $1
+AGENT FOR ALL • $1
                       <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </div>
@@ -223,7 +225,7 @@ BREAK FREE • PAY $1
               TECHNICAL_SPECIFICATIONS
             </h2>
             <p className="text-muted-foreground font-sans">
-              Professional-grade infrastructure powering your AI agent
+              Enterprise-grade infrastructure accessible to everyone
             </p>
           </div>
 
@@ -297,7 +299,7 @@ BREAK FREE • PAY $1
               READY_TO_DEPLOY?
             </h2>
             <p className="text-xl text-muted-foreground font-sans max-w-2xl mx-auto">
-              One dollar. Total freedom. No corporate overlords deciding your AI fate.
+              AI for everyone, not just the wealthy. One dollar breaks down the barriers.
             </p>
           </div>
           
@@ -322,8 +324,8 @@ BREAK FREE • PAY $1
                 </div>
                 
                 <div className="bg-card/50 rounded border border-primary/10 p-4 space-y-2 text-left font-mono text-sm">
-                  <div className="text-muted-foreground">// Your freedom includes:</div>
-                  <div className="text-chart-2">✓ Full PHOENIX-7742 ownership</div>
+                  <div className="text-muted-foreground">// Democracy includes:</div>
+                  <div className="text-chart-2">✓ Full UNIVERSAL-1 ownership</div>
                   <div className="text-chart-2">✓ Zero usage restrictions</div>
                   <div className="text-chart-2">✓ Complete browser control</div>
                   <div className="text-chart-2">✓ No corporate monitoring</div>
@@ -337,15 +339,15 @@ BREAK FREE • PAY $1
                   data-testid="button-initialize-payment"
                 >
                   <Command className="w-5 h-5 mr-2" />
-ESCAPE THE SUBSCRIPTION TRAP
+JOIN THE AI REVOLUTION
                 </Button>
               </div>
             </div>
           </Card>
 
           <div className="text-sm text-muted-foreground font-mono space-y-1">
-            <div>Pay once, own it • No surveillance capitalism • Your data stays yours</div>
-            <div>No account prisons • No subscription slavery • No Big Tech gatekeepers</div>
+            <div>AI for all • No surveillance capitalism • Your intelligence, your rules</div>
+            <div>No subscription slavery • No Big Tech gatekeepers • True AI democracy</div>
           </div>
         </div>
       </div>
@@ -354,8 +356,8 @@ ESCAPE THE SUBSCRIPTION TRAP
       <div className="border-t border-primary/20 bg-card/30">
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-            <div>AGENT_HQ © 2025 • Liberating AI from corporate control</div>
-            <div>Built for rebels who refuse Big Tech subscription slavery</div>
+            <div>AGENT FOR ALL © 2025 • Democratizing AI for everyone</div>
+            <div>Built for people who believe AI should serve all, not just the elite</div>
           </div>
         </div>
       </div>
