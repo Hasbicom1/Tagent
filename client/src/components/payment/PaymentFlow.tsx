@@ -118,7 +118,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
                 AGENT FOR ALL
               </h1>
               <p className="text-lg text-muted-foreground font-sans">
-                AI for everyone, not just elites. Own UNIVERSAL-1 for 24 hours. Just $1.00.
+                <strong>Break free from Big Tech.</strong> Own UNIVERSAL-1 for 24 hours. No subscriptions, no traps. Just <span className="text-primary">$1.00</span>.
               </p>
             </div>
 
@@ -130,10 +130,10 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
                   <span className="font-mono text-2xl font-bold text-primary">$1.00</span>
                 </div>
                 <div className="text-sm text-muted-foreground font-mono space-y-1">
-                  <div>✓ Complete UNIVERSAL-1 ownership</div>
-                  <div>✓ Zero corporate restrictions</div>
-                  <div>✓ Full browser automation</div>
-                  <div>✓ AI for everyone, not elites</div>
+                  <div>✓ Complete UNIVERSAL-1 ownership (not rental)</div>
+                  <div>✓ Zero corporate restrictions (true freedom)</div>
+                  <div>✓ Full browser automation (unlimited power)</div>
+                  <div>✓ No subscription slavery (pay once, own it)</div>
                 </div>
               </div>
             </Card>
@@ -154,7 +154,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
                 ) : (
                   <>
                     <CreditCard className="w-5 h-5 mr-2" />
-JOIN AGENT FOR ALL
+ESCAPE BIG TECH AI • $1
                     <ExternalLink className="w-4 h-4 ml-2" />
                   </>
                 )}
@@ -165,8 +165,8 @@ JOIN AGENT FOR ALL
                   <Shield className="w-4 h-4" />
                   <span>Agent For All payment via Stripe (we don't see your card)</span>
                 </div>
-                <div>24-hour ownership • Zero subscriptions • AI for everyone</div>
-                <div className="text-xs">Secure democratic payment via Stripe's independent fortress</div>
+                <div>24-hour ownership • No subscription traps • Freedom from Big Tech control</div>
+                <div className="text-xs">Secure payment via independent Stripe (we never see your card details)</div>
               </div>
             </div>
           </div>

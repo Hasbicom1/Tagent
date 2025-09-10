@@ -110,10 +110,10 @@ AGENT_ACTIVATED
                     $ ./activate_agent --universal-access-granted
                   </div>
                   <div className="text-muted-foreground font-mono text-sm space-y-1">
-                    <div>Agent For All activated successfully... ✓</div>
-                    <div>UNIVERSAL-1 deployed and ready... ✓</div>
+                    <div>Big Tech barriers bypassed... ✓</div>
+                    <div>UNIVERSAL-1 liberated and ready... ✓</div>
                     <div>AI democratization enabled... ✓</div>
-                    <div>Agent For All network connected... ✓</div>
+                    <div>Corporate surveillance blocked... ✓</div>
                   </div>
                 </div>
 
@@ -121,8 +121,8 @@ AGENT_ACTIVATED
                   AGENT_ACTIVATED
                 </h1>
                 <p className="text-lg text-muted-foreground font-sans max-w-2xl mx-auto">
-                  Welcome to Agent For All. UNIVERSAL-1 is yours for 24 hours.
-                  No gatekeepers. No barriers. Just democratized AI power at your command.
+                  <strong>FREEDOM ACTIVATED.</strong> UNIVERSAL-1 is <em>yours</em> for 24 hours.
+                  No gatekeepers. No subscription chains. No Big Tech overlords. <span className="text-primary">Pure AI power at your command.</span>
                 </p>
               </div>
             </div>
@@ -206,7 +206,7 @@ AGENT_ACTIVATED
                 </div>
                 
                 <div className="text-xs text-muted-foreground font-mono">
-                  // Your 24-hour Agent For All link - bookmark for universal AI access
+                  // Your liberation link - 24 hours of AI freedom, no subscription required
                 </div>
               </div>
             </Card>
@@ -224,7 +224,7 @@ ACCESS YOUR AGENT
               </Button>
               
               <div className="text-sm text-muted-foreground font-mono">
-                Enter Agent For All - democratized AI at your command
+                Enter your liberated AI realm - no subscriptions, no limits, no corporate control
               </div>
             </div>
           </div>
@@ -311,7 +311,7 @@ ACCESS YOUR AGENT
             </div>
             
             <div className="text-xs font-mono text-muted-foreground">
-              Support for your 24-hour AI democracy session
+              Support for your AI liberation - no corporate middlemen, just direct help
             </div>
           </div>
         </Card>
