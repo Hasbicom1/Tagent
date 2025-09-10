@@ -577,8 +577,8 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
 
       // Analyze visible interactive elements
       const interactiveElements = await session.page.evaluate(() => {
-        const elements = Array.from(document.querySelectorAll('button, a, input, select, [role="button"], [onclick]'));
-        return elements.map(el => ({
+        const elements = Array.from((globalThis as any).document.querySelectorAll('button, a, input, select, [role="button"], [onclick]'));
+        return elements.map((el: any) => ({
           tagName: el.tagName.toLowerCase(),
           id: el.id,
           className: el.className,

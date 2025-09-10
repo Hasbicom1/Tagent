@@ -39,7 +39,7 @@ export class BrowserAgent {
     const safeInstruction = validateAIInput(instruction);
     
     // Log security event for monitoring
-    logSecurityEvent('browser_automation_task_creation', {
+    logSecurityEvent('ai_operation_abuse', {
       taskId,
       sessionId,
       instructionLength: instruction.length,
@@ -252,7 +252,7 @@ Focus on real-world browser interactions that accomplish the user's goal.`;
       console.error('AI step planning error:', error);
       
       // Log security event for potential attack attempts
-      logSecurityEvent('browser_automation_planning_error', {
+      logSecurityEvent('ai_operation_abuse', {
         errorMessage: error.message,
         errorType: error.name,
         instruction: instruction.substring(0, 100) // Log only first 100 chars for security
@@ -378,7 +378,7 @@ Return as JSON: { "summary": "result text", "success": true, "data": {...} }`;
       console.error('Result generation error:', error);
       
       // Log security event
-      logSecurityEvent('browser_automation_result_error', {
+      logSecurityEvent('ai_operation_abuse', {
         errorMessage: error.message,
         taskId: task.id,
         sessionId: task.sessionId
