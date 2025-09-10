@@ -2,9 +2,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
+import { analyzeTask, generateInitialMessage } from "./openai";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('Missing required OpenAI secret: OPENAI_API_KEY');
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -60,11 +65,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true
       });
 
-      // Create initial agent message
+      // Create initial agent message using OpenAI
+      const initialMessage = await generateInitialMessage();
       await storage.createMessage({
         sessionId: session.id,
         role: "agent",
-        content: "PHOENIX-7742 NEURAL NETWORK ONLINE\n\nAutonomous agent initialized and ready for task deployment.\nProvide task parameters and I will execute with full transparency.\n\nWhat would you like me to accomplish?",
+        content: initialMessage,
         hasExecutableTask: false,
         taskDescription: null
       });
@@ -162,15 +168,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         taskDescription: null
       });
 
-      // Generate agent response
-      const agentResponse = analyzeTask(content);
+      // Generate agent response using OpenAI
+      const agentResponse = await analyzeTask(content);
       
       const agentMessage = await storage.createMessage({
         sessionId: session.id,
         role: "agent",
         content: agentResponse.response,
         hasExecutableTask: agentResponse.isExecutable,
-        taskDescription: agentResponse.task
+        taskDescription: agentResponse.taskDescription
       });
 
       res.json({
@@ -246,48 +252,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Helper function to analyze user tasks
-function analyzeTask(message: string) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('amazon') || lowerMessage.includes('shop') || lowerMessage.includes('buy')) {
-    return {
-      response: 'E-COMMERCE AUTOMATION DETECTED\n\nI will navigate to the target shopping platform, perform product searches, analyze pricing data, check availability, and can handle cart operations.\n\nReady to execute autonomous shopping workflow.',
-      isExecutable: true,
-      task: 'E-commerce automation and price comparison'
-    };
-  }
-  
-  if (lowerMessage.includes('linkedin') || lowerMessage.includes('social') || lowerMessage.includes('post')) {
-    return {
-      response: 'SOCIAL MEDIA AUTOMATION IDENTIFIED\n\nI will handle social media platform navigation, content creation, posting workflows, engagement tracking, and audience analysis.\n\nReady to execute social media management sequence.',
-      isExecutable: true,
-      task: 'Social media management and automation'
-    };
-  }
-  
-  if (lowerMessage.includes('form') || lowerMessage.includes('fill') || lowerMessage.includes('submit')) {
-    return {
-      response: 'FORM AUTOMATION PROTOCOL ACTIVATED\n\nI will navigate to target forms, analyze field requirements, populate data intelligently, handle validation errors, and complete submissions.\n\nReady to execute form processing workflow.',
-      isExecutable: true,
-      task: 'Automated form filling and submission'
-    };
-  }
-  
-  if (lowerMessage.includes('data') || lowerMessage.includes('scrape') || lowerMessage.includes('extract')) {
-    return {
-      response: 'DATA EXTRACTION SYSTEM ONLINE\n\nI will systematically navigate target sites, extract structured information, handle pagination, process dynamic content, and compile results.\n\nReady to execute data collection protocol.',
-      isExecutable: true,
-      task: 'Web data extraction and scraping'
-    };
-  }
-  
-  return {
-    response: 'TASK ANALYSIS COMPLETE\n\nI have processed your request and developed an execution plan. I will handle all browser interactions, data processing, and result compilation autonomously.\n\nReady to execute when you give the command.',
-    isExecutable: true,
-    task: 'General web automation task'
-  };
-}
 
 // Simulate browser automation task execution
 async function simulateTaskExecution(executionId: string, storage: any) {
