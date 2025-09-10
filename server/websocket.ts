@@ -2,7 +2,13 @@ import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { IncomingMessage } from 'http';
 import { Server as HTTPServer } from 'http';
 import { Redis } from 'ioredis';
-import { validateWebSocketOrigin, logSecurityEvent, validateJWTToken } from './security';
+import { 
+  validateWebSocketOrigin, 
+  logSecurityEvent, 
+  validateJWTToken,
+  MultiLayerRateLimiter,
+  DEFAULT_RATE_LIMIT_CONFIG
+} from './security';
 import { 
   WSMessageType, 
   SubscriptionType, 
@@ -27,6 +33,10 @@ interface ExtendedWebSocket extends WebSocket {
   state: WSConnectionState;
   pingTimeout?: NodeJS.Timeout;
   lastActivity: Date;
+  userId?: string;
+  ipAddress: string;
+  messageCount: number;
+  taskCount: number;
 }
 
 export class WebSocketManager {
@@ -37,6 +47,7 @@ export class WebSocketManager {
   private config: WSServerConfig;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private redisSubscriber: Redis | null = null;
+  private rateLimiter: MultiLayerRateLimiter | null = null;
 
   constructor(config: Partial<WSServerConfig> = {}) {
     this.config = { ...DEFAULT_WS_CONFIG, ...config };
@@ -52,16 +63,24 @@ export class WebSocketManager {
         await this.initializeRedis();
       }
 
+      // Initialize rate limiter with Redis connection
+      if (this.redis) {
+        this.rateLimiter = new MultiLayerRateLimiter(this.redis, DEFAULT_RATE_LIMIT_CONFIG);
+        log('✅ WS: Rate limiter initialized with Redis backend');
+      } else {
+        log('⚠️  WS: Rate limiter disabled - Redis not available');
+      }
+
       // Create WebSocket server with enhanced security
       this.wss = new WebSocketServer({ 
         server,
         path: '/ws',
         maxPayload: 64 * 1024, // 64KB max message size
-        // SECURITY FIX: Add origin validation to prevent cross-origin attacks
-        verifyClient: (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
+        // SECURITY FIX: Add origin validation and rate limiting to prevent attacks
+        verifyClient: async (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
           const origin = info.origin;
           const userAgent = info.req.headers['user-agent'];
-          const clientIP = info.req.socket.remoteAddress;
+          const clientIP = info.req.socket.remoteAddress || '127.0.0.1';
           
           // Validate origin against allowlist
           const isValidOrigin = validateWebSocketOrigin(origin);
@@ -75,9 +94,22 @@ export class WebSocketManager {
             });
             return false;
           }
+
+          // Check WebSocket connection rate limiting
+          if (this.rateLimiter) {
+            const rateLimitOk = await this.rateLimiter.checkWebSocketConnection(clientIP);
+            if (!rateLimitOk) {
+              logSecurityEvent('websocket_connection_rate_limited', {
+                clientIP,
+                userAgent,
+                origin
+              });
+              return false;
+            }
+          }
           
-          // Log successful origin validation
-          logSecurityEvent('websocket_origin_validated', {
+          // Log successful connection validation
+          logSecurityEvent('websocket_connection_accepted', {
             origin,
             clientIP
           });
@@ -156,8 +188,11 @@ export class WebSocketManager {
       origin
     });
     
-    // Initialize connection state
+    // Initialize connection state with rate limiting tracking
     extendedWs.connectionId = connectionId;
+    extendedWs.ipAddress = clientIP || '127.0.0.1';
+    extendedWs.messageCount = 0;
+    extendedWs.taskCount = 0;
     extendedWs.state = {
       isConnected: true,
       connectionId,
@@ -187,15 +222,57 @@ export class WebSocketManager {
   }
 
   /**
-   * Handle incoming WebSocket message
+   * Handle incoming WebSocket message with rate limiting
    */
   private async handleMessage(ws: ExtendedWebSocket, data: RawData): Promise<void> {
     try {
       ws.lastActivity = new Date();
+      ws.messageCount += 1;
       
+      // Parse and validate message
       const message = JSON.parse(Buffer.isBuffer(data) ? data.toString() : data.toString());
       const validatedMessage = clientMessageSchema.parse(message);
 
+      // Check message rate limiting for authenticated users
+      if (ws.userId && this.rateLimiter) {
+        const rateLimitOk = await this.rateLimiter.checkWebSocketMessage(ws.userId);
+        if (!rateLimitOk) {
+          logSecurityEvent('websocket_message_rate_limited', {
+            userId: ws.userId,
+            connectionId: ws.connectionId,
+            messageType: validatedMessage.type,
+            messageCount: ws.messageCount
+          });
+          
+          this.sendError(ws, 'Message rate limit exceeded', 'RATE_LIMIT_EXCEEDED');
+          return;
+        }
+      }
+
+      // Check task submission rate limiting for task-related messages
+      const isTaskMessage = this.isTaskRelatedMessage(validatedMessage);
+      if (isTaskMessage && ws.userId && this.rateLimiter) {
+        const taskRateLimitOk = await this.rateLimiter.checkWebSocketTask(ws.userId);
+        if (!taskRateLimitOk) {
+          ws.taskCount += 1;
+          
+          logSecurityEvent('websocket_task_rate_limited', {
+            userId: ws.userId,
+            connectionId: ws.connectionId,
+            messageType: validatedMessage.type,
+            taskCount: ws.taskCount
+          });
+          
+          this.sendError(ws, 'Task submission rate limit exceeded', 'TASK_RATE_LIMIT_EXCEEDED');
+          return;
+        }
+        
+        if (isTaskMessage) {
+          ws.taskCount += 1;
+        }
+      }
+
+      // Process message based on type
       switch (validatedMessage.type) {
         case WSMessageType.AUTHENTICATE:
           await this.handleAuthentication(ws, validatedMessage);
@@ -220,6 +297,17 @@ export class WebSocketManager {
       log(`❌ WS: Message handling error [${ws.connectionId}]: ${error}`);
       this.sendError(ws, 'Invalid message format', 'INVALID_MESSAGE');
     }
+  }
+
+  /**
+   * Check if a message is task-related for rate limiting
+   */
+  private isTaskRelatedMessage(message: any): boolean {
+    // Add logic to identify task-related messages based on your message structure
+    // This is a placeholder - adjust based on your actual message types
+    return message.type === 'TASK_SUBMIT' || 
+           message.type === 'EXECUTE_TASK' ||
+           (message.type === 'SUBSCRIBE' && message.subscription?.includes('task'));
   }
 
   /**

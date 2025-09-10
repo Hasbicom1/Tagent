@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
+import { Request, Response, NextFunction } from 'express';
+import { Redis } from 'ioredis';
 
 // Security Configuration
 export interface SecurityConfig {
@@ -10,6 +12,447 @@ export interface SecurityConfig {
   sessionTimeout: number;
   rateLimitWindow: number;
   rateLimitMax: number;
+}
+
+// Rate Limiting Configuration
+export interface RateLimitConfig {
+  // Global platform limits
+  globalLimit: {
+    windowMs: number;
+    max: number;
+    skipSuccessfulRequests: boolean;
+  };
+  
+  // Per-user limits for authenticated users
+  userLimit: {
+    windowMs: number;
+    max: number;
+    aiOperationsMax: number;
+  };
+  
+  // Payment endpoint limits
+  paymentLimit: {
+    windowMs: number;
+    max: number;
+  };
+  
+  // WebSocket rate limits
+  websocketLimit: {
+    connectionLimit: number;
+    messageLimit: number;
+    taskLimit: number;
+    windowMs: number;
+  };
+}
+
+// Default rate limiting configuration
+export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
+  globalLimit: {
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // 100 requests per minute per IP
+    skipSuccessfulRequests: false
+  },
+  userLimit: {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 1000, // 1000 requests per hour for authenticated users
+    aiOperationsMax: 50 // 50 AI operations per hour per user
+  },
+  paymentLimit: {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10 // 10 payment attempts per hour per IP
+  },
+  websocketLimit: {
+    connectionLimit: 10, // connections per minute per IP
+    messageLimit: 60, // messages per minute per user
+    taskLimit: 5, // task submissions per minute per user
+    windowMs: 60 * 1000 // 1 minute
+  }
+};
+
+// Rate limit violation types
+export enum RateLimitViolationType {
+  GLOBAL_LIMIT = 'global_limit',
+  USER_LIMIT = 'user_limit',
+  AI_OPERATIONS_LIMIT = 'ai_operations_limit',
+  PAYMENT_LIMIT = 'payment_limit',
+  WEBSOCKET_CONNECTION_LIMIT = 'websocket_connection_limit',
+  WEBSOCKET_MESSAGE_LIMIT = 'websocket_message_limit',
+  WEBSOCKET_TASK_LIMIT = 'websocket_task_limit'
+}
+
+// Redis Rate Limiting Store
+export class RedisRateLimitStore {
+  private redis: Redis;
+  private keyPrefix: string;
+
+  constructor(redis: Redis, keyPrefix = 'rate_limit:') {
+    this.redis = redis;
+    this.keyPrefix = keyPrefix;
+  }
+
+  /**
+   * Increment rate limit counter and return current count
+   */
+  async increment(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+    const redisKey = `${this.keyPrefix}${key}`;
+    const now = Date.now();
+    const windowStart = Math.floor(now / windowMs) * windowMs;
+    const resetTime = windowStart + windowMs;
+
+    // Use pipeline for atomic operations
+    const pipeline = this.redis.pipeline();
+    pipeline.incr(redisKey);
+    pipeline.expire(redisKey, Math.ceil(windowMs / 1000));
+    
+    const results = await pipeline.exec();
+    const count = results?.[0]?.[1] as number || 1;
+
+    return { count, resetTime };
+  }
+
+  /**
+   * Get current rate limit count
+   */
+  async get(key: string): Promise<number> {
+    const redisKey = `${this.keyPrefix}${key}`;
+    const count = await this.redis.get(redisKey);
+    return count ? parseInt(count, 10) : 0;
+  }
+
+  /**
+   * Reset rate limit counter
+   */
+  async reset(key: string): Promise<void> {
+    const redisKey = `${this.keyPrefix}${key}`;
+    await this.redis.del(redisKey);
+  }
+
+  /**
+   * Add to blacklist for progressive penalties
+   */
+  async addToBlacklist(ip: string, durationMs: number): Promise<void> {
+    const blacklistKey = `${this.keyPrefix}blacklist:${ip}`;
+    await this.redis.setex(blacklistKey, Math.ceil(durationMs / 1000), '1');
+  }
+
+  /**
+   * Check if IP is blacklisted
+   */
+  async isBlacklisted(ip: string): Promise<boolean> {
+    const blacklistKey = `${this.keyPrefix}blacklist:${ip}`;
+    const result = await this.redis.get(blacklistKey);
+    return result !== null;
+  }
+}
+
+// Multi-Layer Rate Limiting Manager
+export class MultiLayerRateLimiter {
+  private store: RedisRateLimitStore;
+  private config: RateLimitConfig;
+
+  constructor(redis: Redis, config: RateLimitConfig = DEFAULT_RATE_LIMIT_CONFIG) {
+    this.store = new RedisRateLimitStore(redis);
+    this.config = config;
+  }
+
+  /**
+   * Create global rate limiting middleware
+   */
+  createGlobalLimiter() {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const clientIP = this.getClientIP(req);
+        
+        // Check if IP is blacklisted
+        if (await this.store.isBlacklisted(clientIP)) {
+          logSecurityEvent('rate_limit_blacklisted_access', { 
+            ip: clientIP, 
+            endpoint: req.path 
+          });
+          return res.status(429).json({ 
+            error: 'Access temporarily restricted due to rate limit violations',
+            retryAfter: 300 // 5 minutes
+          });
+        }
+
+        const key = `global:${clientIP}`;
+        const { count, resetTime } = await this.store.increment(key, this.config.globalLimit.windowMs);
+
+        // Set rate limit headers
+        res.setHeader('X-RateLimit-Limit', this.config.globalLimit.max);
+        res.setHeader('X-RateLimit-Remaining', Math.max(0, this.config.globalLimit.max - count));
+        res.setHeader('X-RateLimit-Reset', Math.floor(resetTime / 1000));
+
+        if (count > this.config.globalLimit.max) {
+          await this.handleRateLimitViolation(clientIP, RateLimitViolationType.GLOBAL_LIMIT, count);
+          return res.status(429).json({
+            error: 'Too many requests from this IP address',
+            retryAfter: Math.ceil(this.config.globalLimit.windowMs / 1000)
+          });
+        }
+
+        next();
+      } catch (error) {
+        console.error('Global rate limiter error:', error);
+        next(); // Continue on error to prevent blocking legitimate requests
+      }
+    };
+  }
+
+  /**
+   * Create user-specific rate limiting middleware
+   */
+  createUserLimiter() {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const userId = this.getUserId(req);
+        if (!userId) {
+          return next(); // Skip if no authenticated user
+        }
+
+        const key = `user:${userId}`;
+        const { count, resetTime } = await this.store.increment(key, this.config.userLimit.windowMs);
+
+        res.setHeader('X-RateLimit-User-Limit', this.config.userLimit.max);
+        res.setHeader('X-RateLimit-User-Remaining', Math.max(0, this.config.userLimit.max - count));
+        res.setHeader('X-RateLimit-User-Reset', Math.floor(resetTime / 1000));
+
+        if (count > this.config.userLimit.max) {
+          await this.handleRateLimitViolation(userId, RateLimitViolationType.USER_LIMIT, count);
+          return res.status(429).json({
+            error: 'User rate limit exceeded',
+            retryAfter: Math.ceil(this.config.userLimit.windowMs / 1000)
+          });
+        }
+
+        next();
+      } catch (error) {
+        console.error('User rate limiter error:', error);
+        next();
+      }
+    };
+  }
+
+  /**
+   * Create AI operations rate limiting middleware
+   */
+  createAIOperationsLimiter() {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const userId = this.getUserId(req);
+        if (!userId) {
+          return res.status(401).json({ error: 'Authentication required for AI operations' });
+        }
+
+        const key = `ai_ops:${userId}`;
+        const { count, resetTime } = await this.store.increment(key, this.config.userLimit.windowMs);
+
+        res.setHeader('X-RateLimit-AI-Limit', this.config.userLimit.aiOperationsMax);
+        res.setHeader('X-RateLimit-AI-Remaining', Math.max(0, this.config.userLimit.aiOperationsMax - count));
+        res.setHeader('X-RateLimit-AI-Reset', Math.floor(resetTime / 1000));
+
+        if (count > this.config.userLimit.aiOperationsMax) {
+          await this.handleRateLimitViolation(userId, RateLimitViolationType.AI_OPERATIONS_LIMIT, count);
+          return res.status(429).json({
+            error: 'AI operations rate limit exceeded',
+            retryAfter: Math.ceil(this.config.userLimit.windowMs / 1000),
+            upgrade: 'Consider upgrading for higher limits'
+          });
+        }
+
+        next();
+      } catch (error) {
+        console.error('AI operations rate limiter error:', error);
+        next();
+      }
+    };
+  }
+
+  /**
+   * Create payment rate limiting middleware
+   */
+  createPaymentLimiter() {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const clientIP = this.getClientIP(req);
+        const key = `payment:${clientIP}`;
+        const { count, resetTime } = await this.store.increment(key, this.config.paymentLimit.windowMs);
+
+        res.setHeader('X-RateLimit-Payment-Limit', this.config.paymentLimit.max);
+        res.setHeader('X-RateLimit-Payment-Remaining', Math.max(0, this.config.paymentLimit.max - count));
+        res.setHeader('X-RateLimit-Payment-Reset', Math.floor(resetTime / 1000));
+
+        if (count > this.config.paymentLimit.max) {
+          await this.handleRateLimitViolation(clientIP, RateLimitViolationType.PAYMENT_LIMIT, count);
+          return res.status(429).json({
+            error: 'Payment rate limit exceeded for security',
+            retryAfter: Math.ceil(this.config.paymentLimit.windowMs / 1000)
+          });
+        }
+
+        next();
+      } catch (error) {
+        console.error('Payment rate limiter error:', error);
+        next();
+      }
+    };
+  }
+
+  /**
+   * WebSocket rate limiting
+   */
+  async checkWebSocketConnection(clientIP: string): Promise<boolean> {
+    try {
+      const key = `ws_conn:${clientIP}`;
+      const { count } = await this.store.increment(key, this.config.websocketLimit.windowMs);
+      
+      if (count > this.config.websocketLimit.connectionLimit) {
+        await this.handleRateLimitViolation(clientIP, RateLimitViolationType.WEBSOCKET_CONNECTION_LIMIT, count);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('WebSocket connection rate limit error:', error);
+      return true; // Allow on error
+    }
+  }
+
+  async checkWebSocketMessage(userId: string): Promise<boolean> {
+    try {
+      const key = `ws_msg:${userId}`;
+      const { count } = await this.store.increment(key, this.config.websocketLimit.windowMs);
+      
+      if (count > this.config.websocketLimit.messageLimit) {
+        await this.handleRateLimitViolation(userId, RateLimitViolationType.WEBSOCKET_MESSAGE_LIMIT, count);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('WebSocket message rate limit error:', error);
+      return true;
+    }
+  }
+
+  async checkWebSocketTask(userId: string): Promise<boolean> {
+    try {
+      const key = `ws_task:${userId}`;
+      const { count } = await this.store.increment(key, this.config.websocketLimit.windowMs);
+      
+      if (count > this.config.websocketLimit.taskLimit) {
+        await this.handleRateLimitViolation(userId, RateLimitViolationType.WEBSOCKET_TASK_LIMIT, count);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('WebSocket task rate limit error:', error);
+      return true;
+    }
+  }
+
+  /**
+   * Handle rate limit violations with progressive penalties
+   */
+  private async handleRateLimitViolation(
+    identifier: string, 
+    type: RateLimitViolationType, 
+    count: number
+  ): Promise<void> {
+    logSecurityEvent('rate_limit_violation', {
+      identifier,
+      type,
+      count,
+      timestamp: new Date().toISOString()
+    });
+
+    // Progressive penalties for repeated violations
+    if (count > this.getThresholdForType(type) * 3) {
+      // Temporary blacklist for severe violations
+      const penaltyDuration = this.calculatePenaltyDuration(count, type);
+      await this.store.addToBlacklist(identifier, penaltyDuration);
+      
+      logSecurityEvent('rate_limit_blacklist_applied', {
+        identifier,
+        type,
+        durationMs: penaltyDuration,
+        violationCount: count
+      });
+    }
+  }
+
+  /**
+   * Get rate limit threshold for violation type
+   */
+  private getThresholdForType(type: RateLimitViolationType): number {
+    switch (type) {
+      case RateLimitViolationType.GLOBAL_LIMIT:
+        return this.config.globalLimit.max;
+      case RateLimitViolationType.USER_LIMIT:
+        return this.config.userLimit.max;
+      case RateLimitViolationType.AI_OPERATIONS_LIMIT:
+        return this.config.userLimit.aiOperationsMax;
+      case RateLimitViolationType.PAYMENT_LIMIT:
+        return this.config.paymentLimit.max;
+      case RateLimitViolationType.WEBSOCKET_CONNECTION_LIMIT:
+        return this.config.websocketLimit.connectionLimit;
+      case RateLimitViolationType.WEBSOCKET_MESSAGE_LIMIT:
+        return this.config.websocketLimit.messageLimit;
+      case RateLimitViolationType.WEBSOCKET_TASK_LIMIT:
+        return this.config.websocketLimit.taskLimit;
+      default:
+        return 100;
+    }
+  }
+
+  /**
+   * Calculate progressive penalty duration
+   */
+  private calculatePenaltyDuration(count: number, type: RateLimitViolationType): number {
+    const baseMs = 5 * 60 * 1000; // 5 minutes base
+    const threshold = this.getThresholdForType(type);
+    const multiplier = Math.floor(count / threshold);
+    
+    // Progressive: 5min, 15min, 30min, 1hr, 2hr max
+    return Math.min(baseMs * Math.pow(3, multiplier - 1), 2 * 60 * 60 * 1000);
+  }
+
+  /**
+   * Extract client IP from request
+   */
+  private getClientIP(req: Request): string {
+    return (
+      req.headers['x-forwarded-for'] as string ||
+      req.headers['x-real-ip'] as string ||
+      req.socket.remoteAddress ||
+      '127.0.0.1'
+    ).split(',')[0].trim();
+  }
+
+  /**
+   * Extract user ID from authenticated request
+   */
+  private getUserId(req: Request): string | null {
+    // Check session for agent ID
+    if ((req as any).session?.agentId) {
+      return (req as any).session.agentId;
+    }
+    
+    // Check for JWT token user ID
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, DEFAULT_SECURITY_CONFIG.jwtSecret) as any;
+        return decoded.userId || decoded.agentId;
+      } catch {
+        // Invalid token, treat as unauthenticated
+      }
+    }
+    
+    return null;
+  }
 }
 
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
@@ -345,21 +788,6 @@ class RateLimiter {
 
 export const rateLimiter = new RateLimiter();
 
-/**
- * Security audit log function
- */
-export function logSecurityEvent(event: string, details: Record<string, any> = {}): void {
-  const timestamp = new Date().toISOString();
-  const logEntry = {
-    timestamp,
-    event,
-    details,
-    severity: 'SECURITY'
-  };
-  
-  // In production, this should go to a secure log aggregation service
-  console.warn(`🚨 SECURITY AUDIT: ${JSON.stringify(logEntry)}`);
-}
 
 /**
  * Validate and sanitize file paths to prevent directory traversal
@@ -739,3 +1167,180 @@ export function validateProductionSecurity(): void {
 }
 
 export { DEFAULT_SECURITY_CONFIG as securityConfig };
+
+// ===== SECURITY MONITORING AND ALERTING SYSTEM =====
+
+// Security monitoring and alerting system
+export interface SecurityEvent {
+  type: 'rate_limit_violation' | 'session_hijacking' | 'payment_fraud' | 'websocket_abuse' | 'ai_operation_abuse';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  clientIP: string;
+  userAgent?: string;
+  userId?: string;
+  sessionId?: string;
+  details: Record<string, any>;
+  timestamp: Date;
+}
+
+export class SecurityMonitor {
+  private redis?: Redis;
+  private alertThresholds = {
+    rate_limit_violations_per_hour: 10,
+    session_hijacking_attempts_per_hour: 3,
+    payment_fraud_attempts_per_hour: 5,
+    websocket_abuse_per_hour: 15,
+    ai_operation_abuse_per_hour: 20
+  };
+
+  constructor(redis?: Redis) {
+    this.redis = redis;
+  }
+
+  async logSecurityEvent(event: SecurityEvent): Promise<void> {
+    try {
+      // Log to console for immediate visibility
+      const logLevel = event.severity === 'critical' || event.severity === 'high' ? 'error' : 'warn';
+      console[logLevel](`🚨 SECURITY EVENT [${event.severity.toUpperCase()}]: ${event.type}`, {
+        clientIP: event.clientIP,
+        userAgent: event.userAgent,
+        userId: event.userId,
+        sessionId: event.sessionId,
+        details: event.details,
+        timestamp: event.timestamp.toISOString()
+      });
+
+      // Store in Redis for monitoring and alerting
+      if (this.redis) {
+        const eventKey = `security:events:${event.type}:${event.clientIP}`;
+        const eventData = JSON.stringify(event);
+        
+        // Store event with 24-hour expiration
+        await this.redis.setex(eventKey, 24 * 60 * 60, eventData);
+        
+        // Increment event counter for alerting
+        const counterKey = `security:counters:${event.type}:${this.getHourKey()}`;
+        const count = await this.redis.incr(counterKey);
+        await this.redis.expire(counterKey, 60 * 60); // 1 hour expiration
+        
+        // Check if we need to trigger alerts
+        await this.checkAlertThresholds(event.type, count, event.clientIP);
+      }
+    } catch (error) {
+      console.error('❌ SECURITY: Failed to log security event:', error);
+    }
+  }
+
+  private async checkAlertThresholds(eventType: string, count: number, clientIP: string): Promise<void> {
+    const threshold = this.alertThresholds[eventType as keyof typeof this.alertThresholds];
+    
+    if (threshold && count >= threshold) {
+      const alertEvent: SecurityEvent = {
+        type: 'rate_limit_violation',
+        severity: 'critical',
+        clientIP,
+        details: {
+          originalEventType: eventType,
+          count,
+          threshold,
+          action: 'automatic_ip_block_recommended'
+        },
+        timestamp: new Date()
+      };
+
+      // Log critical alert
+      console.error(`🚨 CRITICAL SECURITY ALERT: ${eventType} threshold exceeded`, {
+        clientIP,
+        count,
+        threshold,
+        recommendation: 'Consider implementing IP blocking'
+      });
+
+      // In production, this could trigger external alerting systems
+      if (process.env.NODE_ENV === 'production') {
+        await this.triggerProductionAlert(alertEvent);
+      }
+    }
+  }
+
+  private async triggerProductionAlert(event: SecurityEvent): Promise<void> {
+    // In production, integrate with monitoring systems like:
+    // - PagerDuty
+    // - Slack notifications
+    // - Email alerts
+    // - External monitoring services
+    
+    console.error('🚨 PRODUCTION ALERT TRIGGERED:', {
+      event: event.type,
+      severity: event.severity,
+      clientIP: event.clientIP,
+      details: event.details,
+      timestamp: event.timestamp.toISOString(),
+      action: 'IMMEDIATE_ATTENTION_REQUIRED'
+    });
+  }
+
+  private getHourKey(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
+  }
+
+  async getSecurityMetrics(): Promise<Record<string, any>> {
+    if (!this.redis) return {};
+
+    try {
+      const hourKey = this.getHourKey();
+      const metrics: Record<string, any> = {};
+
+      // Get current hour counters for all event types
+      for (const eventType of Object.keys(this.alertThresholds)) {
+        const counterKey = `security:counters:${eventType}:${hourKey}`;
+        metrics[eventType] = await this.redis.get(counterKey) || '0';
+      }
+
+      return metrics;
+    } catch (error) {
+      console.error('❌ SECURITY: Failed to get security metrics:', error);
+      return {};
+    }
+  }
+}
+
+// Global security monitor instance
+let securityMonitor: SecurityMonitor;
+
+export function initializeSecurityMonitor(redis?: Redis): SecurityMonitor {
+  securityMonitor = new SecurityMonitor(redis);
+  console.log('✅ SECURITY: Security monitoring system initialized');
+  return securityMonitor;
+}
+
+export function getSecurityMonitor(): SecurityMonitor {
+  if (!securityMonitor) {
+    securityMonitor = new SecurityMonitor();
+    console.warn('⚠️  SECURITY: Security monitor initialized without Redis - limited functionality');
+  }
+  return securityMonitor;
+}
+
+// Helper function for easy security event logging
+export async function logSecurityEvent(
+  type: SecurityEvent['type'],
+  details: Record<string, any>,
+  severity: SecurityEvent['severity'] = 'medium',
+  req?: any
+): Promise<void> {
+  const monitor = getSecurityMonitor();
+  
+  const event: SecurityEvent = {
+    type,
+    severity,
+    clientIP: req?.ip || 'unknown',
+    userAgent: req?.headers?.['user-agent'],
+    userId: req?.session?.userId,
+    sessionId: req?.session?.id,
+    details,
+    timestamp: new Date()
+  };
+
+  await monitor.logSecurityEvent(event);
+}

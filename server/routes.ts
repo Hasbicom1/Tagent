@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import rateLimit from "express-rate-limit";
+import { Redis } from "ioredis";
 import validator from "validator";
 import Stripe from "stripe";
 import { storage } from "./storage";
@@ -13,8 +13,15 @@ import {
   createSecureSessionCookie,
   parseSecureSessionCookie,
   generateCSRFToken,
-  validateCSRFToken
+  validateCSRFToken,
+  MultiLayerRateLimiter,
+  DEFAULT_RATE_LIMIT_CONFIG
 } from "./security";
+import { 
+  SessionSecurityStore,
+  createSessionSecurityMiddleware,
+  DEFAULT_SESSION_SECURITY_CONFIG
+} from "./session";
 import { 
   initializeQueue, 
   addTask, 
@@ -61,22 +68,9 @@ function validateInput(input: string, maxLength: number = 1000): string {
   return trimmed;
 }
 
-// Security rate limiters
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: { error: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs for sensitive endpoints
-  message: { error: 'Rate limit exceeded for this endpoint.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Global rate limiting and session security stores
+let rateLimiter: MultiLayerRateLimiter;
+let sessionSecurityStore: SessionSecurityStore;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize queue system
@@ -87,13 +81,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('❌ Failed to initialize queue system:', error);
   }
   
+  // Initialize Redis for rate limiting and session security (if available)
+  let redis: Redis | null = null;
+  try {
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      redis = new Redis(redisUrl);
+      console.log('✅ Redis connection established for rate limiting');
+      
+      // Initialize comprehensive rate limiting system
+      rateLimiter = new MultiLayerRateLimiter(redis, DEFAULT_RATE_LIMIT_CONFIG);
+      
+      // Initialize session security store
+      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+      
+      console.log('✅ Multi-layer rate limiting and session security initialized');
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('REDIS_URL required for production rate limiting and session security');
+    } else {
+      console.warn('⚠️  DEVELOPMENT: Redis not configured - rate limiting and session security disabled');
+    }
+  } catch (error) {
+    console.error('❌ Redis initialization failed:', error);
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
+  }
+  
   // Note: Enhanced Helmet security configuration is now applied in server/index.ts
   // This provides comprehensive security headers including HSTS, CSP, and custom policies
   
-  app.use(generalLimiter);
+  // Apply comprehensive rate limiting middleware
+  if (rateLimiter) {
+    // Global rate limiting for all API endpoints
+    app.use('/api', rateLimiter.createGlobalLimiter());
+    
+    // User-specific rate limiting for authenticated endpoints
+    app.use('/api', rateLimiter.createUserLimiter());
+    
+    console.log('✅ Comprehensive rate limiting middleware applied');
+  } else {
+    console.warn('⚠️  Rate limiting disabled - Redis not available');
+  }
+  
+  // Apply session security middleware
+  if (sessionSecurityStore) {
+    app.use(createSessionSecurityMiddleware(sessionSecurityStore, DEFAULT_SESSION_SECURITY_CONFIG));
+    console.log('✅ Session security middleware applied');
+  }
   
   // Create Stripe Checkout session for 24h agent access
-  app.post("/api/create-checkout-session", strictLimiter, async (req, res) => {
+  app.post("/api/create-checkout-session", 
+    rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(), 
+    async (req, res) => {
     try {
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
@@ -128,7 +168,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Handle successful Stripe Checkout and create agent session
-  app.post("/api/checkout-success", strictLimiter, async (req, res) => {
+  app.post("/api/checkout-success", 
+    rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
+    async (req, res) => {
     try {
       const { sessionId } = req.body;
       
@@ -273,8 +315,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send message to agent
-  app.post("/api/session/:agentId/message", async (req, res) => {
+  // Send message to agent with AI operations rate limiting
+  app.post("/api/session/:agentId/message", 
+    rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
+    async (req, res) => {
     try {
       const { agentId } = req.params;
       const { content } = req.body;

@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import helmet from "helmet";
+import { Redis } from "ioredis";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { wsManager } from "./websocket";
@@ -16,6 +17,11 @@ import {
   generatePermissionsPolicyHeader,
   generateSecureSessionToken
 } from "./security";
+import { 
+  createRedisSessionStore,
+  SessionSecurityStore,
+  DEFAULT_SESSION_SECURITY_CONFIG
+} from "./session";
 
 const app = express();
 
@@ -88,10 +94,53 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Secure session configuration
+// Initialize Redis for session storage and security features
+let redis: Redis | null = null;
+let sessionSecurityStore: SessionSecurityStore | null = null;
+
+async function initializeRedisSession(): Promise<any> {
+  try {
+    const redisUrl = process.env.REDIS_URL;
+    
+    if (redisUrl) {
+      redis = new Redis(redisUrl);
+      
+      // Test Redis connection
+      await redis.ping();
+      console.log('✅ SECURITY: Redis connection established for session storage');
+      
+      // Initialize session security store
+      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+      console.log('✅ SECURITY: Session security store initialized');
+      
+      // Create Redis session store for production
+      const redisStore = createRedisSessionStore(redis);
+      console.log('✅ SECURITY: Redis session store created');
+      
+      return redisStore;
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('REDIS_URL required for production session storage and security features');
+    } else {
+      console.log('🔄 SECURITY: Redis not configured - using memory store for development');
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ SECURITY: Redis session initialization failed:', error);
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
+    console.warn('⚠️  SECURITY: Falling back to memory store in development');
+    return null;
+  }
+}
+
+// Initialize Redis session store
+const redisStore = await initializeRedisSession();
+
+// Secure session configuration with Redis store for production
 const sessionConfig = {
   secret: process.env.SESSION_SECRET || generateSecureSessionToken(),
-  name: 'sessionId', // Don't use default session name
+  name: 'agentSessionId', // Use unique session name for security
   resave: false,
   saveUninitialized: false,
   rolling: true, // Reset expiration on activity
@@ -102,16 +151,15 @@ const sessionConfig = {
     maxAge: cookieConfig.maxAge * 1000, // Convert to milliseconds
     domain: cookieConfig.domain
   },
-  // Use environment-specific session store
-  store: undefined // Will be configured based on environment
+  // Use Redis store in production, memory store in development
+  store: redisStore || undefined
 };
 
-// Configure session store based on environment
-if (process.env.NODE_ENV === 'production') {
-  // In production, warn about missing session store
-  console.warn('⚠️  SECURITY: Using memory store for sessions in production - consider Redis or database store');
+// Log session store configuration
+if (redisStore) {
+  console.log('✅ SECURITY: Using Redis session store for production-grade session management');
+  console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
 } else {
-  // Development can use memory store
   console.log('🔄 SECURITY: Using memory store for sessions in development');
 }
 
