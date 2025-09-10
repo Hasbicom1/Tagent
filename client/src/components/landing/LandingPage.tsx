@@ -110,8 +110,9 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </div>
                   
                   <p className="text-lg text-muted-foreground max-w-3xl mx-auto font-sans">
-                    AI belongs to <strong>everyone</strong>, not just Silicon Valley elites. Get <span className="text-primary font-mono">UNIVERSAL-1</span> — 
-                    your personal AI agent that's <strong>yours</strong> for 24 hours. Break free from subscription slavery. AI democracy starts with $1.
+                    <strong>ENOUGH.</strong> AI belongs to <strong>everyone</strong>, not just Silicon Valley elites hoarding intelligence behind $100/month paywalls. 
+                    Get <span className="text-primary font-mono">UNIVERSAL-1</span> — your personal AI agent that's <strong>yours</strong> for 24 hours. 
+                    Break free from subscription slavery. <span className="text-primary">AI democracy starts with $1.</span>
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
@@ -174,8 +175,8 @@ AGENT FOR ALL • $1
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  True ownership for 24 hours. No rental fees, no usage surveillance, 
-                  no corporate middlemen extracting value from your work.
+                  <strong>True ownership</strong> for 24 hours. No rental fees, no usage surveillance, 
+                  no corporate middlemen extracting profits from <em>your</em> intelligence.
                 </p>
               </div>
             </Card>
@@ -192,8 +193,8 @@ AGENT FOR ALL • $1
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  Complete transparency — unlike black-box corporate AI. 
-                  Watch every decision, control every action, own every result.
+                  <strong>Complete transparency</strong> — no more black-box corporate AI controlling you. 
+                  <em>You</em> watch every decision, <em>you</em> control every action, <em>you</em> own every result.
                 </p>
               </div>
             </Card>
@@ -210,8 +211,8 @@ AGENT FOR ALL • $1
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  Your privacy fortress. Isolated sessions, zero tracking, 
-                  no corporate surveillance. What you do is yours alone.
+                  <strong>Your privacy fortress.</strong> Isolated sessions, zero tracking, 
+                  no Big Tech surveillance. What you create is <em>yours alone</em> — not theirs to monetize.
                 </p>
               </div>
             </Card>
@@ -227,7 +228,7 @@ AGENT FOR ALL • $1
               TECHNICAL_SPECIFICATIONS
             </h2>
             <p className="text-muted-foreground font-sans">
-              Enterprise-grade infrastructure accessible to everyone
+              Enterprise-grade power in the hands of real people, not just corporate overlords
             </p>
           </div>
 
@@ -301,7 +302,7 @@ AGENT FOR ALL • $1
               READY_TO_DEPLOY?
             </h2>
             <p className="text-xl text-muted-foreground font-sans max-w-2xl mx-auto">
-              AI for everyone, not just the wealthy. One dollar breaks down the barriers.
+              <strong>AI for everyone</strong>, not just the wealthy. <span className="text-primary">One dollar breaks down their barriers.</span>
             </p>
           </div>
           
@@ -326,12 +327,12 @@ AGENT FOR ALL • $1
                 </div>
                 
                 <div className="bg-card/50 rounded border border-primary/10 p-4 space-y-2 text-left font-mono text-sm">
-                  <div className="text-muted-foreground">// Democracy includes:</div>
-                  <div className="text-chart-2">✓ Full UNIVERSAL-1 ownership</div>
-                  <div className="text-chart-2">✓ Zero usage restrictions</div>
-                  <div className="text-chart-2">✓ Complete browser control</div>
-                  <div className="text-chart-2">✓ No corporate monitoring</div>
-                  <div className="text-chart-2">✓ Privacy-first isolation</div>
+                  <div className="text-muted-foreground">// AI Revolution includes:</div>
+                  <div className="text-chart-2">✓ Full UNIVERSAL-1 ownership (not rental)</div>
+                  <div className="text-chart-2">✓ Zero usage restrictions (unlimited power)</div>
+                  <div className="text-chart-2">✓ Complete browser control (true automation)</div>
+                  <div className="text-chart-2">✓ No corporate monitoring (your data only)</div>
+                  <div className="text-chart-2">✓ Privacy-first isolation (Big Tech blocked)</div>
                 </div>
                 
                 <Button 
@@ -341,15 +342,15 @@ AGENT FOR ALL • $1
                   data-testid="button-initialize-payment"
                 >
                   <Command className="w-5 h-5 mr-2" />
-JOIN THE AI REVOLUTION
+BREAK THE AI GATEKEEPERS • $1
                 </Button>
               </div>
             </div>
           </Card>
 
           <div className="text-sm text-muted-foreground font-mono space-y-1">
-            <div>AI for all • No surveillance capitalism • Your intelligence, your rules</div>
-            <div>No subscription slavery • No Big Tech gatekeepers • True AI democracy</div>
+            <div>AI for the people • No surveillance capitalism • Your intelligence, your profit</div>
+            <div>End subscription slavery • Overthrow Big Tech gatekeepers • Power to everyone</div>
           </div>
         </div>
       </div>
@@ -415,8 +416,8 @@ JOIN THE AI REVOLUTION
           </Card>
           
           <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-            <div>AGENT FOR ALL © 2025 • Democratizing AI for everyone</div>
-            <div>Built for people who believe AI should serve all, not just the elite</div>
+            <div>AGENT FOR ALL © 2025 • <span className="text-primary">Liberating AI from corporate control</span></div>
+            <div>Built by rebels who believe AI should empower people, not exploit them</div>
           </div>
         </div>
       </div>
