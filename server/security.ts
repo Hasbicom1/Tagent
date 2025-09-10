@@ -1133,6 +1133,30 @@ export function validateCSRFToken(token: string, expectedToken: string): boolean
 }
 
 /**
+ * Verify Stripe webhook signature for payment security
+ */
+export function verifyStripeWebhook(payload: string, sigHeader: string, webhookSecret: string): boolean {
+  try {
+    if (!sigHeader || !webhookSecret) {
+      return false;
+    }
+    
+    const expectedSig = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(payload, 'utf8')
+      .digest('hex');
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(`sha256=${expectedSig}`, 'utf8'),
+      Buffer.from(sigHeader, 'utf8')
+    );
+  } catch (error) {
+    console.error('Stripe webhook verification failed:', error);
+    return false;
+  }
+}
+
+/**
  * Enhanced security validation for production deployment
  */
 export function validateProductionSecurity(): void {
