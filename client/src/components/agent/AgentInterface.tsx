@@ -184,9 +184,49 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     });
   };
 
+  // Input normalization: convert slash commands to natural language
+  const normalizeInput = (input: string): string => {
+    const trimmed = input.trim();
+    
+    // Handle slash commands
+    if (trimmed.startsWith('/summarize')) {
+      return 'Summarize the main content of this page in clear, concise bullet points';
+    }
+    if (trimmed.startsWith('/translate')) {
+      return 'Translate the text on this page to English and explain key concepts';
+    }
+    if (trimmed.startsWith('/analyze')) {
+      return 'Analyze this content for key insights, patterns, and important information';
+    }
+    if (trimmed.startsWith('/research')) {
+      return 'Research this topic thoroughly and provide comprehensive findings with sources';
+    }
+    if (trimmed.startsWith('/extract')) {
+      return 'Extract and organize all important data from this page into structured format';
+    }
+    if (trimmed.startsWith('/screenshot')) {
+      return 'Navigate to a website and take a screenshot for me';
+    }
+    if (trimmed.startsWith('/monitor')) {
+      return 'Monitor this page for changes and notify me of any updates';
+    }
+    if (trimmed.startsWith('/login')) {
+      return 'Login to my account by finding and filling login forms';
+    }
+    if (trimmed.startsWith('/form')) {
+      return 'Help me fill out this form automatically with smart field detection';
+    }
+    
+    // Return original input if no slash command detected
+    return input;
+  };
+
   const handleSendMessage = () => {
     if (!currentMessage.trim() || sendMessageMutation.isPending) return;
-    sendMessageMutation.mutate(currentMessage);
+    
+    // Normalize input to convert slash commands to natural language
+    const normalizedMessage = normalizeInput(currentMessage);
+    sendMessageMutation.mutate(normalizedMessage);
   };
 
   const handleExecuteTask = (taskDescription: string) => {
@@ -223,7 +263,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
           <div className="text-center space-y-4">
             <div className="text-lg font-mono text-destructive">SESSION_ERROR</div>
             <div className="text-sm text-muted-foreground">Unable to connect to agent session</div>
-            <Button onClick={() => window.location.href = '/'}>Return to Landing</Button>
+            <Button 
+              onClick={() => window.location.href = '/'} 
+              data-testid="button-return-landing"
+            >
+              Return to Landing
+            </Button>
           </div>
         </Card>
       </div>
@@ -351,68 +396,118 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             </ScrollArea>
             
             <div className="p-4 border-t border-primary/10 bg-background/50 space-y-4">
-              {/* Quick Action Buttons */}
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Navigate to a website and take a screenshot for me")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-screenshot"
-                >
-                  <Camera className="w-3 h-3 mr-1" />
-                  Screenshot
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Help me fill out this form automatically")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-form"
-                >
-                  <FileText className="w-3 h-3 mr-1" />
-                  Fill Form
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Login to my account for me")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-login"
-                >
-                  <Lock className="w-3 h-3 mr-1" />
-                  Login
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Search for information and summarize what you find")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-search"
-                >
-                  <Search className="w-3 h-3 mr-1" />
-                  Research
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Monitor this page and alert me of changes")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-monitor"
-                >
-                  <Eye className="w-3 h-3 mr-1" />
-                  Monitor
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMessage("Extract data from this page and organize it for me")}
-                  className="text-xs font-mono"
-                  data-testid="button-quick-extract"
-                >
-                  <BarChart className="w-3 h-3 mr-1" />
-                  Extract
-                </Button>
+              {/* Enhanced Command Categories */}
+              <div className="space-y-3">
+                {/* Browser Automation Commands */}
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">BROWSER_AUTOMATION</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Navigate to a website and take a screenshot for me")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-screenshot"
+                    >
+                      <Camera className="w-3 h-3 mr-1" />
+                      Screenshot
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Help me fill out this form automatically with smart field detection")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-form"
+                    >
+                      <FileText className="w-3 h-3 mr-1" />
+                      Fill Form
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Login to my account by finding and filling login forms")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-login"
+                    >
+                      <Lock className="w-3 h-3 mr-1" />
+                      Login
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Content Analysis Commands */}
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">CONTENT_ANALYSIS</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Summarize the main content of this page in clear, concise bullet points")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-summarize"
+                    >
+                      <FileText className="w-3 h-3 mr-1" />
+                      Summarize
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Translate the text on this page to English and explain key concepts")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-translate"
+                    >
+                      <Command className="w-3 h-3 mr-1" />
+                      Translate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Analyze this content for key insights, patterns, and important information")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-analyze"
+                    >
+                      <BarChart className="w-3 h-3 mr-1" />
+                      Analyze
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Intelligence Operations */}
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">INTELLIGENCE_OPS</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Research this topic thoroughly and provide comprehensive findings with sources")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-research"
+                    >
+                      <Search className="w-3 h-3 mr-1" />
+                      Research
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Monitor this page for changes and notify me of any updates")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-monitor"
+                    >
+                      <Eye className="w-3 h-3 mr-1" />
+                      Monitor
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMessage("Extract and organize all important data from this page into structured format")}
+                      className="text-xs font-mono"
+                      data-testid="button-quick-extract"
+                    >
+                      <BarChart className="w-3 h-3 mr-1" />
+                      Extract
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* Command Input */}
@@ -427,7 +522,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Or type your custom command..."
+                  placeholder="Type natural language or slash commands (/summarize, /translate, /analyze)..."
                   disabled={isExecuting}
                   className="flex-1 font-mono bg-background/50 border-primary/20"
                   data-testid="input-command-line"
