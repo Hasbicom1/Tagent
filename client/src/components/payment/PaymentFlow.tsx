@@ -26,8 +26,8 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
       } catch (error) {
         console.error('Failed to create checkout session:', error);
         toast({
-          title: "Payment Error",
-          description: "Failed to initialize payment system. Please try again.",
+          title: "LIBERATION_GATEWAY_ERROR",
+          description: "Your escape from Big Tech subscription chains hit a snag. Retry your freedom activation.",
           variant: "destructive",
         });
       } finally {
@@ -66,7 +66,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <div className="text-lg font-mono text-destructive">PAYMENT_GATEWAY_ERROR</div>
-            <div className="text-sm text-muted-foreground">Failed to initialize secure checkout</div>
+            <div className="text-sm text-muted-foreground">Liberation payment gateway initialization failed</div>
             <Button 
               onClick={() => window.location.reload()} 
               variant="outline"

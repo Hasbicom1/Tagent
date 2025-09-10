@@ -68,7 +68,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('GET', `/api/session/${agentId}`);
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch session');
+        throw new Error(error.error || 'Agent session data retrieval failed');
       }
       return response.json() as Promise<SessionInfo>;
     },
@@ -82,7 +82,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('GET', `/api/session/${agentId}/messages`);
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch messages');
+        throw new Error(error.error || 'Neural conversation history access denied');
       }
       const data = await response.json();
       return data.map((msg: any) => ({
@@ -100,7 +100,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('GET', `/api/session/${agentId}/chat-history`);
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch chat history');
+        throw new Error(error.error || 'Chat archive retrieval protocol failed');
       }
       const data = await response.json();
       return data.map((msg: any) => ({
@@ -118,7 +118,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('GET', `/api/session/${agentId}/command-history`);
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch command history');
+        throw new Error(error.error || 'Command execution log access denied');
       }
       const data = await response.json();
       return data.map((msg: any) => ({
@@ -146,7 +146,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to send message');
+        throw new Error(error.error || 'Neural link transmission failed - message not delivered');
       }
       return response.json();
     },
@@ -159,7 +159,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
+        title: "NEURAL_TRANSMISSION_ERROR",
         description: error.message,
         variant: "destructive",
       });
@@ -172,7 +172,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       const response = await apiRequest('POST', `/api/session/${agentId}/execute`, { taskDescription });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to execute task');
+        throw new Error(error.error || 'Task execution protocol aborted - automation sequence failed');
       }
       return response.json();
     },
@@ -186,7 +186,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     },
     onError: (error: any) => {
       toast({
-        title: "Execution Error",
+        title: "AUTOMATION_PROTOCOL_FAILURE",
         description: error.message,
         variant: "destructive",
       });
@@ -210,8 +210,8 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   useEffect(() => {
     if (sessionError) {
       toast({
-        title: "Session Error",
-        description: "Your session may have expired. Please create a new session.",
+        title: "SESSION_PROTOCOL_BREACH",
+        description: "Your liberation session has expired. Restart your escape from Big Tech chains.",
         variant: "destructive",
       });
     }

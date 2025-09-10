@@ -295,7 +295,7 @@ export class WebSocketManager {
       }
     } catch (error) {
       log(`❌ WS: Message handling error [${ws.connectionId}]: ${error}`);
-      this.sendError(ws, 'Invalid message format', 'INVALID_MESSAGE');
+      this.sendError(ws, 'PROTOCOL_ERROR: Neural message format corrupted', 'INVALID_MESSAGE');
     }
   }
 
@@ -324,7 +324,7 @@ export class WebSocketManager {
           connectionId: ws.connectionId
         });
         log(`🚫 WS: Authentication failed - missing sessionToken [${ws.connectionId}]`);
-        this.sendError(ws, 'Session token required', 'MISSING_TOKEN');
+        this.sendError(ws, 'AUTHENTICATION_PROTOCOL_ERROR: Neural session token required', 'MISSING_TOKEN');
         return;
       }
       
@@ -334,7 +334,7 @@ export class WebSocketManager {
           connectionId: ws.connectionId
         });
         log(`🚫 WS: Authentication failed - missing agentId [${ws.connectionId}]`);
-        this.sendError(ws, 'Agent ID required', 'MISSING_AGENT_ID');
+        this.sendError(ws, 'IDENTIFICATION_PROTOCOL_ERROR: Agent ID required for neural link', 'MISSING_AGENT_ID');
         return;
       }
 
@@ -348,7 +348,7 @@ export class WebSocketManager {
           agentId
         });
         log(`🚫 WS: Authentication failed - JWT validation failed for agent ${agentId} [${ws.connectionId}]: ${jwtValidation.error}`);
-        this.sendError(ws, 'Invalid session token', 'INVALID_TOKEN');
+        this.sendError(ws, 'SESSION_PROTOCOL_BREACH: Liberation token validation failed', 'INVALID_TOKEN');
         return;
       }
 
@@ -361,7 +361,7 @@ export class WebSocketManager {
           agentId
         });
         log(`🚫 WS: Authentication failed - invalid token for agent ${agentId} [${ws.connectionId}]`);
-        this.sendError(ws, 'Invalid session token', 'INVALID_TOKEN');
+        this.sendError(ws, 'SESSION_PROTOCOL_BREACH: Liberation token validation failed', 'INVALID_TOKEN');
         return;
       }
       
@@ -375,7 +375,7 @@ export class WebSocketManager {
           agentId
         });
         log(`🚫 WS: Authentication failed - session not found or inactive for agent ${agentId} [${ws.connectionId}]`);
-        this.sendError(ws, 'Invalid or expired session', 'INVALID_SESSION');
+        this.sendError(ws, 'SESSION_EXPIRED: Liberation window closed, restart required', 'INVALID_SESSION');
         return;
       }
 
@@ -413,7 +413,7 @@ export class WebSocketManager {
         connectionId: ws.connectionId
       });
       log(`❌ WS: Authentication error [${ws.connectionId}]: ${error}`);
-      this.sendError(ws, 'Authentication failed', 'AUTH_ERROR');
+      this.sendError(ws, 'NEURAL_AUTHENTICATION_FAILED: Liberation protocol access denied', 'AUTH_ERROR');
     }
   }
 

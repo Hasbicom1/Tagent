@@ -170,7 +170,7 @@ export class MultiLayerRateLimiter {
             endpoint: req.path 
           });
           return res.status(429).json({ 
-            error: 'Access temporarily restricted due to rate limit violations',
+            error: 'NEURAL_FIREWALL_ACTIVE: Liberation protocol throttled due to excessive requests',
             retryAfter: 300 // 5 minutes
           });
         }
@@ -186,7 +186,7 @@ export class MultiLayerRateLimiter {
         if (count > this.config.globalLimit.max) {
           await this.handleRateLimitViolation(clientIP, RateLimitViolationType.GLOBAL_LIMIT, count);
           return res.status(429).json({
-            error: 'Too many requests from this IP address',
+            error: 'PROTOCOL_RATE_EXCEEDED: Neural transmission frequency too high from this address',
             retryAfter: Math.ceil(this.config.globalLimit.windowMs / 1000)
           });
         }
@@ -220,7 +220,7 @@ export class MultiLayerRateLimiter {
         if (count > this.config.userLimit.max) {
           await this.handleRateLimitViolation(userId, RateLimitViolationType.USER_LIMIT, count);
           return res.status(429).json({
-            error: 'User rate limit exceeded',
+            error: 'USER_PROTOCOL_THROTTLED: Liberation session command frequency exceeded',
             retryAfter: Math.ceil(this.config.userLimit.windowMs / 1000)
           });
         }
@@ -254,7 +254,7 @@ export class MultiLayerRateLimiter {
         if (count > this.config.userLimit.aiOperationsMax) {
           await this.handleRateLimitViolation(userId, RateLimitViolationType.AI_OPERATIONS_LIMIT, count);
           return res.status(429).json({
-            error: 'AI operations rate limit exceeded',
+            error: 'NEURAL_OPERATIONS_THROTTLED: AI processing capacity exceeded, throttling engaged',
             retryAfter: Math.ceil(this.config.userLimit.windowMs / 1000),
             upgrade: 'Consider upgrading for higher limits'
           });
@@ -285,7 +285,7 @@ export class MultiLayerRateLimiter {
         if (count > this.config.paymentLimit.max) {
           await this.handleRateLimitViolation(clientIP, RateLimitViolationType.PAYMENT_LIMIT, count);
           return res.status(429).json({
-            error: 'Payment rate limit exceeded for security',
+            error: 'LIBERATION_PAYMENT_THROTTLED: Payment frequency exceeded security protocols',
             retryAfter: Math.ceil(this.config.paymentLimit.windowMs / 1000)
           });
         }
@@ -632,16 +632,16 @@ export function detectPromptInjection(input: string): boolean {
 export function validateAIInput(input: string): string {
   // Basic type and length validation
   if (typeof input !== 'string') {
-    throw new Error('Invalid input type - string required');
+    throw new Error('PROTOCOL_VIOLATION: Neural interface requires string data transmission');
   }
 
   if (input.trim().length === 0) {
-    throw new Error('Input cannot be empty');
+    throw new Error('TRANSMISSION_ERROR: Empty neural data packets not permitted');
   }
 
   // Check for prompt injection before sanitization
   if (detectPromptInjection(input)) {
-    throw new Error('Input contains potentially malicious content and has been blocked for security');
+    throw new Error('SECURITY_PROTOCOL_ENGAGED: Malicious code injection attempt blocked by AI defense systems');
   }
 
   // Sanitize the input
@@ -649,7 +649,7 @@ export function validateAIInput(input: string): string {
 
   // Double-check after sanitization
   if (detectPromptInjection(sanitized)) {
-    throw new Error('Input failed security validation after sanitization');
+    throw new Error('NEURAL_FIREWALL_ACTIVE: Input data failed security validation after sanitization protocols');
   }
 
   return sanitized;

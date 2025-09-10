@@ -33,11 +33,11 @@ import {
 } from "./queue";
 
 if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+  throw new Error('LIBERATION_GATEWAY_CONFIG_ERROR: Missing Stripe secret key');
 }
 
 if (!process.env.OPENAI_API_KEY) {
-  throw new Error('Missing required OpenAI secret: OPENAI_API_KEY');
+  throw new Error('NEURAL_NETWORK_CONFIG_ERROR: Missing OpenAI secret key');
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -47,22 +47,22 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 // Input validation helper - validates without corrupting data
 function validateInput(input: string, maxLength: number = 1000): string {
   if (typeof input !== 'string') {
-    throw new Error('Invalid input type');
+    throw new Error('PROTOCOL_VIOLATION: Neural interface requires string data transmission');
   }
   
   const trimmed = input.trim();
   
   if (trimmed.length === 0) {
-    throw new Error('Input cannot be empty');
+    throw new Error('TRANSMISSION_ERROR: Empty neural data packets not permitted');
   }
   
   if (trimmed.length > maxLength) {
-    throw new Error(`Input too long. Maximum ${maxLength} characters allowed`);
+    throw new Error(`INPUT_SIZE_EXCEEDED: Neural capacity limit is ${maxLength} characters`);
   }
   
   // Basic validation - no HTML tags or script content
   if (/<script|javascript:|data:|vbscript:/i.test(trimmed)) {
-    throw new Error('Input contains potentially dangerous content');
+    throw new Error('SECURITY_PROTOCOL_ENGAGED: Malicious content blocked by AI defense systems');
   }
   
   return trimmed;
@@ -97,7 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('✅ Multi-layer rate limiting and session security initialized');
     } else if (process.env.NODE_ENV === 'production') {
-      throw new Error('REDIS_URL required for production rate limiting and session security');
+      throw new Error('PRODUCTION_SECURITY_ERROR: Redis configuration required for liberation protocol');
     } else {
       console.warn('⚠️  DEVELOPMENT: Redis not configured - rate limiting and session security disabled');
     }
@@ -162,7 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating checkout session:", error);
       res.status(500).json({ 
-        error: "Failed to create checkout session: " + error.message 
+        error: "LIBERATION_GATEWAY_INITIALIZATION_FAILED: " + error.message 
       });
     }
   });
@@ -175,18 +175,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { sessionId } = req.body;
       
       if (!sessionId || typeof sessionId !== 'string') {
-        return res.status(400).json({ error: "Valid checkout session ID required" });
+        return res.status(400).json({ error: "ACTIVATION_PROTOCOL_ERROR: Liberation session ID required" });
       }
       
       // Validate sessionId format (should be Stripe session ID)
       if (!validator.isAlphanumeric(sessionId.replace(/[_-]/g, '')) || sessionId.length < 20 || sessionId.length > 200) {
-        return res.status(400).json({ error: "Invalid session ID format" });
+        return res.status(400).json({ error: "PROTOCOL_VIOLATION: Liberation session ID format invalid" });
       }
 
       // Check for replay attacks - ensure checkout session hasn't been used before
       const existingSession = await storage.getSessionByCheckoutSessionId(sessionId);
       if (existingSession) {
-        return res.status(400).json({ error: "Checkout session already used" });
+        return res.status(400).json({ error: "SESSION_REPLAY_BLOCKED: Liberation token already activated" });
       }
 
       // Verify payment with Stripe
@@ -194,25 +194,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Comprehensive session validation
       if (checkoutSession.payment_status !== "paid") {
-        return res.status(400).json({ error: "Payment not successful" });
+        return res.status(400).json({ error: "FREEDOM_PAYMENT_INCOMPLETE: Escape from Big Tech chains not yet funded" });
       }
 
       // Validate session parameters match expected values
       if (checkoutSession.amount_total !== 100) {
-        return res.status(400).json({ error: "Invalid payment amount" });
+        return res.status(400).json({ error: "LIBERATION_COST_MISMATCH: Freedom price must be exactly $1.00" });
       }
 
       if (checkoutSession.currency !== "usd") {
-        return res.status(400).json({ error: "Invalid payment currency" });
+        return res.status(400).json({ error: "CURRENCY_PROTOCOL_ERROR: Liberation must be paid in USD" });
       }
 
       if (checkoutSession.mode !== "payment") {
-        return res.status(400).json({ error: "Invalid payment mode" });
+        return res.status(400).json({ error: "TRANSACTION_MODE_ERROR: One-time freedom payment required" });
       }
 
       // Verify metadata
       if (checkoutSession.metadata?.product !== "agent-hq-24h-session") {
-        return res.status(400).json({ error: "Invalid product metadata" });
+        return res.status(400).json({ error: "PRODUCT_VALIDATION_FAILED: Agent liberation metadata corrupted" });
       }
 
       // Generate unique agent ID
@@ -258,7 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error processing checkout success:", error);
-      res.status(500).json({ error: "Failed to process payment: " + error.message });
+      res.status(500).json({ error: "LIBERATION_PAYMENT_PROCESSING_FAILED: " + error.message });
     }
   });
 
@@ -275,7 +275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if session is expired
       if (new Date() > session.expiresAt) {
         await storage.deactivateSession(session.id);
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       const timeRemaining = Math.max(0, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000 / 60));
@@ -289,7 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error getting session:", error);
-      res.status(500).json({ error: "Failed to get session: " + error.message });
+      res.status(500).json({ error: "AGENT_CONNECTION_FAILED: " + error.message });
     }
   });
 
@@ -304,14 +304,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       const messages = await storage.getSessionMessages(session.id);
       res.json(messages);
     } catch (error: any) {
       console.error("Error getting messages:", error);
-      res.status(500).json({ error: "Failed to get messages: " + error.message });
+      res.status(500).json({ error: "NEURAL_ARCHIVE_ACCESS_DENIED: " + error.message });
     }
   });
 
@@ -326,14 +326,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       const chatHistory = await storage.getSessionChatHistory(session.id);
       res.json(chatHistory);
     } catch (error: any) {
       console.error("Error getting chat history:", error);
-      res.status(500).json({ error: "Failed to get chat history: " + error.message });
+      res.status(500).json({ error: "CHAT_LOG_RETRIEVAL_FAILED: " + error.message });
     }
   });
 
@@ -348,14 +348,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       const commandHistory = await storage.getSessionCommandHistory(session.id);
       res.json(commandHistory);
     } catch (error: any) {
       console.error("Error getting command history:", error);
-      res.status(500).json({ error: "Failed to get command history: " + error.message });
+      res.status(500).json({ error: "COMMAND_LOG_ACCESS_DENIED: " + error.message });
     }
   });
 
@@ -383,7 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       // SECURITY ENHANCEMENT: Enhanced AI input validation with prompt injection detection
@@ -413,7 +413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       // Determine message type and input method from normalized content
@@ -468,7 +468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error sending message:", error);
-      res.status(500).json({ error: "Failed to send message: " + error.message });
+      res.status(500).json({ error: "NEURAL_TRANSMISSION_FAILED: " + error.message });
     }
   });
 
@@ -518,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       // Queue browser automation task using BullMQ
@@ -556,7 +556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error executing task:", error);
-      res.status(500).json({ error: "Failed to execute task: " + error.message });
+      res.status(500).json({ error: "TASK_EXECUTION_PROTOCOL_ABORTED: " + error.message });
     }
   });
 
@@ -701,7 +701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (new Date() > session.expiresAt) {
-        return res.status(410).json({ error: "Session expired" });
+        return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
       // Route command through MCP orchestrator
