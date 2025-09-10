@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Pixel Font Import */
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* Custom pixel font variables */
+:root {
+  --font-sans: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace;
+  --font-serif: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace;  
+  --font-mono: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -324,5 +334,34 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* Pixel text styling for retro terminal aesthetic */
+  .pixel-text {
+    font-family: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-rendering: optimizeSpeed;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+    font-variant-ligatures: none;
+  }
+
+  /* Enhanced pixel styling for headers */
+  .pixel-header {
+    font-family: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-rendering: optimizeSpeed;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+    text-transform: uppercase;
+  }
+
+  /* Apply pixel styling globally */
+  * {
+    font-family: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace !important;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
   }
 }

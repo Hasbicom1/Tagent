@@ -51,12 +51,16 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
     if (checkoutUrl) {
       setIsRedirecting(true);
       console.log('Redirecting to:', checkoutUrl);
-      // Redirect to Stripe Checkout
-      window.location.href = checkoutUrl;
+      // Force redirect with timeout fallback
+      setTimeout(() => {
+        window.location.href = checkoutUrl;
+      }, 100);
+      // Also try immediate redirect
+      window.open(checkoutUrl, '_self');
     } else {
       console.error('No checkout URL available!');
       toast({
-        title: "NEURAL_TRANSMISSION_ERROR",
+        title: "NEURAL_TRANSMISSION_ERROR", 
         description: "Liberation gateway not initialized. Refresh and try again.",
         variant: "destructive",
       });
