@@ -110,3 +110,54 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 export type InsertTaskResult = z.infer<typeof insertTaskResultSchema>;
 export type TaskResult = typeof taskResults.$inferSelect;
+
+// SECURITY ENHANCEMENT: Comprehensive API Request/Response Validation Schemas
+export const createCheckoutSessionSchema = z.object({
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+export const checkoutSuccessSchema = z.object({
+  sessionId: z.string()
+    .min(20, "Liberation session ID too short")
+    .max(200, "Liberation session ID too long")
+    .refine(id => /^cs_[a-zA-Z0-9_-]+$/.test(id), "Invalid Stripe session ID format"),
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+export const sessionMessageSchema = z.object({
+  content: z.string()
+    .min(1, "Neural transmission cannot be empty")
+    .max(2000, "Neural transmission too long - max 2000 characters"),
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+export const sessionExecuteSchema = z.object({
+  taskDescription: z.string()
+    .min(1, "Task description required")
+    .max(1000, "Task description too long - max 1000 characters"),
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+export const browserCommandSchema = z.object({
+  command: z.string()
+    .min(1, "Command required")
+    .max(500, "Command too long - max 500 characters"),
+  timestamp: z.string().datetime().optional(),
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+// Parameter validation schemas for route params
+export const agentIdSchema = z.string()
+  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid agent ID format")
+  .max(50, "Agent ID too long");
+
+export const sessionIdSchema = z.string()
+  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid session ID format")
+  .max(50, "Session ID too long");
+
+// API Request/Response Types
+export type CreateCheckoutSessionRequest = z.infer<typeof createCheckoutSessionSchema>;
+export type CheckoutSuccessRequest = z.infer<typeof checkoutSuccessSchema>;
+export type SessionMessageRequest = z.infer<typeof sessionMessageSchema>;
+export type SessionExecuteRequest = z.infer<typeof sessionExecuteSchema>;
+export type BrowserCommandRequest = z.infer<typeof browserCommandSchema>;

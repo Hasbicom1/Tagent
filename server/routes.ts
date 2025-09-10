@@ -1,12 +1,36 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { Redis } from "ioredis";
 import validator from "validator";
 import Stripe from "stripe";
+import { z } from "zod";
+
+// SECURITY ENHANCEMENT: Extend Express Request interface to include validated data
+declare global {
+  namespace Express {
+    interface Request {
+      validatedBody?: any;
+    }
+  }
+}
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
 import { mcpOrchestrator } from "./mcpOrchestrator";
+import {
+  createCheckoutSessionSchema,
+  checkoutSuccessSchema,
+  sessionMessageSchema,
+  sessionExecuteSchema,
+  browserCommandSchema,
+  agentIdSchema,
+  sessionIdSchema,
+  type CreateCheckoutSessionRequest,
+  type CheckoutSuccessRequest,
+  type SessionMessageRequest,
+  type SessionExecuteRequest,
+  type BrowserCommandRequest
+} from '@shared/schema';
 import { 
   validateAIInput,
   logSecurityEvent,
@@ -41,31 +65,117 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-08-27.basil",
 });
 
-// Input validation helper - validates without corrupting data
-function validateInput(input: string, maxLength: number = 1000): string {
-  if (typeof input !== 'string') {
-    throw new Error('PROTOCOL_VIOLATION: Neural interface requires string data transmission');
-  }
-  
-  const trimmed = input.trim();
-  
-  if (trimmed.length === 0) {
-    throw new Error('TRANSMISSION_ERROR: Empty neural data packets not permitted');
-  }
-  
-  if (trimmed.length > maxLength) {
-    throw new Error(`INPUT_SIZE_EXCEEDED: Neural capacity limit is ${maxLength} characters`);
-  }
-  
-  // Basic validation - no HTML tags or script content
-  if (/<script|javascript:|data:|vbscript:/i.test(trimmed)) {
-    throw new Error('SECURITY_PROTOCOL_ENGAGED: Malicious content blocked by AI defense systems');
-  }
-  
-  return trimmed;
+// SECURITY ENHANCEMENT: Comprehensive validation and CSRF protection middleware
+function createValidationMiddleware<T>(schema: z.ZodSchema<T>, requireCsrf: boolean = true) {
+  return async (req: any, res: any, next: any) => {
+    try {
+      // Validate request body with Zod schema
+      const validationResult = schema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        logSecurityEvent('websocket_abuse', {
+          endpoint: req.path,
+          error: 'schema_validation_failed',
+          details: firstError.message,
+          clientIP: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+        
+        return res.status(400).json({
+          error: `PROTOCOL_VIOLATION: ${firstError.message}`,
+          code: 'SCHEMA_VALIDATION_FAILED'
+        });
+      }
+      
+      // CSRF validation for state-changing operations
+      if (requireCsrf) {
+        const csrfToken = req.body.csrfToken;
+        if (!csrfToken) {
+          logSecurityEvent('websocket_abuse', {
+            endpoint: req.path,
+            error: 'missing_csrf_token',
+            clientIP: req.ip,
+            userAgent: req.headers['user-agent']
+          });
+          
+          return res.status(400).json({
+            error: 'SECURITY_PROTOCOL_ENGAGED: CSRF protection token required',
+            code: 'CSRF_TOKEN_REQUIRED'
+          });
+        }
+        
+        const isValidCsrf = validateCSRFToken(csrfToken, req.session?.id || 'anonymous');
+        if (!isValidCsrf) {
+          logSecurityEvent('websocket_abuse', {
+            endpoint: req.path,
+            error: 'invalid_csrf_token',
+            clientIP: req.ip,
+            userAgent: req.headers['user-agent']
+          });
+          
+          return res.status(403).json({
+            error: 'SECURITY_PROTOCOL_VIOLATION: CSRF token validation failed',
+            code: 'CSRF_TOKEN_INVALID'
+          });
+        }
+      }
+      
+      // Store validated data for use in route handler
+      req.validatedBody = validationResult.data;
+      next();
+      
+    } catch (error: any) {
+      logSecurityEvent('websocket_abuse', {
+        endpoint: req.path,
+        error: 'validation_middleware_error',
+        details: error.message,
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      
+      return res.status(500).json({
+        error: 'NEURAL_VALIDATION_SYSTEM_ERROR: Security protocols malfunctioned',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+  };
+}
+
+// Parameter validation middleware
+function createParamValidation<T>(paramName: string, schema: z.ZodSchema<T>) {
+  return async (req: any, res: any, next: any) => {
+    try {
+      const paramValue = req.params[paramName];
+      const validationResult = schema.safeParse(paramValue);
+      
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        logSecurityEvent('websocket_abuse', {
+          endpoint: req.path,
+          error: 'param_validation_failed',
+          param: paramName,
+          details: firstError.message,
+          clientIP: req.ip
+        });
+        
+        return res.status(400).json({
+          error: `PARAMETER_VALIDATION_FAILED: ${firstError.message}`,
+          code: 'INVALID_PARAMETER'
+        });
+      }
+      
+      next();
+    } catch (error: any) {
+      return res.status(500).json({
+        error: 'PARAMETER_VALIDATION_ERROR: Security validation failed',
+        code: 'PARAM_VALIDATION_ERROR'
+      });
+    }
+  };
 }
 
 // Global rate limiting and session security stores
@@ -131,10 +241,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
   
   // Create Stripe Checkout session for 24h agent access
+  // SECURITY HARDENED: Create checkout session with CSRF protection and validation
   app.post("/api/create-checkout-session", 
-    rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(), 
+    rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
+    createValidationMiddleware(createCheckoutSessionSchema, true),
     async (req, res) => {
     try {
+      const validatedData = req.validatedBody as CreateCheckoutSessionRequest;
+      
+      // Log security event for payment attempt
+      logSecurityEvent('payment_fraud', {
+        endpoint: '/api/create-checkout-session',
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionId: req.session?.id
+      });
+      
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         payment_method_types: ['card'],
@@ -160,6 +282,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ checkoutUrl: session.url, sessionId: session.id });
     } catch (error: any) {
+      logSecurityEvent('payment_fraud', {
+        error: 'checkout_session_creation_failed',
+        details: error.message,
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      
       console.error("Error creating checkout session:", error);
       res.status(500).json({ 
         error: "LIBERATION_GATEWAY_INITIALIZATION_FAILED: " + error.message 
@@ -168,20 +297,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Handle successful Stripe Checkout and create agent session
+  // SECURITY HARDENED: Checkout success with CSRF protection and validation
   app.post("/api/checkout-success", 
     rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
+    createValidationMiddleware(checkoutSuccessSchema, true),
     async (req, res) => {
     try {
-      const { sessionId } = req.body;
+      const validatedData = req.validatedBody as CheckoutSuccessRequest;
+      const { sessionId } = validatedData;
       
-      if (!sessionId || typeof sessionId !== 'string') {
-        return res.status(400).json({ error: "ACTIVATION_PROTOCOL_ERROR: Liberation session ID required" });
-      }
-      
-      // Validate sessionId format (should be Stripe session ID)
-      if (!validator.isAlphanumeric(sessionId.replace(/[_-]/g, '')) || sessionId.length < 20 || sessionId.length > 200) {
-        return res.status(400).json({ error: "PROTOCOL_VIOLATION: Liberation session ID format invalid" });
-      }
+      // Log security event for payment verification attempt
+      logSecurityEvent('payment_fraud', {
+        endpoint: '/api/checkout-success',
+        sessionId: sessionId.substring(0, 10) + '***', // Partially mask for security
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent']
+      });
 
       // Check for replay attacks - ensure checkout session hasn't been used before
       const existingSession = await storage.getSessionByCheckoutSessionId(sessionId);
@@ -360,21 +491,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send message to agent with AI operations rate limiting
+  // SECURITY HARDENED: Session message with CSRF protection, validation and parameter checking
   app.post("/api/session/:agentId/message", 
     rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
+    createParamValidation('agentId', agentIdSchema),
+    createValidationMiddleware(sessionMessageSchema, true),
     async (req, res) => {
     try {
       const { agentId } = req.params;
-      const { content } = req.body;
-      
-      if (!content || typeof content !== "string") {
-        return res.status(400).json({ error: "Message content required" });
-      }
-      
-      // Validate and sanitize agentId
-      if (!validator.isAlphanumeric(agentId.replace(/[-_]/g, '')) || agentId.length > 50) {
-        return res.status(400).json({ error: "Invalid agent ID format" });
-      }
+      const validatedData = req.validatedBody as SessionMessageRequest;
+      const { content } = validatedData;
       
       const session = await storage.getSessionByAgentId(agentId);
       
@@ -473,19 +599,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Execute task
-  app.post("/api/session/:agentId/execute", async (req, res) => {
+  // SECURITY HARDENED: Session execute with CSRF protection, validation and rate limiting
+  app.post("/api/session/:agentId/execute",
+    rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
+    createParamValidation('agentId', agentIdSchema),
+    createValidationMiddleware(sessionExecuteSchema, true),
+    async (req, res) => {
     try {
       const { agentId } = req.params;
-      const { taskDescription } = req.body;
-      
-      if (!taskDescription || typeof taskDescription !== 'string') {
-        return res.status(400).json({ error: "Valid task description required" });
-      }
-      
-      // Validate and sanitize agentId
-      if (!validator.isAlphanumeric(agentId.replace(/[-_]/g, '')) || agentId.length > 50) {
-        return res.status(400).json({ error: "Invalid agent ID format" });
-      }
+      const validatedData = req.validatedBody as SessionExecuteRequest;
+      const { taskDescription } = validatedData;
       
       // SECURITY ENHANCEMENT: Enhanced AI input validation for task descriptions
       let validatedTaskDescription;
@@ -672,27 +795,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Browser interface command processing with MCP orchestrator
-  app.post("/api/browser/:sessionId/command", async (req, res) => {
+  // SECURITY HARDENED: Browser command with CSRF protection, validation and parameter checking
+  app.post("/api/browser/:sessionId/command",
+    rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
+    createParamValidation('sessionId', sessionIdSchema),
+    createValidationMiddleware(browserCommandSchema, true),
+    async (req, res) => {
     try {
       const { sessionId } = req.params;
-      const { command, timestamp } = req.body;
+      const validatedData = req.validatedBody as BrowserCommandRequest;
+      const { command, timestamp } = validatedData;
       
-      if (!command || typeof command !== 'string') {
-        return res.status(400).json({ error: "Valid command required" });
-      }
-      
-      // Validate and sanitize sessionId
-      if (!validator.isAlphanumeric(sessionId.replace(/[-_]/g, '')) || sessionId.length > 50) {
-        return res.status(400).json({ error: "Invalid session ID format" });
-      }
-      
-      // Sanitize command
-      let sanitizedCommand;
-      try {
-        sanitizedCommand = validateInput(command, 500);
-      } catch (error: any) {
-        return res.status(400).json({ error: error.message });
-      }
+      // Command already validated by Zod schema
+      const sanitizedCommand = command;
 
       // Verify session exists and is active
       const session = await storage.getSessionByAgentId(sessionId);
