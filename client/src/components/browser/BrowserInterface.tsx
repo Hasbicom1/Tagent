@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Terminal, ChevronUp, ChevronDown, Clock, Zap, Settings } from 'lucide-react';
+import { Terminal, ChevronUp, ChevronDown, Clock, Zap, Settings, Camera, FileText, MousePointer, ScrollText } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -203,6 +203,50 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
           {/* Expanded Content */}
           {isExpanded && (
             <div className="p-3 pt-0 h-full flex flex-col">
+              {/* Quick Commands Grid */}
+              <div className="grid grid-cols-2 gap-1 mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentCommand("Take a screenshot")}
+                  className="text-xs font-mono"
+                  data-testid="quick-screenshot"
+                >
+                  <Camera className="w-3 h-3 mr-1" />
+                  Screenshot
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentCommand("Fill out this form")}
+                  className="text-xs font-mono"
+                  data-testid="quick-form"
+                >
+                  <FileText className="w-3 h-3 mr-1" />
+                  Fill Form
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentCommand("Click the submit button")}
+                  className="text-xs font-mono"
+                  data-testid="quick-click"
+                >
+                  <MousePointer className="w-3 h-3 mr-1" />
+                  Click
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentCommand("Scroll down to find more content")}
+                  className="text-xs font-mono"
+                  data-testid="quick-scroll"
+                >
+                  <ScrollText className="w-3 h-3 mr-1" />
+                  Scroll
+                </Button>
+              </div>
+
               {/* Command Input */}
               <form onSubmit={handleSubmit} className="mb-3">
                 <div className="flex space-x-2">
@@ -210,7 +254,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
                     ref={inputRef}
                     value={currentCommand}
                     onChange={(e) => setCurrentCommand(e.target.value)}
-                    placeholder="Enter command (e.g., 'login to Gmail', 'fill form')"
+                    placeholder="Or type custom command..."
                     className="flex-1 bg-black/50 border-primary/30 text-green-400 font-mono text-sm"
                     data-testid="command-input"
                     disabled={executeCommand.isPending}
@@ -219,7 +263,6 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
                     type="submit" 
                     size="sm" 
                     disabled={!currentCommand.trim() || executeCommand.isPending}
-                    className="bg-primary/20 hover:bg-primary/30 border border-primary/30"
                     data-testid="command-submit"
                   >
                     {executeCommand.isPending ? (

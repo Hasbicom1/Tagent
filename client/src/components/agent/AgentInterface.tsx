@@ -18,7 +18,13 @@ import {
   Activity,
   Cpu,
   Code,
-  Command
+  Command,
+  Camera,
+  FileText,
+  Lock,
+  Search,
+  Eye,
+  BarChart
 } from 'lucide-react';
 
 interface Message {
@@ -344,7 +350,72 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
               </div>
             </ScrollArea>
             
-            <div className="p-4 border-t border-primary/10 bg-background/50">
+            <div className="p-4 border-t border-primary/10 bg-background/50 space-y-4">
+              {/* Quick Action Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Navigate to a website and take a screenshot for me")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-screenshot"
+                >
+                  <Camera className="w-3 h-3 mr-1" />
+                  Screenshot
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Help me fill out this form automatically")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-form"
+                >
+                  <FileText className="w-3 h-3 mr-1" />
+                  Fill Form
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Login to my account for me")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-login"
+                >
+                  <Lock className="w-3 h-3 mr-1" />
+                  Login
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Search for information and summarize what you find")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-search"
+                >
+                  <Search className="w-3 h-3 mr-1" />
+                  Research
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Monitor this page and alert me of changes")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-monitor"
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  Monitor
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentMessage("Extract data from this page and organize it for me")}
+                  className="text-xs font-mono"
+                  data-testid="button-quick-extract"
+                >
+                  <BarChart className="w-3 h-3 mr-1" />
+                  Extract
+                </Button>
+              </div>
+
+              {/* Command Input */}
               <div className="flex gap-3">
                 <span className="text-primary font-mono text-sm pt-3">$</span>
                 <Input
@@ -356,7 +427,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Enter task parameters..."
+                  placeholder="Or type your custom command..."
                   disabled={isExecuting}
                   className="flex-1 font-mono bg-background/50 border-primary/20"
                   data-testid="input-command-line"
