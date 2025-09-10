@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Terminal, 
@@ -32,6 +32,8 @@ interface Message {
   sessionId: string;
   role: 'user' | 'agent';
   content: string;
+  messageType: 'chat' | 'command' | 'system';
+  inputMethod: 'typing' | 'button' | 'slash_command';
   timestamp: Date;
   hasExecutableTask: boolean | null;
   taskDescription: string | null;
@@ -56,6 +58,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [browserView, setBrowserView] = useState<string | null>(null);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [realTimeRemaining, setRealTimeRemaining] = useState(initialTimeRemaining);
+  const [historyView, setHistoryView] = useState<'all' | 'chat' | 'commands'>('all');
   const { toast } = useToast();
 
   // Fetch session info
@@ -72,8 +75,8 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  // Fetch messages
-  const { data: messages = [], refetch: refetchMessages } = useQuery({
+  // Fetch all messages (backward compatibility and default view)
+  const { data: allMessages = [], refetch: refetchMessages } = useQuery({
     queryKey: ['messages', agentId],
     queryFn: async () => {
       const response = await apiRequest('GET', `/api/session/${agentId}/messages`);
@@ -90,6 +93,53 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     enabled: !!sessionInfo,
   });
 
+  // Fetch chat history only
+  const { data: chatHistory = [] } = useQuery({
+    queryKey: ['chat-history', agentId],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/session/${agentId}/chat-history`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch chat history');
+      }
+      const data = await response.json();
+      return data.map((msg: any) => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
+      })) as Message[];
+    },
+    enabled: !!sessionInfo,
+  });
+
+  // Fetch command history only
+  const { data: commandHistory = [] } = useQuery({
+    queryKey: ['command-history', agentId],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/session/${agentId}/command-history`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch command history');
+      }
+      const data = await response.json();
+      return data.map((msg: any) => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
+      })) as Message[];
+    },
+    enabled: !!sessionInfo,
+  });
+
+  // Get current messages based on selected history view
+  const getCurrentMessages = () => {
+    switch (historyView) {
+      case 'chat': return chatHistory;
+      case 'commands': return commandHistory;
+      default: return allMessages;
+    }
+  };
+
+  const messages = getCurrentMessages();
+
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -101,7 +151,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate all history caches to prevent stale data
       refetchMessages();
+      queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['command-history', agentId] });
       setCurrentMessage('');
     },
     onError: (error: any) => {
@@ -340,12 +393,45 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
           {/* Command Interface */}
           <Card className="flex flex-col bg-card/50 border-primary/20">
             <div className="p-4 border-b border-primary/10 bg-primary/5">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-primary" />
-                <h3 className="font-bold text-lg font-mono">COMMAND_INTERFACE</h3>
-                <Badge variant="outline" className="text-xs font-mono border-primary/30">
-                  SECURE_CHANNEL
-                </Badge>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-primary" />
+                  <h3 className="font-bold text-lg font-mono">COMMAND_INTERFACE</h3>
+                  <Badge variant="outline" className="text-xs font-mono border-primary/30">
+                    SECURE_CHANNEL
+                  </Badge>
+                </div>
+                
+                {/* History View Selector */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant={historyView === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setHistoryView('all')}
+                    className="text-xs font-mono"
+                    data-testid="button-view-all"
+                  >
+                    ALL ({allMessages.length})
+                  </Button>
+                  <Button
+                    variant={historyView === 'chat' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setHistoryView('chat')}
+                    className="text-xs font-mono"
+                    data-testid="button-view-chat"
+                  >
+                    CHAT ({chatHistory.length})
+                  </Button>
+                  <Button
+                    variant={historyView === 'commands' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setHistoryView('commands')}
+                    className="text-xs font-mono"
+                    data-testid="button-view-commands"
+                  >
+                    COMMANDS ({commandHistory.length})
+                  </Button>
+                </div>
               </div>
             </div>
             
@@ -357,6 +443,15 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       <span>{message.timestamp.toLocaleTimeString()}</span>
                       <span>•</span>
                       <span>{message.role === 'user' ? 'USER_INPUT' : 'AGENT_RESPONSE'}</span>
+                      {message.messageType === 'command' && (
+                        <>
+                          <span>•</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {message.inputMethod === 'slash_command' ? 'SLASH_CMD' : 
+                             message.inputMethod === 'button' ? 'BUTTON_CMD' : 'COMMAND'}
+                          </Badge>
+                        </>
+                      )}
                     </div>
                     
                     <div className={`p-4 rounded-lg border ${

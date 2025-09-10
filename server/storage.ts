@@ -24,6 +24,8 @@ export interface IStorage {
   // Message management
   createMessage(message: InsertMessage): Promise<Message>;
   getSessionMessages(sessionId: string): Promise<Message[]>;
+  getSessionChatHistory(sessionId: string): Promise<Message[]>;
+  getSessionCommandHistory(sessionId: string): Promise<Message[]>;
   
   // Execution management
   createExecution(execution: InsertExecution): Promise<Execution>;
@@ -101,6 +103,8 @@ export class MemStorage implements IStorage {
       ...insertMessage,
       id,
       timestamp: new Date(),
+      messageType: insertMessage.messageType ?? "chat",
+      inputMethod: insertMessage.inputMethod ?? "typing",
       hasExecutableTask: insertMessage.hasExecutableTask ?? false,
       taskDescription: insertMessage.taskDescription ?? null,
     };
@@ -111,6 +115,18 @@ export class MemStorage implements IStorage {
   async getSessionMessages(sessionId: string): Promise<Message[]> {
     return Array.from(this.messages.values())
       .filter((message) => message.sessionId === sessionId)
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }
+
+  async getSessionChatHistory(sessionId: string): Promise<Message[]> {
+    return Array.from(this.messages.values())
+      .filter((message) => message.sessionId === sessionId && message.messageType === "chat")
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }
+
+  async getSessionCommandHistory(sessionId: string): Promise<Message[]> {
+    return Array.from(this.messages.values())
+      .filter((message) => message.sessionId === sessionId && message.messageType === "command")
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 

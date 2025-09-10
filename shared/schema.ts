@@ -20,6 +20,8 @@ export const messages = pgTable("messages", {
   sessionId: varchar("session_id").references(() => sessions.id).notNull(),
   role: text("role", { enum: ["user", "agent"] }).notNull(),
   content: text("content").notNull(),
+  messageType: text("message_type", { enum: ["chat", "command", "system"] }).notNull().default("chat"),
+  inputMethod: text("input_method", { enum: ["typing", "button", "slash_command"] }).default("typing"),
   hasExecutableTask: boolean("has_executable_task").default(false),
   taskDescription: text("task_description"),
   timestamp: timestamp("timestamp").defaultNow().notNull(),

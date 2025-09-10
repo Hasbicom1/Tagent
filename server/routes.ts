@@ -293,7 +293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get chat messages for a session
+  // Get all messages for a session (backward compatibility)
   app.get("/api/session/:agentId/messages", async (req, res) => {
     try {
       const { agentId } = req.params;
@@ -312,6 +312,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error getting messages:", error);
       res.status(500).json({ error: "Failed to get messages: " + error.message });
+    }
+  });
+
+  // Get chat history only (non-command messages)
+  app.get("/api/session/:agentId/chat-history", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const session = await storage.getSessionByAgentId(agentId);
+      
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (new Date() > session.expiresAt) {
+        return res.status(410).json({ error: "Session expired" });
+      }
+
+      const chatHistory = await storage.getSessionChatHistory(session.id);
+      res.json(chatHistory);
+    } catch (error: any) {
+      console.error("Error getting chat history:", error);
+      res.status(500).json({ error: "Failed to get chat history: " + error.message });
+    }
+  });
+
+  // Get command history only (command execution messages)
+  app.get("/api/session/:agentId/command-history", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const session = await storage.getSessionByAgentId(agentId);
+      
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (new Date() > session.expiresAt) {
+        return res.status(410).json({ error: "Session expired" });
+      }
+
+      const commandHistory = await storage.getSessionCommandHistory(session.id);
+      res.json(commandHistory);
+    } catch (error: any) {
+      console.error("Error getting command history:", error);
+      res.status(500).json({ error: "Failed to get command history: " + error.message });
     }
   });
 
@@ -372,11 +416,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "Session expired" });
       }
 
-      // Save user message with validated content
+      // Determine message type and input method from normalized content
+      let messageType: "chat" | "command" | "system" = "chat";
+      let inputMethod: "typing" | "button" | "slash_command" = "typing";
+      
+      // Detect if this was a slash command (original content vs validated content difference)
+      if (content.trim().startsWith('/')) {
+        messageType = "command";
+        inputMethod = "slash_command";
+      } else if (validatedContent.includes("Summarize the main content") || 
+                 validatedContent.includes("Translate the text") || 
+                 validatedContent.includes("Analyze this content") ||
+                 validatedContent.includes("Navigate to a website") ||
+                 validatedContent.includes("Help me fill out") ||
+                 validatedContent.includes("Login to my account") ||
+                 validatedContent.includes("Research this topic") ||
+                 validatedContent.includes("Monitor this page") ||
+                 validatedContent.includes("Extract and organize")) {
+        messageType = "command";
+        inputMethod = "button";
+      }
+
+      // Save user message with enhanced tracking
       const userMessage = await storage.createMessage({
         sessionId: session.id,
         role: "user",
         content: validatedContent,
+        messageType,
+        inputMethod,
         hasExecutableTask: false,
         taskDescription: null
       });
@@ -384,10 +451,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate agent response using OpenAI with validated content
       const agentResponse = await analyzeTask(validatedContent);
       
+      // Agent message mirrors user's classification for coherent command history
       const agentMessage = await storage.createMessage({
         sessionId: session.id,
         role: "agent",
         content: agentResponse.response,
+        messageType: messageType, // Mirror user's message type for coherent history
+        inputMethod: "typing", // Agent responses are always generated
         hasExecutableTask: agentResponse.isExecutable,
         taskDescription: agentResponse.taskDescription
       });
