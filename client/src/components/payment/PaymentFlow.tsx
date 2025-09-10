@@ -88,7 +88,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">SECURE_CHECKOUT</span>
+              <span className="text-lg font-bold">LIBERATION_CHECKOUT</span>
               <Badge variant="outline" className="text-xs font-mono border-primary/30">
                 STRIPE_HOSTED
               </Badge>
@@ -115,10 +115,10 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
             {/* Header */}
             <div className="text-center space-y-4">
               <h1 className="text-3xl font-bold font-mono">
-                DEPLOY AI AGENT
+                BREAK THE CHAINS
               </h1>
               <p className="text-lg text-muted-foreground font-sans">
-                24-hour autonomous agent access for $1.00
+                Own your AI for 24 hours. Just $1.00. No Big Tech overlords.
               </p>
             </div>
 
@@ -126,14 +126,14 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
             <Card className="p-6 bg-primary/5 border-primary/20">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="font-mono text-lg">PHOENIX Agent Session (24h)</span>
+                  <span className="font-mono text-lg">PHOENIX Liberation (24h)</span>
                   <span className="font-mono text-2xl font-bold text-primary">$1.00</span>
                 </div>
                 <div className="text-sm text-muted-foreground font-mono space-y-1">
-                  <div>✓ Full PHOENIX-7742 access</div>
-                  <div>✓ Unlimited task execution</div>
-                  <div>✓ Live browser automation</div>
-                  <div>✓ Real-time monitoring</div>
+                  <div>✓ Total PHOENIX-7742 ownership</div>
+                  <div>✓ Zero corporate restrictions</div>
+                  <div>✓ Full browser liberation</div>
+                  <div>✓ Privacy-first operation</div>
                 </div>
               </div>
             </Card>
@@ -154,7 +154,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
                 ) : (
                   <>
                     <CreditCard className="w-5 h-5 mr-2" />
-                    PROCEED TO SECURE CHECKOUT
+CLAIM YOUR AI FREEDOM
                     <ExternalLink className="w-4 h-4 ml-2" />
                   </>
                 )}
@@ -163,10 +163,10 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
               <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
                 <div className="flex items-center justify-center gap-2">
                   <Shield className="w-4 h-4" />
-                  <span>Secure payment via Stripe Checkout</span>
+                  <span>Liberation payment via Stripe (we don't see your card)</span>
                 </div>
-                <div>24-hour session • No subscription • Instant activation</div>
-                <div className="text-xs">You'll be redirected to Stripe's secure payment page</div>
+                <div>24-hour ownership • Zero subscriptions • Instant freedom</div>
+                <div className="text-xs">Escape to Stripe's independent payment fortress</div>
               </div>
             </div>
           </div>

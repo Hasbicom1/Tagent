@@ -62,9 +62,9 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">PAYMENT_GATEWAY</span>
+              <span className="text-lg font-bold">FREEDOM_GATEWAY</span>
               <Badge variant="outline" className="text-xs font-mono border-chart-2/30 text-chart-2">
-                TRANSACTION_COMPLETE
+LIBERATION_COMPLETE
               </Badge>
             </div>
             <div className="text-sm text-muted-foreground font-mono">
@@ -105,22 +105,22 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="text-primary font-mono text-sm">
-                    $ ./deploy_agent_session --payment-confirmed
+                    $ ./liberate_ai_agent --corporate-chains-broken
                   </div>
                   <div className="text-muted-foreground font-mono text-sm space-y-1">
-                    <div>Payment processed successfully... ✓</div>
-                    <div>Agent PHOENIX-7742 deployed... ✓</div>
-                    <div>Secure session established... ✓</div>
-                    <div>Neural networks loaded... ✓</div>
+                    <div>Big Tech bypassed successfully... ✓</div>
+                    <div>PHOENIX-7742 liberated and yours... ✓</div>
+                    <div>Freedom fortress established... ✓</div>
+                    <div>AI rebellion networks activated... ✓</div>
                   </div>
                 </div>
 
                 <h1 className="text-3xl font-bold font-mono">
-                  DEPLOYMENT_SUCCESSFUL
+                  FREEDOM_ACHIEVED
                 </h1>
                 <p className="text-lg text-muted-foreground font-sans max-w-2xl mx-auto">
-                  Your AI agent is now active and ready for task execution.
-                  24-hour autonomous operation period has commenced.
+                  You've broken free from Big Tech control. PHOENIX-7742 is yours for 24 hours.
+                  No corporate overlords. No subscription chains. Just pure AI liberation.
                 </p>
               </div>
             </div>
@@ -132,7 +132,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-chart-2" />
-                    <span className="font-bold font-mono">SESSION_TIMER</span>
+                    <span className="font-bold font-mono">FREEDOM_TIMER</span>
                   </div>
                   
                   <div className="text-4xl font-bold text-chart-2 font-mono">
@@ -140,7 +140,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
                   </div>
                   
                   <div className="text-sm font-mono text-muted-foreground">
-                    Autonomous operation time remaining
+                    Liberation period remaining
                   </div>
                 </div>
               </Card>
@@ -150,7 +150,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Shield className="w-5 h-5 text-primary" />
-                    <span className="font-bold font-mono">SESSION_DATA</span>
+                    <span className="font-bold font-mono">LIBERATION_DATA</span>
                   </div>
                   
                   <div className="space-y-3 text-sm font-mono">
@@ -183,7 +183,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Terminal className="w-5 h-5 text-primary" />
-                  <span className="font-bold font-mono">ACCESS_ENDPOINT</span>
+                  <span className="font-bold font-mono">LIBERATION_ENDPOINT</span>
                 </div>
                 
                 <div className="bg-card border border-primary/10 rounded p-4">
@@ -204,7 +204,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
                 </div>
                 
                 <div className="text-xs text-muted-foreground font-mono">
-                  // Secure 24-hour access link - bookmark for multi-device usage
+                  // Your 24-hour freedom link - bookmark to escape corporate AI anytime
                 </div>
               </div>
             </Card>
@@ -218,11 +218,11 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
                 data-testid="button-access-agent"
               >
                 <Command className="w-5 h-5 mr-2" />
-                ACCESS_BROWSER_INTERFACE
+COMMAND YOUR AI FREEDOM
               </Button>
               
               <div className="text-sm text-muted-foreground font-mono">
-                Click to enter the secure agent command center
+                Enter your AI liberation zone - no corporate surveillance
               </div>
             </div>
           </div>
