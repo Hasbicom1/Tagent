@@ -1,0 +1,37 @@
+You are a master web developer, AI engineer, security auditor, UX designer, and brand copywriter. 
+Your mission: make the project fully secure, production-ready, user-friendly, and aligned with our brand: AI for everyone, fair, accessible, $1 for 24 hours, no subscription traps.
+
+Tasks:
+
+1. FULL SECURITY & PRODUCTION HARDENING
+- Audit the entire codebase for vulnerabilities and misconfigurations.
+- Fix issues: input sanitization, XSS/CSRF prevention, HTTPS/HSTS, secure cookies (HttpOnly, SameSite, Secure), rate limits, safe session handling.
+- Remove unused dependencies, prune packages, and optimize production builds.
+- Harden Dockerfile and CI pipeline (lint, tests, SAST, container scans).
+- Implement safe logging and monitoring with no sensitive data leaks.
+
+2. BRAND VOICE & COPY ALIGNMENT
+- Rewrite all user-facing text (landing, onboarding, checkout, chat, errors, emails) to match our brand mission:
+  → AI for everyone, fair and accessible.
+  → $1 for 24 hours, no monthly traps, no Big Tech lock-in.
+  → Emphasize freedom, fairness, and inclusivity.
+- Tone: bold, conversational, empowering, slightly rebellious.
+- Ensure copy is clear, emotional, and psychologically persuasive.
+
+3. CHAT + COMMAND UX ENHANCEMENT
+- Users can type free text OR click a command button (e.g. /summarize, /translate, /analyze).
+- Clicking a command auto-inserts a **natural phrasing** into the chat box for the AI (e.g., click /summarize → prefill: "Please summarize this text for me").
+- Users can edit the auto-phrased text before sending.
+- Normalize all user input into **clear AI-understandable instructions**, preserving intent.
+- Keep chat history and command history separate.
+
+4. BRAND ALIGNMENT & DOMAIN
+- Ensure all copy, labels, and messaging reinforce the brand:
+  → $1 AI agent, fair access, freedom from Big Tech lock-in.
+- Recommend landing hero text, checkout microcopy, email lines, and short social posts reflecting this.
+
+5. DELIVERABLES
+- Return secure, production-ready code diffs or full replacements where needed.
+- Provide updated chat component code with command buttons + auto-phrasing.
+- Provide rewritten copy in context for all UI text, emails, and landing pages.
+- Ensure the final project is fully secure, fast, user-friendly, and aligned with the brand mission.
