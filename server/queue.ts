@@ -4,6 +4,7 @@ import { Task, TaskResult, InsertTask, InsertTaskResult } from "@shared/schema";
 import { storage } from './storage';
 import { browserAgent } from './browserAutomation';
 import { mcpOrchestrator } from './mcpOrchestrator';
+import { wsManager } from './websocket';
 
 // Redis connection configuration with fallback for development
 const getRedisConnection = (): { connection: ConnectionOptions } | undefined => {
@@ -183,26 +184,45 @@ async function processBrowserAutomationJob(job: Job): Promise<any> {
   const payload = job.data.payload as BrowserAutomationPayload;
   
   try {
-    // Update progress to 10%
+    // Initial setup stage
     await job.updateProgress(10);
+    await broadcastTaskProgress(job.id!, 10, 'Initializing browser automation engine', [
+      'Setting up browser context...',
+      'Loading neural networks...'
+    ]);
     
     // Execute browser automation task
     console.log(`🌐 BROWSER: Executing "${payload.instruction}"`);
+    await broadcastTaskProgress(job.id!, 25, 'Creating automation task', [
+      `Instruction: "${payload.instruction}"`,
+      'Analyzing target environment...'
+    ]);
     
     const result = await browserAgent.createTask(payload.sessionId, payload.instruction);
     
-    // Update progress to 50%
+    // Task created successfully
     await job.updateProgress(50);
+    await broadcastTaskProgress(job.id!, 50, 'Executing automation sequence', [
+      `Task ID: ${result}`,
+      'Browser automation in progress...'
+    ]);
     
-    // Wait for task completion
+    // Wait for task completion with detailed progress updates
     let attempts = 0;
     const maxAttempts = 60; // 60 seconds timeout
+    let lastLoggedProgress = 50;
     
     while (attempts < maxAttempts) {
       const taskStatus = await browserAgent.getTask(result);
       
       if (taskStatus && taskStatus.status === 'completed') {
         await job.updateProgress(100);
+        await broadcastTaskProgress(job.id!, 100, 'Task completed successfully', [
+          'Automation sequence completed',
+          'Processing results...',
+          'Task execution finished'
+        ]);
+        
         return {
           success: true,
           taskId: result,
@@ -211,20 +231,47 @@ async function processBrowserAutomationJob(job: Job): Promise<any> {
           message: `Browser automation completed successfully`
         };
       } else if (taskStatus && taskStatus.status === 'failed') {
+        await broadcastTaskProgress(job.id!, 0, 'Task execution failed', [
+          `Error: ${taskStatus.error}`,
+          'Automation sequence terminated'
+        ]);
         throw new Error(`Browser automation failed: ${taskStatus.error}`);
       }
       
-      // Update progress incrementally
+      // Update progress incrementally with detailed logs
       const progress = Math.min(95, 50 + (attempts / maxAttempts) * 45);
       await job.updateProgress(progress);
+      
+      // Send detailed progress updates every 10% increment
+      if (progress - lastLoggedProgress >= 10) {
+        const stage = attempts < 20 ? 'Executing browser commands' :
+                     attempts < 40 ? 'Processing intermediate results' : 
+                     'Finalizing automation sequence';
+        
+        await broadcastTaskProgress(job.id!, progress, stage, [
+          `Progress: ${Math.round(progress)}%`,
+          `Elapsed time: ${attempts} seconds`,
+          `Estimated remaining: ${Math.max(0, maxAttempts - attempts)} seconds`
+        ]);
+        
+        lastLoggedProgress = progress;
+      }
       
       await new Promise(resolve => setTimeout(resolve, 1000));
       attempts++;
     }
     
+    await broadcastTaskProgress(job.id!, 0, 'Task execution timeout', [
+      'Browser automation timed out after 60 seconds',
+      'Consider simplifying the task or increasing timeout'
+    ]);
     throw new Error('Browser automation timed out after 60 seconds');
   } catch (error) {
     console.error(`❌ BROWSER: Automation failed:`, error);
+    await broadcastTaskProgress(job.id!, 0, 'Task execution error', [
+      `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'Browser automation terminated unexpectedly'
+    ]);
     throw error;
   }
 }
@@ -266,20 +313,30 @@ async function processSessionEndJob(job: Job): Promise<any> {
 function setupQueueEventListeners(): void {
   if (!queueEvents) return;
   
-  queueEvents.on('waiting', ({ jobId }) => {
+  queueEvents.on('waiting', async ({ jobId }) => {
     console.log(`📋 TASK ${jobId}: Queued and waiting`);
+    await broadcastTaskStatusUpdate(jobId, TaskStatus.PENDING);
   });
   
-  queueEvents.on('active', ({ jobId }) => {
+  queueEvents.on('active', async ({ jobId }) => {
     console.log(`⚡ TASK ${jobId}: Started processing`);
+    await broadcastTaskStatusUpdate(jobId, TaskStatus.PROCESSING);
   });
   
-  queueEvents.on('completed', ({ jobId, returnvalue }) => {
+  queueEvents.on('completed', async ({ jobId, returnvalue }) => {
     console.log(`✅ TASK ${jobId}: Completed successfully`);
+    await broadcastTaskStatusUpdate(jobId, TaskStatus.COMPLETED, 100, returnvalue);
   });
   
-  queueEvents.on('failed', ({ jobId, failedReason }) => {
+  queueEvents.on('failed', async ({ jobId, failedReason }) => {
     console.error(`❌ TASK ${jobId}: Failed - ${failedReason}`);
+    await broadcastTaskStatusUpdate(jobId, TaskStatus.FAILED, undefined, undefined, failedReason);
+  });
+
+  queueEvents.on('progress', async ({ jobId, data }) => {
+    if (typeof data === 'number') {
+      await broadcastTaskProgress(jobId, data);
+    }
   });
 }
 
@@ -293,6 +350,9 @@ function setupWorkerEventListeners(): void {
     try {
       // Update storage when job becomes active
       await storage.updateTaskStatus(job.id!, TaskStatus.PROCESSING);
+      
+      // Broadcast WebSocket status update
+      await broadcastTaskStatusUpdate(job.id!, TaskStatus.PROCESSING);
     } catch (error) {
       console.error(`❌ WORKER: Failed to update task status for ${job.id}:`, error);
     }
@@ -318,6 +378,9 @@ function setupWorkerEventListeners(): void {
           finishedOn: job.finishedOn
         }
       });
+      
+      // Broadcast WebSocket completion update
+      await broadcastTaskStatusUpdate(job.id!, TaskStatus.COMPLETED, 100, result);
     } catch (error) {
       console.error(`❌ WORKER: Failed to update storage for completed job ${job.id}:`, error);
     }
@@ -348,6 +411,9 @@ function setupWorkerEventListeners(): void {
           failedReason: job.failedReason
         }
       });
+      
+      // Broadcast WebSocket failure update
+      await broadcastTaskStatusUpdate(job.id, TaskStatus.FAILED, undefined, undefined, error.message);
     } catch (storageError) {
       console.error(`❌ WORKER: Failed to update storage for failed job ${job.id}:`, storageError);
     }
@@ -453,10 +519,29 @@ function addInMemoryTask(
       // Update storage when processing starts
       await storage.updateTaskStatus(taskId, TaskStatus.PROCESSING);
       
+      // Broadcast WebSocket status update
+      await broadcastTaskStatusUpdate(taskId, TaskStatus.PROCESSING);
+      await broadcastTaskProgress(taskId, 10, 'Starting task simulation', [
+        `Task type: ${type}`,
+        'Development mode simulation active'
+      ]);
+      
       // Simulate task processing (would be done by worker in production)
       console.log(`⚡ MEMORY TASK ${taskId}: Simulating processing of ${type}`);
       
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      // Simulate progress updates during processing
+      const steps = [
+        { progress: 25, stage: 'Initializing task execution', logs: ['Setting up simulation environment'] },
+        { progress: 50, stage: 'Processing task logic', logs: ['Executing main task simulation'] },
+        { progress: 75, stage: 'Finalizing results', logs: ['Preparing task completion'] }
+      ];
+      
+      for (const step of steps) {
+        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+        await broadcastTaskProgress(taskId, step.progress, step.stage, step.logs);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
       
       // Mark as completed
       task.status = TaskStatus.COMPLETED;
@@ -478,6 +563,14 @@ function addInMemoryTask(
         duration: "2-3 seconds",
         workerInfo: { mode: "development", simulated: true }
       });
+      
+      // Broadcast WebSocket completion update
+      await broadcastTaskStatusUpdate(taskId, TaskStatus.COMPLETED, 100, task.result);
+      await broadcastTaskProgress(taskId, 100, 'Task completed successfully', [
+        'Simulation finished',
+        'Task execution completed',
+        'Ready for next task'
+      ]);
     } catch (error) {
       task.status = TaskStatus.FAILED;
       task.failedAt = new Date();
@@ -491,6 +584,13 @@ function addInMemoryTask(
         logs: [`Task ${type} failed in development mode: ${task.error}`],
         workerInfo: { mode: "development", simulated: true }
       });
+      
+      // Broadcast WebSocket failure update
+      await broadcastTaskStatusUpdate(taskId, TaskStatus.FAILED, undefined, undefined, task.error);
+      await broadcastTaskProgress(taskId, 0, 'Task execution failed', [
+        `Error: ${task.error}`,
+        'Simulation terminated'
+      ]);
     }
   }, delay || 500);
 
@@ -628,6 +728,73 @@ function mapJobStateToTaskStatus(state: string): TaskStatus {
     case 'completed': return TaskStatus.COMPLETED;
     case 'failed': return TaskStatus.FAILED;
     default: return TaskStatus.PENDING;
+  }
+}
+
+// WebSocket broadcasting helper functions
+async function broadcastTaskStatusUpdate(
+  taskId: string, 
+  status: TaskStatus, 
+  progress?: number, 
+  result?: any, 
+  error?: string
+): Promise<void> {
+  try {
+    // Get task details from storage
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      console.error(`❌ WS: Cannot broadcast status for unknown task ${taskId}`);
+      return;
+    }
+
+    // Broadcast task status via WebSocket
+    await wsManager.broadcastTaskStatus(
+      taskId,
+      task.sessionId,
+      task.agentId,
+      status,
+      task.type,
+      progress,
+      result || error ? { result, error } : undefined
+    );
+  } catch (broadcastError) {
+    console.error(`❌ WS: Failed to broadcast task status for ${taskId}:`, broadcastError);
+  }
+}
+
+async function broadcastTaskProgress(
+  taskId: string, 
+  progress: number, 
+  stage?: string,
+  logs?: string[]
+): Promise<void> {
+  try {
+    // Get task details from storage
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      console.error(`❌ WS: Cannot broadcast progress for unknown task ${taskId}`);
+      return;
+    }
+
+    // Broadcast task progress via WebSocket
+    await wsManager.broadcastTaskProgress(
+      taskId,
+      task.sessionId,
+      progress,
+      stage
+    );
+
+    // Broadcast logs if provided
+    if (logs && logs.length > 0) {
+      await wsManager.broadcastTaskLogs(
+        taskId,
+        task.sessionId,
+        logs,
+        'info'
+      );
+    }
+  } catch (broadcastError) {
+    console.error(`❌ WS: Failed to broadcast task progress for ${taskId}:`, broadcastError);
   }
 }
 

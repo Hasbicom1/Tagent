@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Terminal, ChevronUp, ChevronDown, Clock, Zap, Settings, Camera, FileText, MousePointer, ScrollText } from 'lucide-react';
+import { Terminal, ChevronUp, ChevronDown, Clock, Zap, Settings, Camera, FileText, MousePointer, ScrollText, Wifi, WifiOff, Activity } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
 
 interface BrowserInterfaceProps {
   sessionId: string;
@@ -20,6 +21,10 @@ interface Command {
   status: 'pending' | 'executing' | 'completed' | 'failed';
   timestamp: Date;
   agent?: string;
+  taskId?: string;
+  progress?: number;
+  logs?: string[];
+  stage?: string;
 }
 
 interface SessionInfo {
@@ -49,7 +54,17 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
     refetchInterval: 30000,
   });
 
-  // Send command mutation
+  // WebSocket integration for real-time updates
+  const {
+    connectionStatus,
+    getTaskStatus,
+    getTaskProgress,
+    getTaskLogs,
+    subscribeToTask,
+    getAllTaskStatuses
+  } = useRealtimeTaskStatus(sessionInfo?.agentId, sessionId);
+
+  // Send command mutation with real-time WebSocket updates
   const executeCommand = useMutation({
     mutationFn: async (command: string) => {
       const response = await apiRequest('POST', `/api/browser/${sessionId}/command`, { 
@@ -66,24 +81,21 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
       const newCommand: Command = {
         id: data.commandId || Date.now().toString(),
         input: currentCommand,
-        status: 'executing',
+        status: 'pending',
         timestamp: new Date(),
-        agent: data.agent
+        agent: data.agent,
+        taskId: data.taskId, // Task ID from the queue system
+        progress: 0,
+        logs: ['Task queued for execution...']
       };
       
       setCommands(prev => [newCommand, ...prev]);
       setCurrentCommand('');
       
-      // Simulate command execution progression
-      setTimeout(() => {
-        setCommands(prev => 
-          prev.map(cmd => 
-            cmd.id === newCommand.id 
-              ? { ...cmd, status: 'completed' as const, output: data.result || 'Task completed successfully' }
-              : cmd
-          )
-        );
-      }, 3000);
+      // Subscribe to real-time updates for this task
+      if (data.taskId) {
+        subscribeToTask(data.taskId);
+      }
     },
     onError: (error: any) => {
       toast({
@@ -93,6 +105,58 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
       });
     }
   });
+
+  // Update commands with real-time WebSocket data
+  useEffect(() => {
+    setCommands(prevCommands => 
+      prevCommands.map(cmd => {
+        if (!cmd.taskId) return cmd;
+
+        const taskStatus = getTaskStatus(cmd.taskId);
+        const taskProgress = getTaskProgress(cmd.taskId);
+        const taskLogs = getTaskLogs(cmd.taskId);
+
+        if (taskStatus || taskProgress || taskLogs.length > 0) {
+          const updatedCommand = { ...cmd };
+          
+          // Update status based on WebSocket data
+          if (taskStatus) {
+            switch (taskStatus.status) {
+              case 'PENDING':
+                updatedCommand.status = 'pending';
+                break;
+              case 'PROCESSING':
+                updatedCommand.status = 'executing';
+                break;
+              case 'COMPLETED':
+                updatedCommand.status = 'completed';
+                updatedCommand.output = taskStatus.metadata?.result?.message || 'Task completed successfully';
+                break;
+              case 'FAILED':
+                updatedCommand.status = 'failed';
+                updatedCommand.output = taskStatus.metadata?.error || 'Task execution failed';
+                break;
+            }
+          }
+
+          // Update progress
+          if (taskProgress) {
+            updatedCommand.progress = taskProgress.progress;
+            updatedCommand.stage = taskProgress.stage;
+          }
+
+          // Update logs
+          if (taskLogs.length > 0) {
+            updatedCommand.logs = taskLogs.flatMap(log => log.logs);
+          }
+
+          return updatedCommand;
+        }
+
+        return cmd;
+      })
+    );
+  }, [getTaskStatus, getTaskProgress, getTaskLogs]);
 
   // Update time remaining
   useEffect(() => {
@@ -186,6 +250,20 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
             </div>
             
             <div className="flex items-center space-x-2">
+              {/* WebSocket Connection Status */}
+              <Badge 
+                variant={connectionStatus.isConnected ? 'default' : 'destructive'} 
+                className="text-xs font-mono"
+                data-testid="connection-status"
+              >
+                {connectionStatus.isConnected ? (
+                  <Wifi className="w-3 h-3 mr-1" />
+                ) : (
+                  <WifiOff className="w-3 h-3 mr-1" />
+                )}
+                {connectionStatus.isAuthenticated ? 'LIVE' : connectionStatus.isConnected ? 'CONN' : 'OFFLINE'}
+              </Badge>
+              
               {sessionInfo && (
                 <Badge variant={timeRemaining > 60 ? 'default' : 'destructive'} className="text-xs font-mono">
                   <Clock className="w-3 h-3 mr-1" />
