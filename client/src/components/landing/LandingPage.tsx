@@ -11,7 +11,9 @@ import {
   Code, 
   Command,
   Cpu,
-  Activity
+  Activity,
+  Twitter,
+  Mail
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -352,9 +354,66 @@ JOIN THE AI REVOLUTION
         </div>
       </div>
 
-      {/* Footer Terminal */}
+      {/* Contact Terminal */}
       <div className="border-t border-primary/20 bg-card/30">
-        <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          <Card className="bg-background/50 border-primary/20 max-w-2xl mx-auto mb-8">
+            <div className="bg-card border-b border-primary/20 p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-destructive" />
+                <div className="w-3 h-3 rounded-full bg-chart-3" />
+                <div className="w-3 h-3 rounded-full bg-chart-2" />
+                <div className="ml-4 text-sm font-mono text-muted-foreground">
+                  contact_support.sh
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-3">
+                <div className="text-primary font-mono text-sm">
+                  $ contact --support --agent-for-all
+                </div>
+                <div className="text-muted-foreground font-mono text-sm space-y-2">
+                  <div>Initializing contact protocols...</div>
+                  <div>Democratic AI support channels: <span className="text-chart-2">ACTIVE</span></div>
+                </div>
+              </div>
+              
+              <div className="bg-card/50 rounded border border-primary/10 p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Twitter className="w-4 h-4 text-primary" />
+                  <span className="font-mono text-sm text-muted-foreground">--twitter</span>
+                  <a 
+                    href="https://x.com/AgentForAll" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
+                    data-testid="link-twitter"
+                  >
+                    @AgentForAll
+                  </a>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <Mail className="w-4 h-4 text-primary" />
+                  <span className="font-mono text-sm text-muted-foreground">--email</span>
+                  <a 
+                    href="mailto:support@agentforall.ai" 
+                    className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
+                    data-testid="link-email"
+                  >
+                    support@agentforall.ai
+                  </a>
+                </div>
+              </div>
+              
+              <div className="text-xs font-mono text-muted-foreground">
+                Contact channels established • AI democracy support ready
+              </div>
+            </div>
+          </Card>
+          
           <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
             <div>AGENT FOR ALL © 2025 • Democratizing AI for everyone</div>
             <div>Built for people who believe AI should serve all, not just the elite</div>

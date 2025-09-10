@@ -10,7 +10,9 @@ import {
   CheckCircle, 
   Command,
   Shield,
-  Activity
+  Activity,
+  Twitter,
+  Mail
 } from 'lucide-react';
 
 interface PaymentSuccessProps {
@@ -248,6 +250,68 @@ ACCESS YOUR AGENT
             </div>
             <div className="pt-4 border-t border-primary/10 text-xs text-muted-foreground font-mono">
               All operations are logged and secured. Session data is automatically purged upon expiration.
+            </div>
+          </div>
+        </Card>
+        
+        {/* Contact Support Terminal */}
+        <Card className="bg-background/50 border-primary/20">
+          <div className="bg-card border-b border-primary/20 p-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-destructive" />
+              <div className="w-3 h-3 rounded-full bg-chart-3" />
+              <div className="w-3 h-3 rounded-full bg-chart-2" />
+              <div className="ml-4 text-sm font-mono text-muted-foreground">
+                agent_support.log
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <div className="text-primary font-mono text-sm">
+                $ help --agent-session-support
+              </div>
+              <div className="text-muted-foreground font-mono text-sm space-y-1">
+                <div>Agent For All support channels active...</div>
+                <div>Democratic AI assistance: <span className="text-chart-2">READY</span></div>
+              </div>
+            </div>
+            
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="flex items-center gap-3">
+                <Twitter className="w-4 h-4 text-primary" />
+                <div className="flex flex-col">
+                  <span className="font-mono text-xs text-muted-foreground">--twitter</span>
+                  <a 
+                    href="https://x.com/AgentForAll" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
+                    data-testid="link-twitter"
+                  >
+                    @AgentForAll
+                  </a>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Mail className="w-4 h-4 text-primary" />
+                <div className="flex flex-col">
+                  <span className="font-mono text-xs text-muted-foreground">--email</span>
+                  <a 
+                    href="mailto:support@agentforall.ai" 
+                    className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
+                    data-testid="link-email"
+                  >
+                    support@agentforall.ai
+                  </a>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-xs font-mono text-muted-foreground">
+              Support for your 24-hour AI democracy session
             </div>
           </div>
         </Card>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Terminal, Loader2, CreditCard, Shield, ExternalLink } from 'lucide-react';
+import { Terminal, Loader2, CreditCard, Shield, ExternalLink, Twitter, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -168,6 +168,53 @@ JOIN AGENT FOR ALL
                 <div>24-hour ownership • Zero subscriptions • AI for everyone</div>
                 <div className="text-xs">Secure democratic payment via Stripe's independent fortress</div>
               </div>
+            </div>
+          </div>
+        </Card>
+        
+        {/* Contact Terminal */}
+        <Card className="bg-background/50 border-primary/20 mt-8">
+          <div className="bg-card border-b border-primary/20 p-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-destructive" />
+              <div className="w-3 h-3 rounded-full bg-chart-3" />
+              <div className="w-3 h-3 rounded-full bg-chart-2" />
+              <div className="ml-4 text-sm font-mono text-muted-foreground">
+                support_channels.exe
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <div className="text-primary font-mono text-sm">
+                $ agent_support --democratize-ai
+              </div>
+              <div className="text-muted-foreground font-mono text-xs">
+                Need help? AI democracy support is here.
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4 text-sm font-mono">
+              <a 
+                href="https://x.com/AgentForAll" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-twitter"
+              >
+                <Twitter className="w-4 h-4" />
+                @AgentForAll
+              </a>
+              
+              <a 
+                href="mailto:support@agentforall.ai" 
+                className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-email"
+              >
+                <Mail className="w-4 h-4" />
+                support@agentforall.ai
+              </a>
             </div>
           </div>
         </Card>
