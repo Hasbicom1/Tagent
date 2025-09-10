@@ -13,54 +13,95 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
+  apiVersion: "2024-06-20",
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Create $1 payment intent for 24h agent access
-  app.post("/api/create-payment-intent", async (req, res) => {
+  // Create Stripe Checkout session for 24h agent access
+  app.post("/api/create-checkout-session", async (req, res) => {
     try {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: 100, // $1.00 in cents
-        currency: "usd",
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'PHOENIX Agent - 24 Hour Session',
+                description: 'Full autonomous AI agent access with unlimited task execution',
+              },
+              unit_amount: 100, // $1.00 in cents
+            },
+            quantity: 1,
+          },
+        ],
+        success_url: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/`,
         metadata: {
           product: "agent-hq-24h-session"
         }
       });
       
-      res.json({ clientSecret: paymentIntent.client_secret });
+      res.json({ checkoutUrl: session.url, sessionId: session.id });
     } catch (error: any) {
-      console.error("Error creating payment intent:", error);
+      console.error("Error creating checkout session:", error);
       res.status(500).json({ 
-        error: "Failed to create payment intent: " + error.message 
+        error: "Failed to create checkout session: " + error.message 
       });
     }
   });
 
-  // Confirm payment and create agent session
-  app.post("/api/confirm-payment", async (req, res) => {
+  // Handle successful Stripe Checkout and create agent session
+  app.post("/api/checkout-success", async (req, res) => {
     try {
-      const { paymentIntentId } = req.body;
+      const { sessionId } = req.body;
       
-      if (!paymentIntentId) {
-        return res.status(400).json({ error: "Payment intent ID required" });
+      if (!sessionId) {
+        return res.status(400).json({ error: "Checkout session ID required" });
+      }
+
+      // Check for replay attacks - ensure checkout session hasn't been used before
+      const existingSession = await storage.getSessionByCheckoutSessionId(sessionId);
+      if (existingSession) {
+        return res.status(400).json({ error: "Checkout session already used" });
       }
 
       // Verify payment with Stripe
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
       
-      if (paymentIntent.status !== "succeeded") {
+      // Comprehensive session validation
+      if (checkoutSession.payment_status !== "paid") {
         return res.status(400).json({ error: "Payment not successful" });
+      }
+
+      // Validate session parameters match expected values
+      if (checkoutSession.amount_total !== 100) {
+        return res.status(400).json({ error: "Invalid payment amount" });
+      }
+
+      if (checkoutSession.currency !== "usd") {
+        return res.status(400).json({ error: "Invalid payment currency" });
+      }
+
+      if (checkoutSession.mode !== "payment") {
+        return res.status(400).json({ error: "Invalid payment mode" });
+      }
+
+      // Verify metadata
+      if (checkoutSession.metadata?.product !== "agent-hq-24h-session") {
+        return res.status(400).json({ error: "Invalid product metadata" });
       }
 
       // Generate unique agent ID
       const agentId = `PHOENIX-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
       
-      // Create 24-hour session
+      // Create 24-hour session with checkout session ID for idempotency
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const session = await storage.createSession({
         agentId,
-        stripePaymentIntentId: paymentIntentId,
+        checkoutSessionId: sessionId,
+        stripePaymentIntentId: checkoutSession.payment_intent as string,
         expiresAt,
         isActive: true
       });
@@ -81,8 +122,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt: session.expiresAt
       });
     } catch (error: any) {
-      console.error("Error confirming payment:", error);
-      res.status(500).json({ error: "Failed to confirm payment: " + error.message });
+      console.error("Error processing checkout success:", error);
+      res.status(500).json({ error: "Failed to process payment: " + error.message });
     }
   });
 

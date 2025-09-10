@@ -7,6 +7,7 @@ import { z } from "zod";
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   agentId: text("agent_id").notNull().unique(),
+  checkoutSessionId: text("checkout_session_id").notNull().unique(),
   stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),

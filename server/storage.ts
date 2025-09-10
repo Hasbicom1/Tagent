@@ -14,6 +14,7 @@ export interface IStorage {
   createSession(session: InsertSession): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
   getSessionByAgentId(agentId: string): Promise<Session | undefined>;
+  getSessionByCheckoutSessionId(checkoutSessionId: string): Promise<Session | undefined>;
   deactivateSession(id: string): Promise<void>;
   
   // Message management
@@ -56,6 +57,12 @@ export class MemStorage implements IStorage {
   async getSessionByAgentId(agentId: string): Promise<Session | undefined> {
     return Array.from(this.sessions.values()).find(
       (session) => session.agentId === agentId && session.isActive
+    );
+  }
+
+  async getSessionByCheckoutSessionId(checkoutSessionId: string): Promise<Session | undefined> {
+    return Array.from(this.sessions.values()).find(
+      (session) => session.checkoutSessionId === checkoutSessionId
     );
   }
 

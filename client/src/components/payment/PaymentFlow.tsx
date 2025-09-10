@@ -1,137 +1,50 @@
 import { useState, useEffect } from 'react';
-import { useStripe, useElements, PaymentElement, Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Terminal, Loader2, CreditCard, Shield } from 'lucide-react';
+import { Terminal, Loader2, CreditCard, Shield, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-
-// Load Stripe
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
-}
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 interface PaymentFlowProps {
   onPaymentSuccess: (sessionData: { sessionId: string; agentId: string; expiresAt: Date }) => void;
 }
 
-const CheckoutForm = ({ onPaymentSuccess }: PaymentFlowProps) => {
-  const stripe = useStripe();
-  const elements = useElements();
+export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
+  const [checkoutUrl, setCheckoutUrl] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const { toast } = useToast();
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.origin,
-        },
-        redirect: 'if_required'
-      });
-
-      if (error) {
+  // Create checkout session when component mounts
+  useEffect(() => {
+    const createCheckoutSession = async () => {
+      try {
+        const response = await apiRequest('POST', '/api/create-checkout-session', {});
+        const data = await response.json();
+        setCheckoutUrl(data.checkoutUrl);
+      } catch (error) {
+        console.error('Failed to create checkout session:', error);
         toast({
-          title: "Payment Failed",
-          description: error.message,
+          title: "Payment Error",
+          description: "Failed to initialize payment system. Please try again.",
           variant: "destructive",
         });
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        // Confirm payment with our backend
-        const response = await apiRequest('POST', '/api/confirm-payment', {
-          paymentIntentId: paymentIntent.id
-        });
-
-        const sessionData = await response.json();
-        
-        onPaymentSuccess({
-          sessionId: sessionData.sessionId,
-          agentId: sessionData.agentId,
-          expiresAt: new Date(sessionData.expiresAt)
-        });
-
-        toast({
-          title: "Payment Successful!",
-          description: "Your agent session is now active.",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Payment Error",
-        description: error.message || "An unexpected error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <PaymentElement className="mb-6" />
-      
-      <Button
-        type="submit"
-        disabled={!stripe || !elements || isProcessing}
-        className="w-full text-lg py-6 font-mono"
-        data-testid="button-process-payment"
-      >
-        {isProcessing ? (
-          <>
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            PROCESSING_PAYMENT...
-          </>
-        ) : (
-          <>
-            <CreditCard className="w-5 h-5 mr-2" />
-            DEPLOY AGENT • $1.00
-          </>
-        )}
-      </Button>
-      
-      <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-        <div className="flex items-center justify-center gap-2">
-          <Shield className="w-4 h-4" />
-          <span>Secure payment via Stripe</span>
-        </div>
-        <div>24-hour session • No subscription • Instant activation</div>
-      </div>
-    </form>
-  );
-};
-
-export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
-  const [clientSecret, setClientSecret] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Create payment intent when component mounts
-  useEffect(() => {
-    const createPaymentIntent = async () => {
-      try {
-        const response = await apiRequest('POST', '/api/create-payment-intent', {});
-        const data = await response.json();
-        setClientSecret(data.clientSecret);
-      } catch (error) {
-        console.error('Failed to create payment intent:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    createPaymentIntent();
-  }, []);
+    createCheckoutSession();
+  }, [toast]);
+
+  const handleProceedToCheckout = () => {
+    if (checkoutUrl) {
+      setIsRedirecting(true);
+      // Redirect to Stripe Checkout
+      window.location.href = checkoutUrl;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -139,7 +52,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
-            <div className="text-lg font-mono">INITIALIZING_PAYMENT_GATEWAY...</div>
+            <div className="text-lg font-mono">INITIALIZING_SECURE_CHECKOUT...</div>
             <div className="text-sm text-muted-foreground">Please wait while we prepare your session</div>
           </div>
         </Card>
@@ -147,32 +60,25 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
     );
   }
 
-  if (!clientSecret) {
+  if (!checkoutUrl) {
     return (
       <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <div className="text-lg font-mono text-destructive">PAYMENT_GATEWAY_ERROR</div>
-            <div className="text-sm text-muted-foreground">Failed to initialize payment system</div>
+            <div className="text-sm text-muted-foreground">Failed to initialize secure checkout</div>
+            <Button 
+              onClick={() => window.location.reload()} 
+              variant="outline"
+              data-testid="button-retry"
+            >
+              RETRY
+            </Button>
           </div>
         </Card>
       </div>
     );
   }
-
-  const stripeOptions = {
-    clientSecret,
-    appearance: {
-      theme: 'night' as const,
-      variables: {
-        colorPrimary: '#3b82f6',
-        colorBackground: '#0f0f23',
-        colorText: '#ffffff',
-        colorDanger: '#ef4444',
-        borderRadius: '8px',
-      },
-    },
-  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-mono">
@@ -182,9 +88,9 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">PAYMENT_GATEWAY</span>
+              <span className="text-lg font-bold">SECURE_CHECKOUT</span>
               <Badge variant="outline" className="text-xs font-mono border-primary/30">
-                SECURE_CHECKOUT
+                STRIPE_HOSTED
               </Badge>
             </div>
           </div>
@@ -200,7 +106,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
               <div className="w-3 h-3 rounded-full bg-chart-3" />
               <div className="w-3 h-3 rounded-full bg-chart-2" />
               <div className="ml-4 text-sm font-mono text-muted-foreground">
-                stripe_payment_terminal.exe
+                stripe_checkout.exe
               </div>
             </div>
           </div>
@@ -220,7 +126,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
             <Card className="p-6 bg-primary/5 border-primary/20">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="font-mono text-lg">Agent Session (24h)</span>
+                  <span className="font-mono text-lg">PHOENIX Agent Session (24h)</span>
                   <span className="font-mono text-2xl font-bold text-primary">$1.00</span>
                 </div>
                 <div className="text-sm text-muted-foreground font-mono space-y-1">
@@ -232,10 +138,37 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
               </div>
             </Card>
 
-            {/* Payment Form */}
-            <Elements stripe={stripePromise} options={stripeOptions}>
-              <CheckoutForm onPaymentSuccess={onPaymentSuccess} />
-            </Elements>
+            {/* Checkout Button */}
+            <div className="space-y-6">
+              <Button
+                onClick={handleProceedToCheckout}
+                disabled={isRedirecting}
+                className="w-full text-lg py-6 font-mono hover-elevate"
+                data-testid="button-proceed-checkout"
+              >
+                {isRedirecting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    REDIRECTING_TO_STRIPE...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    PROCEED TO SECURE CHECKOUT
+                    <ExternalLink className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+              
+              <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
+                <div className="flex items-center justify-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  <span>Secure payment via Stripe Checkout</span>
+                </div>
+                <div>24-hour session • No subscription • Instant activation</div>
+                <div className="text-xs">You'll be redirected to Stripe's secure payment page</div>
+              </div>
+            </div>
           </div>
         </Card>
       </div>
