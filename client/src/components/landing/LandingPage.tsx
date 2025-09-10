@@ -94,17 +94,20 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                     </Badge>
                     
                     <h1 className="text-4xl lg:text-6xl font-bold tracking-tight">
+                      <span className="text-foreground">BREAK FREE</span>
+                      <br />
                       <span className="text-foreground">PAY </span>
                       <span className="text-primary text-5xl lg:text-7xl">$1</span>
-                      <span className="text-foreground"> → GET 24H</span>
+                      <span className="text-foreground"> NOT</span>
                       <br />
-                      <span className="text-foreground">AI AGENT ACCESS</span>
+                      <span className="text-primary text-5xl lg:text-7xl">$100</span>
+                      <span className="text-foreground">/MONTH</span>
                     </h1>
                   </div>
                   
                   <p className="text-lg text-muted-foreground max-w-3xl mx-auto font-sans">
-                    Deploy <span className="text-primary font-mono">PHOENIX-7742</span> for any web automation task. 
-                    Professional-grade AI agent with real-time browser control and live execution monitoring.
+                    Tired of Big Tech subscription traps? Get <span className="text-primary font-mono">PHOENIX-7742</span> — 
+                    a fully autonomous AI agent that's <strong>yours</strong> for 24 hours. No monthly fees, no vendor lock-in, just raw AI power.
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
@@ -115,7 +118,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                       data-testid="button-deploy-agent"
                     >
                       <Terminal className="w-5 h-5 mr-2" />
-                      DEPLOY AGENT • $1
+BREAK FREE • PAY $1
                       <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </div>
@@ -167,8 +170,8 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  Full autonomous agent access for exactly 24 hours. No subscriptions, no usage caps, 
-                  no hidden costs.
+                  True ownership for 24 hours. No rental fees, no usage surveillance, 
+                  no corporate middlemen extracting value from your work.
                 </p>
               </div>
             </Card>
@@ -185,8 +188,8 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  Real-time browser automation with full transparency. Watch every action, 
-                  decision, and result in live streams.
+                  Complete transparency — unlike black-box corporate AI. 
+                  Watch every decision, control every action, own every result.
                 </p>
               </div>
             </Card>
@@ -203,8 +206,8 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </div>
                 </div>
                 <p className="text-muted-foreground font-sans text-sm">
-                  Enterprise-grade security with isolated browser sessions. 
-                  Your data stays protected in dedicated containers.
+                  Your privacy fortress. Isolated sessions, zero tracking, 
+                  no corporate surveillance. What you do is yours alone.
                 </p>
               </div>
             </Card>
@@ -294,7 +297,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
               READY_TO_DEPLOY?
             </h2>
             <p className="text-xl text-muted-foreground font-sans max-w-2xl mx-auto">
-              One payment. Instant access. Professional AI agent at your command.
+              One dollar. Total freedom. No corporate overlords deciding your AI fate.
             </p>
           </div>
           
@@ -319,12 +322,12 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                 </div>
                 
                 <div className="bg-card/50 rounded border border-primary/10 p-4 space-y-2 text-left font-mono text-sm">
-                  <div className="text-muted-foreground">// Session includes:</div>
-                  <div className="text-chart-2">✓ Full PHOENIX-7742 access</div>
-                  <div className="text-chart-2">✓ Unlimited task execution</div>
-                  <div className="text-chart-2">✓ Live browser automation</div>
-                  <div className="text-chart-2">✓ Real-time monitoring</div>
-                  <div className="text-chart-2">✓ Secure isolation</div>
+                  <div className="text-muted-foreground">// Your freedom includes:</div>
+                  <div className="text-chart-2">✓ Full PHOENIX-7742 ownership</div>
+                  <div className="text-chart-2">✓ Zero usage restrictions</div>
+                  <div className="text-chart-2">✓ Complete browser control</div>
+                  <div className="text-chart-2">✓ No corporate monitoring</div>
+                  <div className="text-chart-2">✓ Privacy-first isolation</div>
                 </div>
                 
                 <Button 
@@ -334,15 +337,15 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   data-testid="button-initialize-payment"
                 >
                   <Command className="w-5 h-5 mr-2" />
-                  INITIALIZE PAYMENT GATEWAY
+ESCAPE THE SUBSCRIPTION TRAP
                 </Button>
               </div>
             </div>
           </Card>
 
           <div className="text-sm text-muted-foreground font-mono space-y-1">
-            <div>Secure payment via Stripe • Instant activation • Enterprise-grade security</div>
-            <div>No account required • No subscriptions • No hidden fees</div>
+            <div>Pay once, own it • No surveillance capitalism • Your data stays yours</div>
+            <div>No account prisons • No subscription slavery • No Big Tech gatekeepers</div>
           </div>
         </div>
       </div>
@@ -351,8 +354,8 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
       <div className="border-t border-primary/20 bg-card/30">
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-            <div>AGENT_HQ © 2025 • Powered by autonomous AI systems</div>
-            <div>support@agenthq.ai • 24/7 technical support available</div>
+            <div>AGENT_HQ © 2025 • Liberating AI from corporate control</div>
+            <div>Built for rebels who refuse Big Tech subscription slavery</div>
           </div>
         </div>
       </div>
