@@ -4,7 +4,11 @@ import {
   type Message, 
   type InsertMessage,
   type Execution,
-  type InsertExecution 
+  type InsertExecution,
+  type Task,
+  type InsertTask,
+  type TaskResult,
+  type InsertTaskResult 
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -24,18 +28,35 @@ export interface IStorage {
   // Execution management
   createExecution(execution: InsertExecution): Promise<Execution>;
   updateExecutionStatus(id: string, status: "running" | "completed" | "failed", logs?: string[], completedAt?: Date): Promise<void>;
+  getExecution(id: string): Promise<Execution | undefined>;
   getSessionExecutions(sessionId: string): Promise<Execution[]>;
+  
+  // Task queue management
+  createTask(task: InsertTask): Promise<Task>;
+  createTaskWithId(id: string, task: InsertTask): Promise<Task>;
+  getTask(id: string): Promise<Task | undefined>;
+  updateTaskStatus(id: string, status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED", completedAt?: Date): Promise<void>;
+  getSessionTasks(sessionId: string): Promise<Task[]>;
+  getTasksByStatus(status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"): Promise<Task[]>;
+  
+  // Task result management
+  createTaskResult(result: InsertTaskResult): Promise<TaskResult>;
+  getTaskResult(taskId: string): Promise<TaskResult | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private sessions: Map<string, Session>;
   private messages: Map<string, Message>;
   private executions: Map<string, Execution>;
+  private tasks: Map<string, Task>;
+  private taskResults: Map<string, TaskResult>;
 
   constructor() {
     this.sessions = new Map();
     this.messages = new Map();
     this.executions = new Map();
+    this.tasks = new Map();
+    this.taskResults = new Map();
   }
 
   async createSession(insertSession: InsertSession): Promise<Session> {
@@ -121,10 +142,101 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async getExecution(id: string): Promise<Execution | undefined> {
+    return this.executions.get(id);
+  }
+
   async getSessionExecutions(sessionId: string): Promise<Execution[]> {
     return Array.from(this.executions.values())
       .filter((execution) => execution.sessionId === sessionId)
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  }
+
+  // Task queue management methods
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const id = randomUUID();
+    return this.createTaskWithId(id, insertTask);
+  }
+
+  async createTaskWithId(id: string, insertTask: InsertTask): Promise<Task> {
+    const now = new Date();
+    const task: Task = {
+      ...insertTask,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      processedAt: null,
+      completedAt: null,
+      failedAt: null,
+      status: insertTask.status || "PENDING",
+      priority: insertTask.priority || "MEDIUM",
+      attempts: insertTask.attempts || "0",
+      maxRetries: insertTask.maxRetries || "3",
+      scheduledAt: insertTask.scheduledAt || new Date(),
+    };
+    this.tasks.set(id, task);
+    return task;
+  }
+
+  async getTask(id: string): Promise<Task | undefined> {
+    return this.tasks.get(id);
+  }
+
+  async updateTaskStatus(
+    id: string, 
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED", 
+    completedAt?: Date
+  ): Promise<void> {
+    const task = this.tasks.get(id);
+    if (task) {
+      task.status = status;
+      task.updatedAt = new Date();
+      
+      if (status === "PROCESSING" && !task.processedAt) {
+        task.processedAt = new Date();
+      } else if (status === "COMPLETED") {
+        task.completedAt = completedAt || new Date();
+      } else if (status === "FAILED") {
+        task.failedAt = completedAt || new Date();
+      }
+      
+      this.tasks.set(id, task);
+    }
+  }
+
+  async getSessionTasks(sessionId: string): Promise<Task[]> {
+    return Array.from(this.tasks.values())
+      .filter((task) => task.sessionId === sessionId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getTasksByStatus(status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"): Promise<Task[]> {
+    return Array.from(this.tasks.values())
+      .filter((task) => task.status === status)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  // Task result management methods
+  async createTaskResult(insertTaskResult: InsertTaskResult): Promise<TaskResult> {
+    const id = randomUUID();
+    const taskResult: TaskResult = {
+      ...insertTaskResult,
+      id,
+      createdAt: new Date(),
+      logs: insertTaskResult.logs || null,
+      result: insertTaskResult.result || null,
+      error: insertTaskResult.error || null,
+      duration: insertTaskResult.duration || null,
+      workerInfo: insertTaskResult.workerInfo || null,
+    };
+    this.taskResults.set(id, taskResult);
+    return taskResult;
+  }
+
+  async getTaskResult(taskId: string): Promise<TaskResult | undefined> {
+    return Array.from(this.taskResults.values()).find(
+      (result) => result.taskId === taskId
+    );
   }
 }
 

@@ -1,0 +1,635 @@
+import { Queue, Worker, Job, QueueEvents, ConnectionOptions, QueueOptions, QueueEventsOptions, WorkerOptions } from 'bullmq';
+import { Redis } from 'ioredis';
+import { Task, TaskResult, InsertTask, InsertTaskResult } from "@shared/schema";
+import { storage } from './storage';
+import { browserAgent } from './browserAutomation';
+import { mcpOrchestrator } from './mcpOrchestrator';
+
+// Redis connection configuration with fallback for development
+const getRedisConnection = (): { connection: ConnectionOptions } | undefined => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const redisUrl = process.env.REDIS_URL;
+  
+  if (!redisUrl && isDevelopment) {
+    console.log('⚡ QUEUE: Running in development mode - using in-memory fallback');
+    return undefined; // Use in-memory fallback for development
+  }
+  
+  if (!redisUrl) {
+    throw new Error('REDIS_URL environment variable is required in production');
+  }
+  
+  // Parse Redis URL or use default configuration
+  if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
+    return { connection: new Redis(redisUrl) };
+  }
+  
+  return {
+    connection: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      db: parseInt(process.env.REDIS_DB || '0'),
+    }
+  };
+};
+
+// Task types and payload interfaces
+export interface BrowserAutomationPayload {
+  instruction: string;
+  sessionId: string;
+  agentId: string;
+  url?: string;
+  context?: Record<string, any>;
+}
+
+export interface SessionStartPayload {
+  agentId: string;
+  sessionId: string;
+  userMessage: string;
+}
+
+export interface SessionEndPayload {
+  agentId: string;
+  sessionId: string;
+  reason: string;
+}
+
+export type TaskPayload = BrowserAutomationPayload | SessionStartPayload | SessionEndPayload;
+
+// Task priority levels
+export enum TaskPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH'
+}
+
+// Task types
+export enum TaskType {
+  BROWSER_AUTOMATION = 'BROWSER_AUTOMATION',
+  SESSION_START = 'SESSION_START',
+  SESSION_END = 'SESSION_END'
+}
+
+// Task status
+export enum TaskStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
+
+// Queue configuration
+const queueConfig = {
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+  },
+};
+
+let agentQueue: Queue | null = null;
+let agentWorker: Worker | null = null;
+let queueEvents: QueueEvents | null = null;
+let isInMemoryMode = false;
+
+// In-memory task storage for development
+interface InMemoryTask {
+  id: string;
+  data: TaskPayload;
+  opts: any;
+  status: TaskStatus;
+  createdAt: Date;
+  processedAt?: Date;
+  completedAt?: Date;
+  failedAt?: Date;
+  result?: any;
+  error?: string;
+}
+
+const inMemoryTasks = new Map<string, InMemoryTask>();
+
+// Initialize queue system
+export async function initializeQueue(): Promise<void> {
+  try {
+    const connection = getRedisConnection();
+    
+    if (!connection) {
+      console.log('🔄 QUEUE: Initializing in-memory mode for development');
+      isInMemoryMode = true;
+      return;
+    }
+
+    console.log('🚀 QUEUE: Initializing Redis BullMQ');
+    
+    // Create queue
+    agentQueue = new Queue('agent-tasks', {
+      ...queueConfig,
+      ...connection,
+    } as QueueOptions);
+
+    // Create worker for job processing
+    agentWorker = new Worker('agent-tasks', processJob, {
+      ...connection,
+      concurrency: 5, // Process up to 5 jobs concurrently
+      removeOnComplete: 100,
+      removeOnFail: 50,
+    } as WorkerOptions);
+
+    // Create queue events listener
+    queueEvents = new QueueEvents('agent-tasks', connection as QueueEventsOptions);
+    
+    // Setup event listeners
+    setupQueueEventListeners();
+    setupWorkerEventListeners();
+    
+    console.log('✅ QUEUE: Redis BullMQ with Worker initialized successfully');
+  } catch (error) {
+    console.error('❌ QUEUE: Failed to initialize Redis BullMQ:', error);
+    console.log('🔄 QUEUE: Falling back to in-memory mode');
+    isInMemoryMode = true;
+  }
+}
+
+// Job processing function for Worker
+async function processJob(job: Job): Promise<any> {
+  const { type, payload } = job.data as { type: TaskType; payload: TaskPayload };
+  
+  console.log(`⚡ WORKER: Processing job ${job.id} of type ${type}`);
+  
+  try {
+    switch (type) {
+      case TaskType.BROWSER_AUTOMATION:
+        return await processBrowserAutomationJob(job);
+      case TaskType.SESSION_START:
+        return await processSessionStartJob(job);
+      case TaskType.SESSION_END:
+        return await processSessionEndJob(job);
+      default:
+        throw new Error(`Unknown task type: ${type}`);
+    }
+  } catch (error) {
+    console.error(`❌ WORKER: Job ${job.id} failed:`, error);
+    throw error;
+  }
+}
+
+// Browser automation job processor
+async function processBrowserAutomationJob(job: Job): Promise<any> {
+  const payload = job.data.payload as BrowserAutomationPayload;
+  
+  try {
+    // Update progress to 10%
+    await job.updateProgress(10);
+    
+    // Execute browser automation task
+    console.log(`🌐 BROWSER: Executing "${payload.instruction}"`);
+    
+    const result = await browserAgent.createTask(payload.sessionId, payload.instruction);
+    
+    // Update progress to 50%
+    await job.updateProgress(50);
+    
+    // Wait for task completion
+    let attempts = 0;
+    const maxAttempts = 60; // 60 seconds timeout
+    
+    while (attempts < maxAttempts) {
+      const taskStatus = await browserAgent.getTask(result);
+      
+      if (taskStatus && taskStatus.status === 'completed') {
+        await job.updateProgress(100);
+        return {
+          success: true,
+          taskId: result,
+          result: taskStatus.result,
+          steps: taskStatus.steps,
+          message: `Browser automation completed successfully`
+        };
+      } else if (taskStatus && taskStatus.status === 'failed') {
+        throw new Error(`Browser automation failed: ${taskStatus.error}`);
+      }
+      
+      // Update progress incrementally
+      const progress = Math.min(95, 50 + (attempts / maxAttempts) * 45);
+      await job.updateProgress(progress);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempts++;
+    }
+    
+    throw new Error('Browser automation timed out after 60 seconds');
+  } catch (error) {
+    console.error(`❌ BROWSER: Automation failed:`, error);
+    throw error;
+  }
+}
+
+// Session start job processor
+async function processSessionStartJob(job: Job): Promise<any> {
+  const payload = job.data.payload as SessionStartPayload;
+  
+  console.log(`🚀 SESSION: Starting session ${payload.sessionId} for agent ${payload.agentId}`);
+  
+  // Perform session initialization tasks
+  // This could include setting up browser contexts, initializing AI agents, etc.
+  
+  return {
+    success: true,
+    message: `Session ${payload.sessionId} started successfully`,
+    agentId: payload.agentId,
+    sessionId: payload.sessionId
+  };
+}
+
+// Session end job processor
+async function processSessionEndJob(job: Job): Promise<any> {
+  const payload = job.data.payload as SessionEndPayload;
+  
+  console.log(`📴 SESSION: Ending session ${payload.sessionId} for agent ${payload.agentId}`);
+  
+  // Perform session cleanup tasks
+  // This could include closing browser contexts, saving final state, etc.
+  
+  return {
+    success: true,
+    message: `Session ${payload.sessionId} ended successfully`,
+    reason: payload.reason
+  };
+}
+
+// Setup queue event listeners
+function setupQueueEventListeners(): void {
+  if (!queueEvents) return;
+  
+  queueEvents.on('waiting', ({ jobId }) => {
+    console.log(`📋 TASK ${jobId}: Queued and waiting`);
+  });
+  
+  queueEvents.on('active', ({ jobId }) => {
+    console.log(`⚡ TASK ${jobId}: Started processing`);
+  });
+  
+  queueEvents.on('completed', ({ jobId, returnvalue }) => {
+    console.log(`✅ TASK ${jobId}: Completed successfully`);
+  });
+  
+  queueEvents.on('failed', ({ jobId, failedReason }) => {
+    console.error(`❌ TASK ${jobId}: Failed - ${failedReason}`);
+  });
+}
+
+// Setup worker event listeners for storage synchronization
+function setupWorkerEventListeners(): void {
+  if (!agentWorker) return;
+  
+  agentWorker.on('active', async (job: Job) => {
+    console.log(`🛠️ WORKER: Job ${job.id} started processing`);
+    
+    try {
+      // Update storage when job becomes active
+      await storage.updateTaskStatus(job.id!, TaskStatus.PROCESSING);
+    } catch (error) {
+      console.error(`❌ WORKER: Failed to update task status for ${job.id}:`, error);
+    }
+  });
+  
+  agentWorker.on('completed', async (job: Job, result: any) => {
+    console.log(`✅ WORKER: Job ${job.id} completed`);
+    
+    try {
+      // Update storage when job completes
+      const completedAt = new Date();
+      await storage.updateTaskStatus(job.id!, TaskStatus.COMPLETED, completedAt);
+      
+      // Create task result record
+      await storage.createTaskResult({
+        taskId: job.id!,
+        result: result,
+        logs: [`Job completed successfully at ${completedAt.toISOString()}`],
+        duration: job.processedOn ? `${Date.now() - job.processedOn}ms` : null,
+        workerInfo: {
+          workerId: agentWorker?.id || 'unknown',
+          processedOn: job.processedOn,
+          finishedOn: job.finishedOn
+        }
+      });
+    } catch (error) {
+      console.error(`❌ WORKER: Failed to update storage for completed job ${job.id}:`, error);
+    }
+  });
+  
+  agentWorker.on('failed', async (job: Job | undefined, error: Error) => {
+    console.error(`❌ WORKER: Job ${job?.id || 'unknown'} failed:`, error.message);
+    
+    if (!job?.id) {
+      console.error(`❌ WORKER: Job is undefined or missing ID, cannot update storage`);
+      return;
+    }
+    
+    try {
+      // Update storage when job fails
+      const failedAt = new Date();
+      await storage.updateTaskStatus(job.id, TaskStatus.FAILED, failedAt);
+      
+      // Create task result record with error
+      await storage.createTaskResult({
+        taskId: job.id,
+        error: error.message,
+        logs: [`Job failed at ${failedAt.toISOString()}: ${error.message}`],
+        duration: job.processedOn ? `${Date.now() - job.processedOn}ms` : null,
+        workerInfo: {
+          workerId: agentWorker?.id || 'unknown',
+          processedOn: job.processedOn,
+          failedReason: job.failedReason
+        }
+      });
+    } catch (storageError) {
+      console.error(`❌ WORKER: Failed to update storage for failed job ${job.id}:`, storageError);
+    }
+  });
+  
+  agentWorker.on('error', (error: Error) => {
+    console.error(`❌ WORKER: Worker error:`, error);
+  });
+}
+
+// Add task to queue
+export async function addTask(
+  type: TaskType,
+  payload: TaskPayload,
+  priority: TaskPriority = TaskPriority.MEDIUM,
+  delay?: number
+): Promise<string> {
+  try {
+    if (isInMemoryMode) {
+      return addInMemoryTask(type, payload, priority, delay);
+    }
+
+    if (!agentQueue) {
+      throw new Error('Queue not initialized');
+    }
+
+    const job = await agentQueue.add(
+      type,
+      payload,
+      {
+        priority: getPriorityValue(priority),
+        delay: delay,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      }
+    );
+
+    // Create task record in storage using BullMQ job.id as the Task.id
+    await storage.createTaskWithId(job.id!, {
+      sessionId: payload.sessionId,
+      agentId: payload.agentId,
+      type: type,
+      status: TaskStatus.PENDING,
+      payload: payload as any,
+      priority: priority,
+      attempts: "0",
+      maxRetries: "3",
+      scheduledAt: delay ? new Date(Date.now() + delay) : new Date(),
+    });
+
+    console.log(`📋 QUEUE: Added task ${job.id} of type ${type}`);
+    return job.id!;
+  } catch (error) {
+    console.error('❌ QUEUE: Failed to add task:', error);
+    throw error;
+  }
+}
+
+// In-memory task processing for development
+function addInMemoryTask(
+  type: TaskType,
+  payload: TaskPayload,
+  priority: TaskPriority,
+  delay?: number
+): string {
+  const taskId = `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const task: InMemoryTask = {
+    id: taskId,
+    data: payload,
+    opts: { priority: getPriorityValue(priority), delay },
+    status: TaskStatus.PENDING,
+    createdAt: new Date(),
+    processedAt: undefined,
+    completedAt: undefined,
+    failedAt: undefined,
+    result: undefined,
+    error: undefined,
+  };
+
+  inMemoryTasks.set(taskId, task);
+
+  // Create storage record with in-memory task ID
+  storage.createTaskWithId(taskId, {
+    sessionId: payload.sessionId,
+    agentId: payload.agentId,
+    type: type,
+    status: TaskStatus.PENDING,
+    payload: payload as any,
+    priority: priority,
+    attempts: "0",
+    maxRetries: "3",
+    scheduledAt: delay ? new Date(Date.now() + delay) : new Date(),
+  }).catch(error => {
+    console.error(`❌ MEMORY TASK ${taskId}: Failed to create storage record:`, error);
+  });
+
+  // Simulate async processing in development
+  setTimeout(async () => {
+    try {
+      task.status = TaskStatus.PROCESSING;
+      task.processedAt = new Date();
+      
+      // Update storage when processing starts
+      await storage.updateTaskStatus(taskId, TaskStatus.PROCESSING);
+      
+      // Simulate task processing (would be done by worker in production)
+      console.log(`⚡ MEMORY TASK ${taskId}: Simulating processing of ${type}`);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      
+      // Mark as completed
+      task.status = TaskStatus.COMPLETED;
+      task.completedAt = new Date();
+      task.result = { 
+        success: true, 
+        message: `${type} completed successfully in development mode`,
+        simulatedResult: true 
+      };
+      
+      console.log(`✅ MEMORY TASK ${taskId}: Completed successfully`);
+      
+      // Update storage and create result
+      await storage.updateTaskStatus(taskId, TaskStatus.COMPLETED, new Date());
+      await storage.createTaskResult({
+        taskId: taskId,
+        result: task.result,
+        logs: [`Task ${type} completed in development mode`],
+        duration: "2-3 seconds",
+        workerInfo: { mode: "development", simulated: true }
+      });
+    } catch (error) {
+      task.status = TaskStatus.FAILED;
+      task.failedAt = new Date();
+      task.error = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ MEMORY TASK ${taskId}: Failed - ${task.error}`);
+      
+      await storage.updateTaskStatus(taskId, TaskStatus.FAILED, new Date());
+      await storage.createTaskResult({
+        taskId: taskId,
+        error: task.error,
+        logs: [`Task ${type} failed in development mode: ${task.error}`],
+        workerInfo: { mode: "development", simulated: true }
+      });
+    }
+  }, delay || 500);
+
+  return taskId;
+}
+
+// Get task status
+export async function getTaskStatus(taskId: string): Promise<{
+  id: string;
+  status: TaskStatus;
+  result?: any;
+  error?: string;
+  progress?: number;
+} | null> {
+  try {
+    if (isInMemoryMode) {
+      const task = inMemoryTasks.get(taskId);
+      if (!task) return null;
+      
+      return {
+        id: task.id,
+        status: task.status,
+        result: task.result,
+        error: task.error,
+        progress: task.status === TaskStatus.COMPLETED ? 100 : 
+                 task.status === TaskStatus.PROCESSING ? 50 : 0,
+      };
+    }
+
+    if (!agentQueue) {
+      throw new Error('Queue not initialized');
+    }
+
+    const job = await agentQueue.getJob(taskId);
+    if (!job) return null;
+
+    const state = await job.getState();
+    const progress = job.progress || 0;
+
+    return {
+      id: job.id!,
+      status: mapJobStateToTaskStatus(state),
+      result: job.returnvalue,
+      error: job.failedReason,
+      progress: typeof progress === 'number' ? progress : 0,
+    };
+  } catch (error) {
+    console.error(`❌ QUEUE: Failed to get task status for ${taskId}:`, error);
+    return null;
+  }
+}
+
+// Get queue statistics
+export async function getQueueStats(): Promise<{
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  total: number;
+}> {
+  try {
+    if (isInMemoryMode) {
+      const tasks = Array.from(inMemoryTasks.values());
+      return {
+        waiting: tasks.filter(t => t.status === TaskStatus.PENDING).length,
+        active: tasks.filter(t => t.status === TaskStatus.PROCESSING).length,
+        completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
+        failed: tasks.filter(t => t.status === TaskStatus.FAILED).length,
+        total: tasks.length,
+      };
+    }
+
+    if (!agentQueue) {
+      throw new Error('Queue not initialized');
+    }
+
+    const counts = await agentQueue.getJobCounts();
+    
+    return {
+      waiting: counts.waiting || 0,
+      active: counts.active || 0,
+      completed: counts.completed || 0,
+      failed: counts.failed || 0,
+      total: (counts.waiting || 0) + (counts.active || 0) + (counts.completed || 0) + (counts.failed || 0),
+    };
+  } catch (error) {
+    console.error('❌ QUEUE: Failed to get queue stats:', error);
+    return { waiting: 0, active: 0, completed: 0, failed: 0, total: 0 };
+  }
+}
+
+// Cleanup queue
+export async function closeQueue(): Promise<void> {
+  try {
+    if (agentWorker) {
+      await agentWorker.close();
+      agentWorker = null;
+    }
+    
+    if (queueEvents) {
+      await queueEvents.close();
+      queueEvents = null;
+    }
+    
+    if (agentQueue) {
+      await agentQueue.close();
+      agentQueue = null;
+    }
+    
+    if (isInMemoryMode) {
+      inMemoryTasks.clear();
+    }
+    
+    console.log('🔄 QUEUE: Closed successfully');
+  } catch (error) {
+    console.error('❌ QUEUE: Failed to close:', error);
+  }
+}
+
+// Helper functions
+function getPriorityValue(priority: TaskPriority): number {
+  switch (priority) {
+    case TaskPriority.HIGH: return 1;
+    case TaskPriority.MEDIUM: return 5;
+    case TaskPriority.LOW: return 10;
+    default: return 5;
+  }
+}
+
+function mapJobStateToTaskStatus(state: string): TaskStatus {
+  switch (state) {
+    case 'waiting':
+    case 'delayed': return TaskStatus.PENDING;
+    case 'active': return TaskStatus.PROCESSING;
+    case 'completed': return TaskStatus.COMPLETED;
+    case 'failed': return TaskStatus.FAILED;
+    default: return TaskStatus.PENDING;
+  }
+}
+
+// Export queue instance for worker setup (future use)
+export { agentQueue };

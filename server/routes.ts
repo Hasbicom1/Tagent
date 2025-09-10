@@ -8,6 +8,15 @@ import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
 import { mcpOrchestrator } from "./mcpOrchestrator";
+import { 
+  initializeQueue, 
+  addTask, 
+  getTaskStatus, 
+  getQueueStats,
+  TaskType, 
+  TaskPriority,
+  type BrowserAutomationPayload
+} from "./queue";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
@@ -63,6 +72,14 @@ const strictLimiter = rateLimit({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize queue system
+  try {
+    await initializeQueue();
+    console.log('✅ Task queue system initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize queue system:', error);
+  }
+  
   // Apply security middleware with development-friendly CSP
   const isDevelopment = process.env.NODE_ENV === 'development';
   
@@ -349,25 +366,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "Session expired" });
       }
 
-      // Create AI-powered browser automation task using PHOENIX-7742
-      const taskId = await browserAgent.createTask(session.id, validatedTaskDescription);
-      
-      // Start task execution asynchronously
-      browserAgent.executeTask(taskId).catch(error => {
-        console.error(`PHOENIX-7742 task execution failed for ${taskId}:`, error);
-      });
+      // Queue browser automation task using BullMQ
+      const taskPayload: BrowserAutomationPayload = {
+        instruction: validatedTaskDescription,
+        sessionId: session.id,
+        agentId: session.agentId,
+        context: {
+          userAgent: req.headers['user-agent'],
+          timestamp: new Date().toISOString()
+        }
+      };
 
-      // Create execution record for compatibility
+      const queueTaskId = await addTask(
+        TaskType.BROWSER_AUTOMATION,
+        taskPayload,
+        TaskPriority.HIGH
+      );
+
+      // Create execution record for backward compatibility
       const execution = await storage.createExecution({
         sessionId: session.id,
         taskDescription: validatedTaskDescription,
         status: "running",
-        logs: ["PHOENIX-7742 NEURAL NETWORK ACTIVATED"]
+        logs: [`Task queued with ID: ${queueTaskId}`, "PHOENIX-7742 NEURAL NETWORK ACTIVATED"]
       });
+
+      // Note: Task record already created in storage by addTask() using BullMQ job.id
 
       res.json({
         executionId: execution.id,
-        taskId: taskId,
+        taskId: queueTaskId,
+        queueStatus: "QUEUED",
         status: "running"
       });
     } catch (error: any) {
@@ -380,45 +409,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/execution/:executionId", async (req, res) => {
     try {
       const { executionId } = req.params;
-      const executions = await storage.getSessionExecutions(''); // This is inefficient but OK for MVP
-      const execution = Array.from(executions).find(e => e.id === executionId);
       
-      if (!execution) {
-        return res.status(404).json({ error: "Execution not found" });
+      // Validate executionId format
+      if (!validator.isUUID(executionId)) {
+        return res.status(400).json({ error: "Invalid execution ID format" });
       }
-
-      res.json(execution);
+      
+      // Direct execution lookup - efficient O(1) operation
+      const execution = await storage.getExecution(executionId);
+      
+      if (execution) {
+        return res.json({
+          ...execution,
+          source: "direct_lookup"
+        });
+      }
+      
+      return res.status(404).json({ error: "Execution not found" });
     } catch (error: any) {
       console.error("Error getting execution:", error);
       res.status(500).json({ error: "Failed to get execution: " + error.message });
     }
   });
 
-  // Get real-time browser automation task status
+  // Get real-time queue-based task status
   app.get("/api/task/:taskId", async (req, res) => {
     try {
       const { taskId } = req.params;
-      const task = await browserAgent.getTask(taskId);
       
-      if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+      // Try to get from queue system first (live status)
+      const queueStatus = await getTaskStatus(taskId);
+      if (queueStatus) {
+        // Also get storage data for additional details
+        const storageTask = await storage.getTask(taskId);
+        const taskResult = await storage.getTaskResult(taskId);
+        
+        return res.json({
+          id: queueStatus.id,
+          status: queueStatus.status,
+          result: queueStatus.result || taskResult?.result,
+          error: queueStatus.error || taskResult?.error,
+          progress: queueStatus.progress || 0,
+          createdAt: storageTask?.createdAt,
+          updatedAt: storageTask?.updatedAt,
+          processedAt: storageTask?.processedAt,
+          completedAt: storageTask?.completedAt,
+          failedAt: storageTask?.failedAt,
+          logs: taskResult?.logs,
+          duration: taskResult?.duration,
+          source: "unified"
+        });
       }
-
-      res.json({
-        id: task.id,
-        status: task.status,
-        instruction: task.instruction,
-        steps: task.steps,
-        result: task.result,
-        error: task.error,
-        progress: {
-          completed: task.steps.filter(s => s.status === 'completed').length,
-          total: task.steps.length,
-          percentage: Math.round((task.steps.filter(s => s.status === 'completed').length / task.steps.length) * 100)
-        },
-        createdAt: task.createdAt,
-        completedAt: task.completedAt
-      });
+      
+      // If not in queue, try storage (for completed/historical tasks)
+      const storageTask = await storage.getTask(taskId);
+      if (storageTask) {
+        const taskResult = await storage.getTaskResult(taskId);
+        
+        return res.json({
+          id: storageTask.id,
+          status: storageTask.status,
+          type: storageTask.type,
+          priority: storageTask.priority,
+          attempts: storageTask.attempts,
+          result: taskResult?.result,
+          error: taskResult?.error,
+          createdAt: storageTask.createdAt,
+          updatedAt: storageTask.updatedAt,
+          processedAt: storageTask.processedAt,
+          completedAt: storageTask.completedAt,
+          failedAt: storageTask.failedAt,
+          logs: taskResult?.logs,
+          duration: taskResult?.duration,
+          progress: storageTask.status === "COMPLETED" ? 100 : 
+                   storageTask.status === "PROCESSING" ? 50 : 
+                   storageTask.status === "FAILED" ? 100 : 0,
+          source: "storage"
+        });
+      }
+      
+      // Final fallback to legacy browser agent system (for truly old tasks)
+      const legacyTask = await browserAgent.getTask(taskId);
+      if (legacyTask) {
+        return res.json({
+          id: legacyTask.id,
+          status: legacyTask.status,
+          instruction: legacyTask.instruction,
+          steps: legacyTask.steps,
+          result: legacyTask.result,
+          error: legacyTask.error,
+          progress: {
+            completed: legacyTask.steps.filter(s => s.status === 'completed').length,
+            total: legacyTask.steps.length,
+            percentage: Math.round((legacyTask.steps.filter(s => s.status === 'completed').length / legacyTask.steps.length) * 100)
+          },
+          createdAt: legacyTask.createdAt,
+          completedAt: legacyTask.completedAt,
+          source: "legacy"
+        });
+      }
+      
+      return res.status(404).json({ error: "Task not found" });
     } catch (error: any) {
       console.error("Error getting task status:", error);
       res.status(500).json({ error: "Failed to get task status: " + error.message });
@@ -501,6 +592,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error getting command status:", error);
       res.status(500).json({ error: "Failed to get command status: " + error.message });
+    }
+  });
+
+  // Get queue statistics (for monitoring)
+  app.get("/api/queue/stats", async (req, res) => {
+    try {
+      const stats = await getQueueStats();
+      res.json({
+        queue: "agent-tasks",
+        ...stats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error("Error getting queue stats:", error);
+      res.status(500).json({ error: "Failed to get queue statistics: " + error.message });
+    }
+  });
+
+  // Get all tasks for a session
+  app.get("/api/session/:agentId/tasks", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const session = await storage.getSessionByAgentId(agentId);
+      
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const tasks = await storage.getSessionTasks(session.id);
+      res.json(tasks);
+    } catch (error: any) {
+      console.error("Error getting session tasks:", error);
+      res.status(500).json({ error: "Failed to get session tasks: " + error.message });
     }
   });
 
