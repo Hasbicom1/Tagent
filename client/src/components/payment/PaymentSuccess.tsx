@@ -2,7 +2,16 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Clock, ExternalLink, Copy, Zap } from 'lucide-react';
+import { 
+  Terminal, 
+  Clock, 
+  Copy, 
+  Zap, 
+  CheckCircle, 
+  Command,
+  Shield,
+  Activity
+} from 'lucide-react';
 
 interface PaymentSuccessProps {
   sessionId: string;
@@ -13,13 +22,12 @@ interface PaymentSuccessProps {
 export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSuccessProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [sessionLink, setSessionLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    // Generate session link
     const link = `${window.location.origin}/agent/${sessionId}`;
     setSessionLink(link);
 
-    // Update countdown every second
     const interval = setInterval(() => {
       const now = new Date().getTime();
       const distance = expiresAt.getTime() - now;
@@ -29,9 +37,9 @@ export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSu
         const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((distance % (1000 * 60)) / 1000);
         
-        setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+        setTimeRemaining(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
       } else {
-        setTimeRemaining('EXPIRED');
+        setTimeRemaining('00:00:00');
         clearInterval(interval);
       }
     }, 1000);
@@ -41,131 +49,208 @@ export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSu
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    console.log('Copied to clipboard:', text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="max-w-2xl w-full p-8">
-        <div className="text-center space-y-6">
-          {/* Success Icon */}
-          <div className="flex justify-center">
-            <div className="w-20 h-20 bg-chart-2/10 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-12 h-12 text-chart-2" />
+    <div className="min-h-screen bg-background text-foreground font-mono">
+      {/* Terminal Header */}
+      <div className="border-b border-primary/20 bg-card/50">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Terminal className="w-6 h-6 text-primary" />
+              <span className="text-lg font-bold">PAYMENT_GATEWAY</span>
+              <Badge variant="outline" className="text-xs font-mono border-chart-2/30 text-chart-2">
+                TRANSACTION_COMPLETE
+              </Badge>
+            </div>
+            <div className="text-sm text-muted-foreground font-mono">
+              ~/secure/payment_success
             </div>
           </div>
-
-          {/* Success Message */}
-          <div className="space-y-4">
-            <h1 className="text-3xl font-bold">Payment Successful!</h1>
-            <p className="text-lg text-muted-foreground">
-              Welcome to Agent HQ. Your 24-hour session with PHOENIX-7742 is now active.
-            </p>
-          </div>
-
-          {/* Session Details */}
-          <Card className="p-6 bg-chart-2/5 border-chart-2/20">
-            <div className="space-y-4">
-              <div className="flex items-center justify-center gap-2">
-                <Clock className="w-5 h-5 text-chart-2" />
-                <span className="font-semibold">Time Remaining</span>
-              </div>
-              
-              <div className="text-4xl font-bold text-chart-2">
-                {timeRemaining}
-              </div>
-              
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Session ID:</span>
-                  <Badge variant="secondary" className="font-mono">
-                    {sessionId}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Expires:</span>
-                  <span className="font-medium">
-                    {expiresAt.toLocaleDateString()} at {expiresAt.toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Session Link */}
-          <Card className="p-4 bg-muted/50">
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-muted-foreground">
-                Your 24-hour access link:
-              </div>
-              <div className="flex items-center gap-2 bg-background p-3 rounded border">
-                <code className="flex-1 text-sm font-mono text-left break-all">
-                  {sessionLink}
-                </code>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyToClipboard(sessionLink)}
-                  data-testid="button-copy-link"
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Bookmark this link to access your agent from any device
-              </div>
-            </div>
-          </Card>
-
-          {/* Action Buttons */}
-          <div className="space-y-4">
-            <Button 
-              size="lg" 
-              className="w-full text-lg py-6"
-              onClick={onEnterAgent}
-              data-testid="button-enter-agent"
-            >
-              <Zap className="w-5 h-5 mr-2" />
-              ENTER AGENT INTERFACE
-            </Button>
-            
-            <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => copyToClipboard(sessionLink)}
-                data-testid="button-share-link"
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Link
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => window.open('https://discord.gg/agenthq', '_blank')}
-                data-testid="button-get-help"
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Get Help
-              </Button>
-            </div>
-          </div>
-
-          {/* Important Notes */}
-          <Card className="p-4 bg-primary/5 border-primary/20">
-            <div className="space-y-2 text-sm">
-              <div className="font-medium text-primary">Important Notes:</div>
-              <ul className="space-y-1 text-muted-foreground text-left">
-                <li>• Your session expires in exactly 24 hours from payment</li>
-                <li>• The agent link works on any device - save it!</li>
-                <li>• Need help? Join our Discord for instant support</li>
-                <li>• No refunds, but we guarantee you'll love the experience</li>
-              </ul>
-            </div>
-          </Card>
         </div>
-      </Card>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        {/* Main Terminal Window */}
+        <Card className="bg-background/90 border-primary/30 overflow-hidden mb-8">
+          <div className="bg-card border-b border-primary/20 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-destructive" />
+                <div className="w-3 h-3 rounded-full bg-chart-3" />
+                <div className="w-3 h-3 rounded-full bg-chart-2" />
+                <div className="ml-4 text-sm font-mono text-muted-foreground">
+                  session_activated.log
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-xs font-mono border-chart-2/30">
+                SECURE_SESSION
+              </Badge>
+            </div>
+          </div>
+          
+          <div className="p-8 space-y-8">
+            {/* Success Status */}
+            <div className="text-center space-y-6">
+              <div className="flex justify-center">
+                <div className="w-20 h-20 bg-chart-2/20 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-12 h-12 text-chart-2" />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="text-primary font-mono text-sm">
+                    $ ./deploy_agent_session --payment-confirmed
+                  </div>
+                  <div className="text-muted-foreground font-mono text-sm space-y-1">
+                    <div>Payment processed successfully... ✓</div>
+                    <div>Agent PHOENIX-7742 deployed... ✓</div>
+                    <div>Secure session established... ✓</div>
+                    <div>Neural networks loaded... ✓</div>
+                  </div>
+                </div>
+
+                <h1 className="text-3xl font-bold font-mono">
+                  DEPLOYMENT_SUCCESSFUL
+                </h1>
+                <p className="text-lg text-muted-foreground font-sans max-w-2xl mx-auto">
+                  Your AI agent is now active and ready for task execution.
+                  24-hour autonomous operation period has commenced.
+                </p>
+              </div>
+            </div>
+
+            {/* Session Details */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Time Remaining */}
+              <Card className="p-6 bg-chart-2/10 border-chart-2/20">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-chart-2" />
+                    <span className="font-bold font-mono">SESSION_TIMER</span>
+                  </div>
+                  
+                  <div className="text-4xl font-bold text-chart-2 font-mono">
+                    {timeRemaining}
+                  </div>
+                  
+                  <div className="text-sm font-mono text-muted-foreground">
+                    Autonomous operation time remaining
+                  </div>
+                </div>
+              </Card>
+
+              {/* Session Info */}
+              <Card className="p-6 bg-card/50 border-primary/20">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-primary" />
+                    <span className="font-bold font-mono">SESSION_DATA</span>
+                  </div>
+                  
+                  <div className="space-y-3 text-sm font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AGENT_ID:</span>
+                      <Badge variant="secondary" className="font-mono">
+                        {sessionId}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">EXPIRES:</span>
+                      <span className="text-foreground">
+                        {expiresAt.toLocaleDateString()} {expiresAt.toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">STATUS:</span>
+                      <span className="text-chart-2 flex items-center gap-1">
+                        <Activity className="w-3 h-3 animate-pulse" />
+                        ACTIVE
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Access Link */}
+            <Card className="p-6 bg-background/50 border-primary/20">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-primary" />
+                  <span className="font-bold font-mono">ACCESS_ENDPOINT</span>
+                </div>
+                
+                <div className="bg-card border border-primary/10 rounded p-4">
+                  <div className="flex items-center gap-3">
+                    <code className="flex-1 text-sm font-mono text-foreground break-all">
+                      {sessionLink}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(sessionLink)}
+                      data-testid="button-copy-endpoint"
+                      className="font-mono"
+                    >
+                      {copied ? 'COPIED' : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="text-xs text-muted-foreground font-mono">
+                  // Secure 24-hour access link - bookmark for multi-device usage
+                </div>
+              </div>
+            </Card>
+
+            {/* Action Button */}
+            <div className="text-center space-y-4">
+              <Button 
+                size="lg" 
+                className="text-lg px-12 py-6 font-mono"
+                onClick={onEnterAgent}
+                data-testid="button-access-agent"
+              >
+                <Command className="w-5 h-5 mr-2" />
+                ACCESS_AGENT_INTERFACE
+              </Button>
+              
+              <div className="text-sm text-muted-foreground font-mono">
+                Click to enter the secure agent command center
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* System Information */}
+        <Card className="bg-card/30 border-primary/10 p-6">
+          <div className="space-y-4">
+            <h3 className="font-bold font-mono text-primary">SYSTEM_PARAMETERS</h3>
+            <div className="grid md:grid-cols-3 gap-6 text-sm font-mono">
+              <div className="space-y-2">
+                <div className="text-muted-foreground">Security Model:</div>
+                <div className="text-foreground">ENTERPRISE_ISOLATION</div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-muted-foreground">Network Policy:</div>
+                <div className="text-foreground">ENCRYPTED_CHANNELS</div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-muted-foreground">Data Retention:</div>
+                <div className="text-foreground">SESSION_SCOPED</div>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-primary/10 text-xs text-muted-foreground font-mono">
+              All operations are logged and secured. Session data is automatically purged upon expiration.
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

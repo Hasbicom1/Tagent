@@ -1,65 +1,86 @@
 # Design Guidelines for Agent HQ
 
 ## Design Approach
-**Reference-Based Approach**: Drawing inspiration from modern SaaS platforms like Linear, Notion, and Stripe Dashboard. This utility-focused platform requires clean, professional aesthetics that convey trust and efficiency.
+**Reference-Based Approach**: Drawing inspiration from VS Code, iOS design language, and professional development environments like Linear and Notion. This high-tech platform emphasizes terminal aesthetics with sophisticated dark themes that create a psychological spark of advanced technology.
 
 ## Core Design Elements
 
 ### Color Palette
 **Primary Brand Colors:**
-- Dark Mode: Deep blue-gray (220 15% 12%) with bright accent (210 100% 60%)
-- Light Mode: Clean whites with professional blue (210 50% 45%)
+- Deep terminal black (220 20% 8%) with electric blue accents (210 100% 65%)
+- Secondary dark slate (220 15% 12%) for elevated surfaces
+- Bright cyan (180 100% 70%) for active states and highlights
 
 **Supporting Colors:**
-- Success states: Green (142 69% 58%) for payment confirmations
-- Warning states: Amber (45 93% 58%) for usage limits
-- Error states: Red (0 72% 51%) for failed operations
+- Success: Electric green (120 100% 60%) for successful operations
+- Warning: Bright amber (45 100% 65%) for system alerts
+- Error: Vivid red (0 85% 60%) for critical errors
+- Muted text: Cool gray (220 10% 60%) for secondary information
+
+**Modern Gradients:**
+- Hero backgrounds: Subtle dark blue to black gradients (220 30% 8% to 220 20% 4%)
+- Button highlights: Electric blue to cyan gradients for premium actions
+- Terminal windows: Dark slate with subtle blue edge glows
 
 ### Typography
-**Font Stack:** Inter via Google Fonts
-- Headers: 600-700 weight for strong hierarchy
-- Body: 400-500 weight for readability
-- Code/Technical: JetBrains Mono for agent logs
+**Font Stack:** 
+- Primary: SF Pro Display (iOS-inspired) via system fonts for headers
+- Interface: Inter for body text and controls
+- Terminal/Code: JetBrains Mono for all command-line interfaces and logs
+
+**Hierarchy:**
+- Headers: 600-700 weight with generous letter-spacing
+- Interface text: 400-500 weight optimized for dark backgrounds
+- Terminal text: 400 weight monospace with subtle glow effects
 
 ### Layout System
-**Spacing Primitives:** Tailwind units of 2, 4, 6, 8, and 12
-- Consistent 8-unit grid system
-- Generous whitespace for professional feel
-- Dense information areas use 4-unit spacing
+**Spacing Primitives:** Tailwind units of 2, 4, 6, 8, and 16
+- Terminal-inspired grid with emphasis on horizontal rhythm
+- Generous padding (8-16 units) for breathing room
+- Dense information areas use 4-unit spacing for efficiency
 
 ### Component Library
 
 **Navigation:**
-- Clean sidebar with collapsible sections
-- Top bar with user profile and notifications
-- Breadcrumb navigation for deep pages
+- VS Code-inspired sidebar with file tree aesthetics
+- Terminal-style top bar with command palette integration
+- Breadcrumbs styled as file paths with forward slashes
+
+**Terminal Interface:**
+- Full-screen terminal windows with subtle rounded corners
+- Monospace text with syntax highlighting
+- Cursor animations and typing effects for live feedback
+- Command history with up/down arrow navigation
 
 **Dashboard Elements:**
-- Card-based layout for agent status
-- Real-time indicators with subtle animations
-- Progress bars for task completion
-- Live browser preview windows
+- Dark cards with subtle border glows
+- Real-time status indicators with pulsing animations
+- Progress bars with electric blue fills and terminal-style percentages
+- Live browser preview in terminal-framed windows
 
-**Payment Interface:**
-- Prominent "$1 for 24 hours" pricing display
-- Stripe-integrated payment forms
-- Clear usage timers and status indicators
-
-**Agent Controls:**
-- Task queue interface with drag-drop capability
-- Live browser automation viewer
-- Agent conversation interface with chat-like design
-- Emergency stop/pause controls
+**Professional Controls:**
+- Command palette modal with fuzzy search
+- Keyboard shortcut displays throughout interface
+- Toggle switches with premium haptic-style animations
+- Dropdown menus with terminal-inspired styling
 
 ### Key Design Principles
-1. **Trust & Security**: Professional color scheme, clear payment flows
-2. **Real-time Clarity**: Live status indicators, progress visualization
-3. **Operational Efficiency**: Quick access to controls, minimal clicks
-4. **Transparency**: Clear usage tracking, visible agent activities
+1. **Advanced Technology Feel**: Dark themes with electric accents create cutting-edge atmosphere
+2. **Terminal Aesthetics**: Monospace fonts and command-line interfaces throughout
+3. **Professional Polish**: iOS-quality animations and VS Code-inspired layouts
+4. **Psychological Impact**: Subtle glows and gradients enhance the futuristic feel
+5. **Developer-Grade UX**: Keyboard-first navigation with power-user shortcuts
+
+### Animations
+**Subtle Enhancements Only:**
+- Gentle cursor blinking in terminal areas
+- Smooth fade transitions between states
+- Soft glow effects on interactive elements
+- Minimal slide animations for modals and dropdowns
 
 ### Images
-**Hero Section:** Medium-sized hero (40vh) showing browser automation in action - split screen with code/interface on left, live browser on right. Clean, technical aesthetic.
+**No Hero Image**: Replace with full-width terminal interface showing live agent execution
+**Inline Screenshots**: Small terminal windows displaying agent workflows, styled as code editor tabs
+**Interface Previews**: Browser automation views framed as terminal outputs with subtle glows
 
-**Dashboard Screenshots:** Smaller contextual images showing agent workflows, placed inline with feature descriptions.
-
-**No decorative imagery** - focus on functional screenshots and interface previews that demonstrate platform capabilities.
+Focus on functional interface screenshots that demonstrate platform capabilities within the terminal aesthetic framework.
