@@ -242,12 +242,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('✅ Session security middleware applied');
   }
   
+  // CSRF token endpoint for frontend
+  app.get("/api/csrf-token", (req, res) => {
+    const csrfToken = generateCSRFToken();
+    res.json({ csrfToken });
+  });
+
   // Create Stripe Checkout session for 24h agent access
   // SECURITY HARDENED: Create checkout session with CSRF protection and validation
-  // TEMPORARY: CSRF disabled for payment flow until frontend CSRF implementation
   app.post("/api/create-checkout-session", 
     rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
-    createValidationMiddleware(createCheckoutSessionSchema, false), // CSRF temporarily disabled
+    createValidationMiddleware(createCheckoutSessionSchema, true), // CSRF protection enabled
     async (req, res) => {
     try {
       const validatedData = req.validatedBody as CreateCheckoutSessionRequest;
@@ -303,7 +308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // SECURITY HARDENED: Idempotent session activation with Redis locks
   app.post("/api/checkout-success", 
     rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
-    createValidationMiddleware(checkoutSuccessSchema, false), // CSRF temporarily disabled
+    createValidationMiddleware(checkoutSuccessSchema, true), // CSRF protection enabled
     async (req, res) => {
     try {
       const validatedData = req.validatedBody as CheckoutSuccessRequest;

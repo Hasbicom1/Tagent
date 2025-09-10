@@ -20,7 +20,11 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
   useEffect(() => {
     const createCheckoutSession = async () => {
       try {
-        const response = await apiRequest('POST', '/api/create-checkout-session', {});
+        // Get CSRF token first
+        const csrfResponse = await apiRequest('GET', '/api/csrf-token', {});
+        const { csrfToken } = await csrfResponse.json();
+        
+        const response = await apiRequest('POST', '/api/create-checkout-session', { csrfToken });
         const data = await response.json();
         console.log('Checkout session response:', data);
         
