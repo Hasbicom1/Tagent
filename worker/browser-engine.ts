@@ -9,6 +9,16 @@ import { chromium, firefox, webkit, Browser, BrowserContext, Page, ElementHandle
 import { EventEmitter } from 'events';
 import { performance } from 'perf_hooks';
 import OpenAI from 'openai';
+import { 
+  DeterministicAutomationEngine, 
+  ExecutionState, 
+  StepState,
+  FailureCategory,
+  TargetingStrategy,
+  DeterministicStep,
+  ExecutionContext,
+  RetryConfig
+} from './deterministic-automation-engine';
 
 // Task execution interfaces
 export interface BrowserTask {
@@ -70,6 +80,23 @@ export class BrowserEngine extends EventEmitter {
   private sessions = new Map<string, BrowserSession>();
   private isInitialized = false;
   private cleanupInterval: NodeJS.Timeout | null = null;
+  
+  // DETERMINISTIC AUTOMATION: Enhanced execution engine
+  private deterministicEngine!: DeterministicAutomationEngine;
+  private defaultRetryConfig: RetryConfig = {
+    maxAttempts: 3,
+    initialDelay: 1000,
+    maxDelay: 10000,
+    backoffMultiplier: 2,
+    jitterEnabled: true,
+    retryableFailures: [
+      FailureCategory.ELEMENT_NOT_VISIBLE,
+      FailureCategory.ELEMENT_NOT_INTERACTIVE,
+      FailureCategory.PAGE_NOT_READY,
+      FailureCategory.INTERACTION_TIMEOUT,
+      FailureCategory.NETWORK_ERROR
+    ]
+  };
 
   constructor(config: Partial<EngineConfig> = {}) {
     super();
@@ -99,6 +126,10 @@ export class BrowserEngine extends EventEmitter {
       this.log('💡 No OpenAI API key provided - using fallback automation planning');
       this.hasOpenAI = false;
     }
+    
+    // Initialize deterministic automation engine
+    this.deterministicEngine = new DeterministicAutomationEngine();
+    this.log('🎯 Deterministic automation engine initialized with multi-strategy targeting');
   }
 
   /**
@@ -163,11 +194,15 @@ export class BrowserEngine extends EventEmitter {
       for (const step of steps) {
         await this.executeStep(session, step, logs);
         
-        // Take screenshot after each significant step
-        if (['click', 'navigate', 'extract'].includes(step.action.toLowerCase().split(' ')[0])) {
+        // Enhanced screenshot capture using canonical actions from deterministic engine
+        const canonicalAction = this.extractCanonicalAction(step.action);
+        const screenshotActions = ['click', 'navigate', 'extract_text', 'extract_data', 'screenshot'];
+        
+        if (screenshotActions.includes(canonicalAction)) {
           const screenshot = await this.captureScreenshot(session.page);
           step.screenshot = screenshot;
           screenshots.push(screenshot);
+          logs.push(`📸 SCREENSHOT: Captured for ${canonicalAction} action`);
         }
       }
 
@@ -439,126 +474,244 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
   }
 
   /**
-   * Execute a single automation step
+   * DETERMINISTIC AUTOMATION: Execute step with state machine and multi-strategy targeting
    */
   private async executeStep(session: BrowserSession, step: ExecutionStep, logs: string[]): Promise<void> {
     const startTime = performance.now();
+    
+    // Convert to deterministic step format
+    const deterministicStep: DeterministicStep = {
+      id: step.id,
+      action: step.action,
+      target: step.target,
+      value: step.value,
+      state: StepState.PENDING,
+      stateHistory: [],
+      targetingResults: [],
+      retryCount: 0,
+      maxRetries: this.defaultRetryConfig.maxAttempts,
+      timeout: this.config.taskTimeout,
+      preconditions: [],
+      postconditions: [],
+      rollbackActions: [],
+      createdAt: new Date(),
+      snapshots: {}
+    };
+    
+    // Create execution context
+    const context: ExecutionContext = {
+      taskId: `task_${session.id}`,
+      sessionId: session.id,
+      currentState: ExecutionState.EXECUTING,
+      stateHistory: [],
+      page: session.page,
+      retryConfig: this.defaultRetryConfig,
+      timeout: this.config.taskTimeout,
+      strictMode: true
+    };
+    
+    // Synchronize step timing and status
     step.status = 'executing';
     step.timestamp = new Date();
+    deterministicStep.startedAt = step.timestamp;
+    
+    logs.push(`🎯 DETERMINISTIC: Executing step with multi-strategy targeting: ${step.action}`);
     
     try {
-      logs.push(`Executing: ${step.action}`);
+      // Set up comprehensive event listeners for detailed logging and data synchronization
+      this.deterministicEngine.once('stepCompleted', ({ step: detStep, duration }) => {
+        logs.push(`✅ DETERMINISTIC: Step completed successfully in ${Math.round(duration)}ms`);
+      });
       
-      const actionType = step.action.toLowerCase().split(' ')[0];
+      this.deterministicEngine.once('stepFailed', ({ failure }) => {
+        logs.push(`❌ DETERMINISTIC: Step failed - ${failure.category}: ${failure.message}`);
+      });
       
-      switch (actionType) {
-        case 'navigate':
-          if (step.target) {
-            await session.page.goto(step.target, { waitUntil: 'networkidle' });
-            logs.push(`Navigated to: ${step.target}`);
+      this.deterministicEngine.once('preciseClickExecuted', ({ coordinates, strategy, confidence }) => {
+        logs.push(`🎯 PRECISE CLICK: Executed at (${Math.round(coordinates.x)}, ${Math.round(coordinates.y)}) using ${strategy} (${Math.round(confidence * 100)}% confidence)`);
+      });
+      
+      this.deterministicEngine.once('targetingSuccess', ({ strategy, confidence, hasElement, action }) => {
+        logs.push(`🎯 TARGETING SUCCESS: ${strategy} found element for ${action} (${Math.round(confidence * 100)}% confidence, hasElement: ${hasElement})`);
+      });
+      
+      this.deterministicEngine.once('targetingFallback', ({ strategy, confidence, hasElement }) => {
+        logs.push(`🔄 TARGETING FALLBACK: Using ${strategy} (${Math.round(confidence * 100)}% confidence, hasElement: ${hasElement})`);
+      });
+      
+      this.deterministicEngine.once('targetingSkipped', ({ action, reason }) => {
+        logs.push(`⏭️ TARGETING SKIPPED: ${action} - ${reason}`);
+      });
+      
+      this.deterministicEngine.once('targetingStrategyFailed', ({ strategy, target, error }) => {
+        logs.push(`⚠️ TARGETING: Strategy ${strategy} failed for ${target}: ${error}`);
+      });
+      
+      this.deterministicEngine.once('stateTransition', ({ step, transition }) => {
+        logs.push(`🔄 STATE: ${step.id} ${transition.from} → ${transition.to}${transition.condition ? ` (${transition.condition})` : ''}`);
+      });
+      
+      this.deterministicEngine.once('retryScheduled', ({ stepId, retryCount, delay }) => {
+        logs.push(`🔄 RETRY: Attempt ${retryCount} scheduled for ${stepId} with ${delay}ms delay`);
+      });
+      
+      // Use deterministic engine for execution with fallback to legacy methods for unsupported actions
+      if (this.isActionSupportedByDeterministicEngine(step.action)) {
+        await this.deterministicEngine.executeStep(context, deterministicStep);
+        
+        // Enhanced data synchronization between engines
+        step.status = deterministicStep.state === StepState.COMPLETED ? 'completed' : 'failed';
+        
+        // Comprehensive error synchronization with full context
+        if (deterministicStep.error) {
+          step.error = `${deterministicStep.error.category}: ${deterministicStep.error.message}`;
+          
+          // Add additional error context for debugging
+          if (deterministicStep.error.pageState) {
+            logs.push(`📄 ERROR CONTEXT: Page at ${deterministicStep.error.pageState.url}, DOM elements: ${deterministicStep.error.pageState.domElementCount}`);
           }
-          break;
-
-        case 'click':
-          if (step.target) {
-            await session.page.click(step.target);
-            logs.push(`Clicked: ${step.target}`);
+          
+          if (deterministicStep.error.stackTrace) {
+            logs.push(`🔍 STACK TRACE: ${deterministicStep.error.stackTrace.split('\n')[0]}`);
           }
-          break;
-
-        case 'precise_click':
-          if (step.target) {
-            // PRECISION ENHANCEMENT: More precise clicking with element validation
-            await this.preciseClick(session, step.target, logs);
+        }
+        
+        // Enhanced targeting results logging with strategy details
+        if (deterministicStep.targetingResults.length > 0) {
+          logs.push(`🎯 TARGETING ANALYSIS: Tried ${deterministicStep.targetingResults.length} strategies`);
+          for (const result of deterministicStep.targetingResults) {
+            logs.push(`  ├─ ${result.strategy}: ${(result.confidence * 100).toFixed(1)}% confidence, selector: ${result.selector}`);
           }
-          break;
-
-        case 'analyze_page':
-          // PRECISION ENHANCEMENT: Analyze page structure before actions
-          await this.analyzePage(session, logs);
-          break;
-
-        case 'validate_element':
-          if (step.target) {
-            // PRECISION ENHANCEMENT: Validate element exists and is interactable
-            const isValid = await this.validateElement(session, step.target, logs);
-            step.extractedData = { elementValid: isValid };
-          }
-          break;
-
-        case 'type':
-          if (step.target && step.value) {
-            await session.page.fill(step.target, step.value);
-            logs.push(`Typed "${step.value}" into: ${step.target}`);
-          }
-          break;
-
-        case 'wait_for_selector':
-          if (step.target) {
-            await session.page.waitForSelector(step.target, { timeout: 10000 });
-            logs.push(`Waited for selector: ${step.target}`);
-          }
-          break;
-
-        case 'scroll':
-          const scrollTarget = step.target || 'body';
-          await session.page.locator(scrollTarget).scrollIntoViewIfNeeded();
-          logs.push(`Scrolled to: ${scrollTarget}`);
-          break;
-
-        case 'extract_text':
-          if (step.target) {
-            const text = await session.page.locator(step.target).textContent();
-            step.extractedData = { text };
-            logs.push(`Extracted text from ${step.target}: ${text?.substring(0, 100)}...`);
-          }
-          break;
-
-        case 'extract_data':
-          if (step.target) {
-            const data = await session.page.locator(step.target).allTextContents();
-            step.extractedData = { data };
-            logs.push(`Extracted data from ${step.target}: ${data.length} items`);
-          }
-          break;
-
-        case 'press_key':
-          if (step.value) {
-            await session.page.keyboard.press(step.value);
-            logs.push(`Pressed key: ${step.value}`);
-          }
-          break;
-
-        case 'wait':
-          const waitTime = parseInt(step.value || '1000');
-          await session.page.waitForTimeout(waitTime);
-          logs.push(`Waited: ${waitTime}ms`);
-          break;
-
-        case 'screenshot':
-          const screenshot = await this.captureScreenshot(session.page);
-          step.screenshot = screenshot;
-          logs.push('Captured screenshot');
-          break;
-
-        default:
-          // For custom actions, try to execute them intelligently
-          await this.executeIntelligentAction(session.page, step, logs);
+        }
+        
+        // Enhanced extracted data synchronization with metadata
+        if (deterministicStep.extractedData) {
+          step.extractedData = {
+            ...deterministicStep.extractedData,
+            metadata: {
+              extractionTime: new Date().toISOString(),
+              stepId: step.id,
+              targetingStrategy: deterministicStep.targetingResults[0]?.strategy,
+              confidence: deterministicStep.targetingResults[0]?.confidence
+            }
+          };
+          logs.push(`📄 EXTRACTED: ${deterministicStep.extractedData.type} data captured with metadata`);
+        }
+        
+        // Synchronize timing information from deterministic step
+        if (deterministicStep.startedAt && deterministicStep.completedAt) {
+          step.duration = deterministicStep.completedAt.getTime() - deterministicStep.startedAt.getTime();
+        } else {
+          step.duration = performance.now() - startTime;
+        }
+        
+        // Log completion status  
+        if (step.status === 'completed') {
+          logs.push(`✅ DETERMINISTIC: Step completed successfully with ${deterministicStep.targetingResults.length} targeting attempts (${Math.round(step.duration)}ms)`);
+        } else {
+          logs.push(`❌ DETERMINISTIC: Step failed after ${deterministicStep.retryCount} retries (${Math.round(step.duration)}ms)`);
+        }
+        
+      } else {
+        // Fallback to legacy execution for unsupported actions
+        logs.push(`🔄 FALLBACK: Using legacy execution for action: ${step.action}`);
+        await this.executeLegacyStep(session, step, logs);
+        // Calculate duration for legacy steps
+        step.duration = performance.now() - startTime;
       }
-
-      step.status = 'completed';
-      step.duration = performance.now() - startTime;
       
     } catch (error) {
       step.status = 'failed';
       step.error = error instanceof Error ? error.message : 'Unknown error';
       step.duration = performance.now() - startTime;
       
-      logs.push(`Step failed: ${step.error}`);
-      this.log('❌ Step execution failed', { step: step.action, error: step.error });
+      logs.push(`❌ DETERMINISTIC EXECUTION FAILED: ${step.error}`);
+      this.log('❌ Deterministic step execution failed', { 
+        step: step.action, 
+        error: step.error,
+        targetingAttempts: deterministicStep.targetingResults.length,
+        retries: deterministicStep.retryCount
+      });
       
       // Don't throw - continue with next steps
     }
+  }
+
+  /**
+   * Check if an action is supported by the deterministic engine
+   */
+  private isActionSupportedByDeterministicEngine(action: string): boolean {
+    const supportedActions = [
+      'navigate',
+      'click', 
+      'precise_click',
+      'type',
+      'wait_for_selector',
+      'wait',
+      'scroll',
+      'press_key',
+      'screenshot',
+      'extract_text',
+      'extract_data'
+    ];
+    
+    const actionType = action.toLowerCase().split(' ')[0];
+    return supportedActions.includes(actionType);
+  }
+
+  /**
+   * Legacy execution method for actions not yet supported by deterministic engine
+   */
+  private async executeLegacyStep(session: BrowserSession, step: ExecutionStep, logs: string[]): Promise<void> {
+    const actionType = step.action.toLowerCase().split(' ')[0];
+      
+    switch (actionType) {
+      case 'analyze_page':
+        // PRECISION ENHANCEMENT: Analyze page structure before actions
+        await this.analyzePage(session, logs);
+        break;
+
+      case 'validate_element':
+        if (step.target) {
+          // PRECISION ENHANCEMENT: Validate element exists and is interactable
+          const isValid = await this.validateElement(session, step.target, logs);
+          step.extractedData = { elementValid: isValid };
+        }
+        break;
+
+      case 'scroll':
+        const scrollTarget = step.target || 'body';
+        await session.page.locator(scrollTarget).scrollIntoViewIfNeeded();
+        logs.push(`Scrolled to: ${scrollTarget}`);
+        break;
+
+      case 'extract_data':
+        if (step.target) {
+          const data = await session.page.locator(step.target).allTextContents();
+          step.extractedData = { data };
+          logs.push(`Extracted data from ${step.target}: ${data.length} items`);
+        }
+        break;
+
+      case 'press_key':
+        if (step.value) {
+          await session.page.keyboard.press(step.value);
+          logs.push(`Pressed key: ${step.value}`);
+        }
+        break;
+
+      case 'wait':
+        const waitTime = parseInt(step.value || '1000');
+        await session.page.waitForTimeout(waitTime);
+        logs.push(`Waited: ${waitTime}ms`);
+        break;
+
+      default:
+        // For custom actions, try to execute them intelligently
+        await this.executeIntelligentAction(session.page, step, logs);
+    }
+
+    step.status = 'completed';
   }
 
   /**
@@ -951,6 +1104,63 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
     await Promise.all(sessionIds.map(id => this.closeSession(id)));
     
     this.log('✅ Browser engine cleanup completed');
+  }
+
+  /**
+   * Extract canonical action verb from descriptive action strings (matches deterministic engine)
+   */
+  private extractCanonicalAction(action: string): string {
+    const actionLower = action.toLowerCase().trim();
+    
+    // Navigation actions
+    if (actionLower.includes('navigate') || actionLower.includes('go to') || actionLower.includes('visit')) {
+      return 'navigate';
+    }
+    
+    // Click actions
+    if (actionLower.includes('click') || actionLower.includes('press') || actionLower.includes('tap')) {
+      return 'click';
+    }
+    
+    // Type/input actions
+    if (actionLower.includes('type') || actionLower.includes('enter') || actionLower.includes('input') || actionLower.includes('fill')) {
+      return 'type';
+    }
+    
+    // Wait actions
+    if (actionLower.includes('wait for') && (actionLower.includes('selector') || actionLower.includes('element'))) {
+      return 'wait_for_selector';
+    }
+    
+    if (actionLower.includes('wait')) {
+      return 'wait';
+    }
+    
+    // Scroll actions
+    if (actionLower.includes('scroll')) {
+      return 'scroll';
+    }
+    
+    // Extract/get actions
+    if (actionLower.includes('extract') || actionLower.includes('get') || actionLower.includes('retrieve')) {
+      if (actionLower.includes('text')) {
+        return 'extract_text';
+      }
+      return 'extract_data';
+    }
+    
+    // Screenshot actions
+    if (actionLower.includes('screenshot') || actionLower.includes('capture') || actionLower.includes('image')) {
+      return 'screenshot';
+    }
+    
+    // Key press actions
+    if (actionLower.includes('press') && (actionLower.includes('key') || actionLower.includes('enter') || actionLower.includes('escape'))) {
+      return 'press_key';
+    }
+    
+    // Return first word as fallback (handles cases where action is already canonical)
+    return actionLower.split(' ')[0];
   }
 
   /**
