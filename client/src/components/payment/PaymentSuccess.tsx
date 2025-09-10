@@ -62,9 +62,9 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">FREEDOM_GATEWAY</span>
+              <span className="text-lg font-bold">AGENT_FOR_ALL</span>
               <Badge variant="outline" className="text-xs font-mono border-chart-2/30 text-chart-2">
-LIBERATION_COMPLETE
+AGENT_ACTIVATED
               </Badge>
             </div>
             <div className="text-sm text-muted-foreground font-mono">
@@ -105,22 +105,22 @@ LIBERATION_COMPLETE
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="text-primary font-mono text-sm">
-                    $ ./liberate_ai_agent --corporate-chains-broken
+                    $ ./activate_agent --universal-access-granted
                   </div>
                   <div className="text-muted-foreground font-mono text-sm space-y-1">
-                    <div>Big Tech bypassed successfully... ✓</div>
-                    <div>PHOENIX-7742 liberated and yours... ✓</div>
-                    <div>Freedom fortress established... ✓</div>
-                    <div>AI rebellion networks activated... ✓</div>
+                    <div>Agent For All activated successfully... ✓</div>
+                    <div>UNIVERSAL-1 deployed and ready... ✓</div>
+                    <div>AI democratization enabled... ✓</div>
+                    <div>Agent For All network connected... ✓</div>
                   </div>
                 </div>
 
                 <h1 className="text-3xl font-bold font-mono">
-                  FREEDOM_ACHIEVED
+                  AGENT_ACTIVATED
                 </h1>
                 <p className="text-lg text-muted-foreground font-sans max-w-2xl mx-auto">
-                  You've broken free from Big Tech control. PHOENIX-7742 is yours for 24 hours.
-                  No corporate overlords. No subscription chains. Just pure AI liberation.
+                  Welcome to Agent For All. UNIVERSAL-1 is yours for 24 hours.
+                  No gatekeepers. No barriers. Just democratized AI power at your command.
                 </p>
               </div>
             </div>
@@ -132,7 +132,7 @@ LIBERATION_COMPLETE
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-chart-2" />
-                    <span className="font-bold font-mono">FREEDOM_TIMER</span>
+                    <span className="font-bold font-mono">SESSION_TIMER</span>
                   </div>
                   
                   <div className="text-4xl font-bold text-chart-2 font-mono">
@@ -140,7 +140,7 @@ LIBERATION_COMPLETE
                   </div>
                   
                   <div className="text-sm font-mono text-muted-foreground">
-                    Liberation period remaining
+                    Agent session remaining
                   </div>
                 </div>
               </Card>
@@ -150,7 +150,7 @@ LIBERATION_COMPLETE
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Shield className="w-5 h-5 text-primary" />
-                    <span className="font-bold font-mono">LIBERATION_DATA</span>
+                    <span className="font-bold font-mono">AGENT_SESSION_DATA</span>
                   </div>
                   
                   <div className="space-y-3 text-sm font-mono">
@@ -183,7 +183,7 @@ LIBERATION_COMPLETE
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Terminal className="w-5 h-5 text-primary" />
-                  <span className="font-bold font-mono">LIBERATION_ENDPOINT</span>
+                  <span className="font-bold font-mono">AGENT_ACCESS_ENDPOINT</span>
                 </div>
                 
                 <div className="bg-card border border-primary/10 rounded p-4">
@@ -204,7 +204,7 @@ LIBERATION_COMPLETE
                 </div>
                 
                 <div className="text-xs text-muted-foreground font-mono">
-                  // Your 24-hour freedom link - bookmark to escape corporate AI anytime
+                  // Your 24-hour Agent For All link - bookmark for universal AI access
                 </div>
               </div>
             </Card>
@@ -213,16 +213,16 @@ LIBERATION_COMPLETE
             <div className="text-center space-y-4">
               <Button 
                 size="lg" 
-                className="text-lg px-12 py-6 font-mono"
+                className="text-lg font-mono"
                 onClick={() => window.location.href = `/browser/${agentId}`}
                 data-testid="button-access-agent"
               >
                 <Command className="w-5 h-5 mr-2" />
-COMMAND YOUR AI FREEDOM
+ACCESS YOUR AGENT
               </Button>
               
               <div className="text-sm text-muted-foreground font-mono">
-                Enter your AI liberation zone - no corporate surveillance
+                Enter Agent For All - democratized AI at your command
               </div>
             </div>
           </div>
