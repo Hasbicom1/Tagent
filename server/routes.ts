@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
+import validator from "validator";
+import helmet from "helmet";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
@@ -15,12 +18,75 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-08-27.basil",
+});
+
+// Input validation helper - validates without corrupting data
+function validateInput(input: string, maxLength: number = 1000): string {
+  if (typeof input !== 'string') {
+    throw new Error('Invalid input type');
+  }
+  
+  const trimmed = input.trim();
+  
+  if (trimmed.length === 0) {
+    throw new Error('Input cannot be empty');
+  }
+  
+  if (trimmed.length > maxLength) {
+    throw new Error(`Input too long. Maximum ${maxLength} characters allowed`);
+  }
+  
+  // Basic validation - no HTML tags or script content
+  if (/<script|javascript:|data:|vbscript:/i.test(trimmed)) {
+    throw new Error('Input contains potentially dangerous content');
+  }
+  
+  return trimmed;
+}
+
+// Security rate limiters
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs for sensitive endpoints
+  message: { error: 'Rate limit exceeded for this endpoint.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Apply security middleware with development-friendly CSP
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  app.use(helmet({
+    contentSecurityPolicy: isDevelopment ? false : {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", "https://js.stripe.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https://api.stripe.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        objectSrc: ["'none'"],
+        frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+  
+  app.use(generalLimiter);
+  
   // Create Stripe Checkout session for 24h agent access
-  app.post("/api/create-checkout-session", async (req, res) => {
+  app.post("/api/create-checkout-session", strictLimiter, async (req, res) => {
     try {
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
@@ -55,12 +121,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Handle successful Stripe Checkout and create agent session
-  app.post("/api/checkout-success", async (req, res) => {
+  app.post("/api/checkout-success", strictLimiter, async (req, res) => {
     try {
       const { sessionId } = req.body;
       
-      if (!sessionId) {
-        return res.status(400).json({ error: "Checkout session ID required" });
+      if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({ error: "Valid checkout session ID required" });
+      }
+      
+      // Validate sessionId format (should be Stripe session ID)
+      if (!validator.isAlphanumeric(sessionId.replace(/[_-]/g, '')) || sessionId.length < 20 || sessionId.length > 200) {
+        return res.status(400).json({ error: "Invalid session ID format" });
       }
 
       // Check for replay attacks - ensure checkout session hasn't been used before
@@ -191,6 +262,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!content || typeof content !== "string") {
         return res.status(400).json({ error: "Message content required" });
       }
+      
+      // Validate and sanitize agentId
+      if (!validator.isAlphanumeric(agentId.replace(/[-_]/g, '')) || agentId.length > 50) {
+        return res.status(400).json({ error: "Invalid agent ID format" });
+      }
+      
+      // Validate message content
+      let validatedContent;
+      try {
+        validatedContent = validateInput(content, 2000);
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message });
+      }
 
       const session = await storage.getSessionByAgentId(agentId);
       
@@ -202,17 +286,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "Session expired" });
       }
 
-      // Save user message
+      // Save user message with validated content
       const userMessage = await storage.createMessage({
         sessionId: session.id,
         role: "user",
-        content,
+        content: validatedContent,
         hasExecutableTask: false,
         taskDescription: null
       });
 
-      // Generate agent response using OpenAI
-      const agentResponse = await analyzeTask(content);
+      // Generate agent response using OpenAI with validated content
+      const agentResponse = await analyzeTask(validatedContent);
       
       const agentMessage = await storage.createMessage({
         sessionId: session.id,
@@ -238,8 +322,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { agentId } = req.params;
       const { taskDescription } = req.body;
       
-      if (!taskDescription) {
-        return res.status(400).json({ error: "Task description required" });
+      if (!taskDescription || typeof taskDescription !== 'string') {
+        return res.status(400).json({ error: "Valid task description required" });
+      }
+      
+      // Validate and sanitize agentId
+      if (!validator.isAlphanumeric(agentId.replace(/[-_]/g, '')) || agentId.length > 50) {
+        return res.status(400).json({ error: "Invalid agent ID format" });
+      }
+      
+      // Validate task description
+      let validatedTaskDescription;
+      try {
+        validatedTaskDescription = validateInput(taskDescription, 1000);
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message });
       }
 
       const session = await storage.getSessionByAgentId(agentId);
@@ -253,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create AI-powered browser automation task using PHOENIX-7742
-      const taskId = await browserAgent.createTask(session.id, taskDescription);
+      const taskId = await browserAgent.createTask(session.id, validatedTaskDescription);
       
       // Start task execution asynchronously
       browserAgent.executeTask(taskId).catch(error => {
@@ -263,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create execution record for compatibility
       const execution = await storage.createExecution({
         sessionId: session.id,
-        taskDescription,
+        taskDescription: validatedTaskDescription,
         status: "running",
         logs: ["PHOENIX-7742 NEURAL NETWORK ACTIVATED"]
       });
@@ -334,8 +431,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { sessionId } = req.params;
       const { command, timestamp } = req.body;
       
-      if (!command) {
-        return res.status(400).json({ error: "Command required" });
+      if (!command || typeof command !== 'string') {
+        return res.status(400).json({ error: "Valid command required" });
+      }
+      
+      // Validate and sanitize sessionId
+      if (!validator.isAlphanumeric(sessionId.replace(/[-_]/g, '')) || sessionId.length > 50) {
+        return res.status(400).json({ error: "Invalid session ID format" });
+      }
+      
+      // Sanitize command
+      let sanitizedCommand;
+      try {
+        sanitizedCommand = validateInput(command, 500);
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message });
       }
 
       // Verify session exists and is active
@@ -351,12 +461,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Route command through MCP orchestrator
       const response = await mcpOrchestrator.routeCommand({
         sessionId: session.id,
-        command: command.trim(),
+        command: sanitizedCommand,
         timestamp: timestamp || new Date().toISOString()
       });
 
       // Generate natural AI RAi response
-      const aiResponse = mcpOrchestrator.generateAIResponse(command, response.agent);
+      const aiResponse = mcpOrchestrator.generateAIResponse(sanitizedCommand, response.agent);
 
       res.json({
         commandId: response.commandId,
