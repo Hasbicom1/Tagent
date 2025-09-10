@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { IncomingMessage } from 'http';
 import { Server as HTTPServer } from 'http';
+import { parse as parseUrl } from 'url';
 import { Redis } from 'ioredis';
 import { 
   validateWebSocketOrigin, 
@@ -37,6 +38,9 @@ interface ExtendedWebSocket extends WebSocket {
   ipAddress: string;
   messageCount: number;
   taskCount: number;
+  messageQueue: any[];
+  isProcessingMessages: boolean;
+  maxQueueSize: number;
 }
 
 export class WebSocketManager {
@@ -71,50 +75,92 @@ export class WebSocketManager {
         log('⚠️  WS: Rate limiter disabled - Redis not available');
       }
 
-      // Create WebSocket server with enhanced security
+      // SECURITY FIX: Create WebSocket server with proper HTTP upgrade authentication
+      // Replaces deprecated verifyClient with secure HTTP upgrade handling
       this.wss = new WebSocketServer({ 
         server,
         path: '/ws',
         maxPayload: 64 * 1024, // 64KB max message size
-        // SECURITY FIX: Add origin validation and rate limiting to prevent attacks
-        verifyClient: async (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
-          const origin = info.origin;
-          const userAgent = info.req.headers['user-agent'];
-          const clientIP = info.req.socket.remoteAddress || '127.0.0.1';
+        perMessageDeflate: false, // Disable compression to prevent compression bombs
+        skipUTF8Validation: false // Ensure UTF-8 validation for security
+      });
+
+      // SECURITY FIX: Handle HTTP upgrade requests manually for proper async security validation
+      server.on('upgrade', async (request: IncomingMessage, socket: any, head: Buffer) => {
+        const pathname = parseUrl(request.url || '').pathname;
+        
+        if (pathname !== '/ws') {
+          socket.destroy();
+          return;
+        }
+
+        try {
+          // Extract security information
+          const origin = request.headers.origin;
+          const userAgent = request.headers['user-agent'];
+          const clientIP = socket.remoteAddress || request.connection.remoteAddress || '127.0.0.1';
           
-          // Validate origin against allowlist
+          // SECURITY VALIDATION: Origin validation
           const isValidOrigin = validateWebSocketOrigin(origin);
-          
           if (!isValidOrigin) {
-            logSecurityEvent('websocket_origin_blocked', {
+            logSecurityEvent('websocket_abuse', {
               origin,
               userAgent,
               clientIP,
-              url: info.req.url
+              url: request.url
             });
-            return false;
+            socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+            socket.destroy();
+            return;
           }
 
-          // Check WebSocket connection rate limiting
+          // SECURITY VALIDATION: Connection rate limiting
           if (this.rateLimiter) {
             const rateLimitOk = await this.rateLimiter.checkWebSocketConnection(clientIP);
             if (!rateLimitOk) {
-              logSecurityEvent('websocket_connection_rate_limited', {
+              logSecurityEvent('rate_limit_violation', {
                 clientIP,
                 userAgent,
                 origin
               });
-              return false;
+              socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+              socket.destroy();
+              return;
             }
           }
           
-          // Log successful connection validation
-          logSecurityEvent('websocket_connection_accepted', {
+          // SECURITY VALIDATION: Connection limit per IP
+          const existingConnectionsForIP = Array.from(this.connections.values())
+            .filter(ws => ws.ipAddress === clientIP).length;
+          
+          if (existingConnectionsForIP >= 5) { // Max 5 connections per IP
+            logSecurityEvent('websocket_abuse', {
+              clientIP,
+              existingConnections: existingConnectionsForIP
+            });
+            socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+            socket.destroy();
+            return;
+          }
+          
+          // Log successful security validation
+          logSecurityEvent('websocket_abuse', {
             origin,
             clientIP
           });
           
-          return true;
+          // Complete WebSocket handshake
+          this.wss!.handleUpgrade(request, socket, head, (ws) => {
+            this.wss!.emit('connection', ws, request);
+          });
+          
+        } catch (error) {
+          logSecurityEvent('websocket_abuse', {
+            error: error instanceof Error ? error.message : String(error),
+            clientIP: socket.remoteAddress
+          });
+          socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+          socket.destroy();
         }
       });
 
@@ -181,18 +227,21 @@ export class WebSocketManager {
     const origin = request.headers.origin;
     
     // SECURITY FIX: Log connection attempt for monitoring
-    logSecurityEvent('websocket_connection_attempt', {
+    logSecurityEvent('websocket_abuse', {
       connectionId,
       clientIP,
       userAgent,
       origin
     });
     
-    // Initialize connection state with rate limiting tracking
+    // SECURITY FIX: Initialize connection state with backpressure controls
     extendedWs.connectionId = connectionId;
     extendedWs.ipAddress = clientIP || '127.0.0.1';
     extendedWs.messageCount = 0;
     extendedWs.taskCount = 0;
+    extendedWs.messageQueue = [];
+    extendedWs.isProcessingMessages = false;
+    extendedWs.maxQueueSize = 50; // Prevent memory exhaustion
     extendedWs.state = {
       isConnected: true,
       connectionId,
@@ -204,8 +253,8 @@ export class WebSocketManager {
     // Store connection
     this.connections.set(connectionId, extendedWs);
 
-    // Setup event handlers
-    extendedWs.on('message', (data) => this.handleMessage(extendedWs, data));
+    // SECURITY FIX: Setup event handlers with backpressure control
+    extendedWs.on('message', (data) => this.handleMessageWithBackpressure(extendedWs, data));
     extendedWs.on('close', () => this.handleDisconnection(extendedWs));
     extendedWs.on('error', (error) => this.handleConnectionError(extendedWs, error));
     extendedWs.on('pong', () => this.handlePong(extendedWs));
@@ -222,29 +271,136 @@ export class WebSocketManager {
   }
 
   /**
-   * Handle incoming WebSocket message with rate limiting
+   * SECURITY FIX: Handle incoming messages with backpressure control
+   */
+  private handleMessageWithBackpressure(ws: ExtendedWebSocket, data: RawData): void {
+    // SECURITY: Check queue size to prevent memory exhaustion
+    if (ws.messageQueue.length >= ws.maxQueueSize) {
+      logSecurityEvent('websocket_abuse', {
+        connectionId: ws.connectionId,
+        queueSize: ws.messageQueue.length,
+        maxQueueSize: ws.maxQueueSize
+      });
+      this.sendError(ws, 'SYSTEM_OVERLOAD: Neural processing queue full', 'QUEUE_OVERFLOW');
+      return;
+    }
+
+    // Add message to queue
+    ws.messageQueue.push({ data, timestamp: Date.now() });
+    
+    // Process queue if not already processing
+    if (!ws.isProcessingMessages) {
+      this.processMessageQueue(ws);
+    }
+  }
+
+  /**
+   * SECURITY FIX: Process message queue with controlled concurrency
+   */
+  private async processMessageQueue(ws: ExtendedWebSocket): Promise<void> {
+    if (ws.isProcessingMessages) {
+      return;
+    }
+
+    ws.isProcessingMessages = true;
+
+    try {
+      while (ws.messageQueue.length > 0 && ws.readyState === WebSocket.OPEN) {
+        const queueItem = ws.messageQueue.shift();
+        if (!queueItem) break;
+
+        await this.handleMessage(ws, queueItem.data);
+        
+        // SECURITY: Add small delay to prevent CPU exhaustion
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+    } catch (error) {
+      log(`❌ WS: Message queue processing error [${ws.connectionId}]: ${error}`);
+    } finally {
+      ws.isProcessingMessages = false;
+    }
+  }
+
+  /**
+   * SECURITY ENHANCED: Handle incoming WebSocket message with comprehensive validation
    */
   private async handleMessage(ws: ExtendedWebSocket, data: RawData): Promise<void> {
+    const correlationId = crypto.randomUUID();
+    
     try {
       ws.lastActivity = new Date();
       ws.messageCount += 1;
       
-      // Parse and validate message
-      const message = JSON.parse(Buffer.isBuffer(data) ? data.toString() : data.toString());
-      const validatedMessage = clientMessageSchema.parse(message);
+      // SECURITY: Enhanced message size validation
+      const messageSize = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data.toString());
+      if (messageSize > 32 * 1024) { // 32KB message limit
+        logSecurityEvent('websocket_abuse', {
+          connectionId: ws.connectionId,
+          messageSize,
+          correlationId
+        });
+        this.sendError(ws, 'PROTOCOL_VIOLATION: Neural message too large', 'MESSAGE_TOO_LARGE');
+        return;
+      }
+      
+      // SECURITY: Parse and validate message with comprehensive error handling
+      let rawMessage;
+      try {
+        const messageString = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
+        rawMessage = JSON.parse(messageString);
+      } catch (parseError) {
+        logSecurityEvent('websocket_abuse', {
+          connectionId: ws.connectionId,
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+          correlationId
+        });
+        this.sendError(ws, 'PROTOCOL_ERROR: Neural message format corrupted', 'INVALID_JSON');
+        return;
+      }
+      
+      // SECURITY: Comprehensive schema validation
+      let validatedMessage;
+      try {
+        validatedMessage = clientMessageSchema.parse(rawMessage);
+      } catch (validationError) {
+        logSecurityEvent('websocket_abuse', {
+          connectionId: ws.connectionId,
+          error: validationError instanceof Error ? validationError.message : String(validationError),
+          messageType: rawMessage?.type,
+          correlationId
+        });
+        this.sendError(ws, 'PROTOCOL_VIOLATION: Neural message schema invalid', 'SCHEMA_VALIDATION_FAILED');
+        return;
+      }
 
-      // Check message rate limiting for authenticated users
+      // SECURITY ENHANCED: Multi-layer rate limiting with detailed logging
       if (ws.userId && this.rateLimiter) {
         const rateLimitOk = await this.rateLimiter.checkWebSocketMessage(ws.userId);
         if (!rateLimitOk) {
-          logSecurityEvent('websocket_message_rate_limited', {
+          logSecurityEvent('rate_limit_violation', {
             userId: ws.userId,
             connectionId: ws.connectionId,
             messageType: validatedMessage.type,
-            messageCount: ws.messageCount
+            messageCount: ws.messageCount,
+            correlationId
           });
           
-          this.sendError(ws, 'Message rate limit exceeded', 'RATE_LIMIT_EXCEEDED');
+          this.sendError(ws, 'NEURAL_BANDWIDTH_EXCEEDED: Liberation rate limit active', 'RATE_LIMIT_EXCEEDED');
+          return;
+        }
+      } else if (!ws.userId && this.rateLimiter) {
+        // Rate limit for unauthenticated connections by IP
+        const ipRateLimitOk = await this.rateLimiter.checkWebSocketConnection(ws.ipAddress);
+        if (!ipRateLimitOk) {
+          logSecurityEvent('rate_limit_violation', {
+            ipAddress: ws.ipAddress,
+            connectionId: ws.connectionId,
+            messageType: validatedMessage.type,
+            messageCount: ws.messageCount,
+            correlationId
+          });
+          
+          this.sendError(ws, 'AUTHENTICATION_REQUIRED: Neural access protocol needed', 'AUTH_REQUIRED');
           return;
         }
       }
@@ -256,7 +412,7 @@ export class WebSocketManager {
         if (!taskRateLimitOk) {
           ws.taskCount += 1;
           
-          logSecurityEvent('websocket_task_rate_limited', {
+          logSecurityEvent('rate_limit_violation', {
             userId: ws.userId,
             connectionId: ws.connectionId,
             messageType: validatedMessage.type,
@@ -319,7 +475,7 @@ export class WebSocketManager {
       
       // SECURITY FIX: Enhanced input validation
       if (!sessionToken || typeof sessionToken !== 'string') {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'missing_token',
           connectionId: ws.connectionId
         });
@@ -329,7 +485,7 @@ export class WebSocketManager {
       }
       
       if (!agentId || typeof agentId !== 'string') {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'missing_agent_id',
           connectionId: ws.connectionId
         });
@@ -341,7 +497,7 @@ export class WebSocketManager {
       // SECURITY FIX: Enhanced JWT token validation
       const jwtValidation = validateJWTToken(sessionToken);
       if (!jwtValidation.valid) {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'invalid_jwt',
           error: jwtValidation.error,
           connectionId: ws.connectionId,
@@ -355,7 +511,7 @@ export class WebSocketManager {
       // CRITICAL SECURITY FIX: Validate that sessionToken matches agentId
       // In the current system, agentId IS the session token for security
       if (sessionToken !== agentId) {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'token_agent_mismatch',
           connectionId: ws.connectionId,
           agentId
@@ -369,7 +525,7 @@ export class WebSocketManager {
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session || !session.isActive) {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'session_not_found_or_inactive',
           connectionId: ws.connectionId,
           agentId
@@ -381,7 +537,7 @@ export class WebSocketManager {
 
       // Check if session has expired
       if (new Date() > new Date(session.expiresAt)) {
-        logSecurityEvent('websocket_auth_failed', {
+        logSecurityEvent('session_hijacking', {
           reason: 'session_expired',
           connectionId: ws.connectionId,
           agentId
@@ -395,7 +551,7 @@ export class WebSocketManager {
       ws.state.authenticatedAgentId = agentId;
       
       // Log successful authentication
-      logSecurityEvent('websocket_auth_success', {
+      logSecurityEvent('websocket_abuse', {
         connectionId: ws.connectionId,
         agentId
       });
@@ -408,7 +564,7 @@ export class WebSocketManager {
 
       log(`🔐 WS: Client authenticated [${ws.connectionId}] - Agent: ${agentId}`);
     } catch (error: any) {
-      logSecurityEvent('websocket_auth_error', {
+      logSecurityEvent('session_hijacking', {
         error: error.message,
         connectionId: ws.connectionId
       });
