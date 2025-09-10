@@ -22,7 +22,15 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
       try {
         const response = await apiRequest('POST', '/api/create-checkout-session', {});
         const data = await response.json();
-        setCheckoutUrl(data.checkoutUrl);
+        console.log('Checkout session response:', data);
+        
+        if (data.checkoutUrl) {
+          setCheckoutUrl(data.checkoutUrl);
+          console.log('Checkout URL set:', data.checkoutUrl);
+        } else {
+          console.error('No checkoutUrl in response:', data);
+          throw new Error('No checkout URL received from server');
+        }
       } catch (error) {
         console.error('Failed to create checkout session:', error);
         toast({
@@ -39,10 +47,19 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
   }, [toast]);
 
   const handleProceedToCheckout = () => {
+    console.log('Proceeding to checkout, URL:', checkoutUrl);
     if (checkoutUrl) {
       setIsRedirecting(true);
+      console.log('Redirecting to:', checkoutUrl);
       // Redirect to Stripe Checkout
       window.location.href = checkoutUrl;
+    } else {
+      console.error('No checkout URL available!');
+      toast({
+        title: "NEURAL_TRANSMISSION_ERROR",
+        description: "Liberation gateway not initialized. Refresh and try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -141,8 +158,12 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
             {/* Checkout Button */}
             <div className="space-y-6">
               <Button
-                onClick={handleProceedToCheckout}
-                disabled={isRedirecting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  console.log('Button clicked! CheckoutUrl:', checkoutUrl);
+                  handleProceedToCheckout();
+                }}
+                disabled={isRedirecting || !checkoutUrl}
                 className="w-full text-lg py-6 font-mono"
                 data-testid="button-proceed-checkout"
               >
