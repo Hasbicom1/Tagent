@@ -14,13 +14,19 @@ import {
   Activity
 } from 'lucide-react';
 
-export function LandingPage() {
+interface LandingPageProps {
+  onStartPayment: () => void;
+}
+
+export function LandingPage({ onStartPayment }: LandingPageProps) {
   const [isActivated, setIsActivated] = useState(false);
 
   const handleActivation = () => {
     setIsActivated(true);
-    setTimeout(() => setIsActivated(false), 3000);
-    console.log('Agent activation sequence initiated');
+    setTimeout(() => {
+      setIsActivated(false);
+      onStartPayment();
+    }, 2000);
   };
 
   return (
@@ -105,7 +111,7 @@ export function LandingPage() {
                     <Button 
                       size="lg" 
                       className="text-lg px-8 py-6 font-mono hover-elevate group"
-                      onClick={handleActivation}
+                      onClick={onStartPayment}
                       data-testid="button-deploy-agent"
                     >
                       <Terminal className="w-5 h-5 mr-2" />
@@ -324,7 +330,7 @@ export function LandingPage() {
                 <Button 
                   size="lg" 
                   className="w-full text-lg py-6 font-mono"
-                  onClick={() => console.log('Initialize payment gateway')}
+                  onClick={onStartPayment}
                   data-testid="button-initialize-payment"
                 >
                   <Command className="w-5 h-5 mr-2" />

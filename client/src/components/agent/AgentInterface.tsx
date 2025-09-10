@@ -5,6 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Terminal, 
   Zap, 
@@ -20,11 +23,20 @@ import {
 
 interface Message {
   id: string;
+  sessionId: string;
   role: 'user' | 'agent';
   content: string;
   timestamp: Date;
-  hasExecutableTask?: boolean;
-  taskDescription?: string;
+  hasExecutableTask: boolean | null;
+  taskDescription: string | null;
+}
+
+interface SessionInfo {
+  sessionId: string;
+  agentId: string;
+  expiresAt: string;
+  timeRemaining: number;
+  isActive: boolean;
 }
 
 interface AgentInterfaceProps {
@@ -32,67 +44,121 @@ interface AgentInterfaceProps {
   timeRemaining: number;
 }
 
-export function AgentInterface({ agentId, timeRemaining }: AgentInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'agent',
-      content: 'PHOENIX-7742 NEURAL NETWORK ONLINE\n\nAutonomous agent initialized and ready for task deployment.\nProvide task parameters and I will execute with full transparency.\n\nWhat would you like me to accomplish?',
-      timestamp: new Date(),
-    }
-  ]);
+export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }: AgentInterfaceProps) {
   const [currentMessage, setCurrentMessage] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [browserView, setBrowserView] = useState<string | null>(null);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
+  const [realTimeRemaining, setRealTimeRemaining] = useState(initialTimeRemaining);
+  const { toast } = useToast();
 
-  const generateAgentResponse = (userMessage: string): Message => {
-    const taskAnalysis = analyzeTask(userMessage);
-    
-    return {
-      id: Date.now().toString(),
-      role: 'agent',
-      content: taskAnalysis.response,
-      timestamp: new Date(),
-      hasExecutableTask: taskAnalysis.isExecutable,
-      taskDescription: taskAnalysis.task
-    };
-  };
+  // Fetch session info
+  const { data: sessionInfo, error: sessionError } = useQuery({
+    queryKey: ['session', agentId],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/session/${agentId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch session');
+      }
+      return response.json() as Promise<SessionInfo>;
+    },
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
-  const analyzeTask = (message: string) => {
-    const response = `TASK ANALYSIS COMPLETE\n\nI have processed your request and developed an execution plan.\nI will handle all browser interactions, data processing, and result compilation.\n\nReady to execute when you give the command.`;
-    
-    return {
-      response,
-      isExecutable: true,
-      task: 'Autonomous web task execution'
-    };
-  };
+  // Fetch messages
+  const { data: messages = [], refetch: refetchMessages } = useQuery({
+    queryKey: ['messages', agentId],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/session/${agentId}/messages`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch messages');
+      }
+      const data = await response.json();
+      return data.map((msg: any) => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
+      })) as Message[];
+    },
+    enabled: !!sessionInfo,
+  });
 
-  const handleSendMessage = () => {
-    if (!currentMessage.trim()) return;
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to send message');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchMessages();
+      setCurrentMessage('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: currentMessage,
-      timestamp: new Date(),
-    };
+  // Execute task mutation
+  const executeTaskMutation = useMutation({
+    mutationFn: async (taskDescription: string) => {
+      const response = await apiRequest('POST', `/api/session/${agentId}/execute`, { taskDescription });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to execute task');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setIsExecuting(true);
+      setBrowserView('active');
+      setExecutionLog(['INITIALIZING BROWSER ENGINE...']);
+      
+      // Simulate execution monitoring
+      simulateExecution();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Execution Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
 
-    setMessages(prev => [...prev, userMessage]);
-    setCurrentMessage('');
+  // Update time remaining
+  useEffect(() => {
+    if (sessionInfo) {
+      setRealTimeRemaining(sessionInfo.timeRemaining);
+      
+      const interval = setInterval(() => {
+        setRealTimeRemaining(prev => Math.max(0, prev - 1));
+      }, 60000); // Update every minute
 
-    setTimeout(() => {
-      const agentResponse = generateAgentResponse(currentMessage);
-      setMessages(prev => [...prev, agentResponse]);
-    }, 1000);
-  };
+      return () => clearInterval(interval);
+    }
+  }, [sessionInfo]);
 
-  const handleExecuteTask = () => {
-    setIsExecuting(true);
-    setBrowserView('active');
-    setExecutionLog(['INITIALIZING BROWSER ENGINE...']);
-    
+  // Handle session errors
+  useEffect(() => {
+    if (sessionError) {
+      toast({
+        title: "Session Error",
+        description: "Your session may have expired. Please create a new session.",
+        variant: "destructive",
+      });
+    }
+  }, [sessionError, toast]);
+
+  const simulateExecution = () => {
     const steps = [
       'LOADING NEURAL NETWORKS...',
       'ESTABLISHING SECURE SESSION...',
@@ -112,11 +178,51 @@ export function AgentInterface({ agentId, timeRemaining }: AgentInterfaceProps) 
     });
   };
 
+  const handleSendMessage = () => {
+    if (!currentMessage.trim() || sendMessageMutation.isPending) return;
+    sendMessageMutation.mutate(currentMessage);
+  };
+
+  const handleExecuteTask = (taskDescription: string) => {
+    if (executeTaskMutation.isPending) return;
+    executeTaskMutation.mutate(taskDescription);
+  };
+
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
   };
+
+  // Show loading state while fetching session
+  if (!sessionInfo && !sessionError) {
+    return (
+      <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
+        <Card className="max-w-md w-full p-8">
+          <div className="text-center space-y-4">
+            <Activity className="w-8 h-8 mx-auto animate-spin text-primary" />
+            <div className="text-lg font-mono">LOADING_SESSION...</div>
+            <div className="text-sm text-muted-foreground">Connecting to agent {agentId}</div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (sessionError) {
+    return (
+      <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
+        <Card className="max-w-md w-full p-8">
+          <div className="text-center space-y-4">
+            <div className="text-lg font-mono text-destructive">SESSION_ERROR</div>
+            <div className="text-sm text-muted-foreground">Unable to connect to agent session</div>
+            <Button onClick={() => window.location.href = '/'}>Return to Landing</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-mono">
@@ -149,9 +255,9 @@ export function AgentInterface({ agentId, timeRemaining }: AgentInterfaceProps) 
             <div className="flex items-center gap-6">
               <div className="text-right space-y-1">
                 <div className="text-sm text-muted-foreground font-mono">SESSION_TIME</div>
-                <Badge variant={timeRemaining > 60 ? 'default' : 'destructive'} className="text-sm font-mono">
+                <Badge variant={realTimeRemaining > 60 ? 'default' : 'destructive'} className="text-sm font-mono">
                   <Clock className="w-4 h-4 mr-1" />
-                  {formatTime(timeRemaining)}
+                  {formatTime(realTimeRemaining)}
                 </Badge>
               </div>
               
@@ -211,15 +317,15 @@ export function AgentInterface({ agentId, timeRemaining }: AgentInterfaceProps) 
                         {message.content}
                       </div>
                       
-                      {message.hasExecutableTask && (
+                      {message.hasExecutableTask && message.taskDescription && (
                         <Button
-                          onClick={handleExecuteTask}
-                          disabled={isExecuting}
+                          onClick={() => handleExecuteTask(message.taskDescription!)}
+                          disabled={isExecuting || executeTaskMutation.isPending}
                           className="mt-4 w-full font-mono"
                           variant="default"
                           data-testid="button-execute-command"
                         >
-                          {isExecuting ? (
+                          {isExecuting || executeTaskMutation.isPending ? (
                             <>
                               <Activity className="w-4 h-4 mr-2 animate-spin" />
                               EXECUTING_SEQUENCE...
@@ -257,11 +363,15 @@ export function AgentInterface({ agentId, timeRemaining }: AgentInterfaceProps) 
                 />
                 <Button 
                   onClick={handleSendMessage}
-                  disabled={!currentMessage.trim() || isExecuting}
+                  disabled={!currentMessage.trim() || sendMessageMutation.isPending}
                   data-testid="button-send-command"
                   className="font-mono"
                 >
-                  <Send className="w-4 h-4" />
+                  {sendMessageMutation.isPending ? (
+                    <Activity className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
             </div>
