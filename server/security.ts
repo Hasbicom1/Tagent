@@ -433,4 +433,309 @@ export function validateWebSocketConfiguration(): void {
   console.log(`✅ SECURITY: Max payload size: 64KB, JWT validation enabled`);
 }
 
+/**
+ * HTTP Security Headers Configuration
+ */
+export interface SecurityHeadersConfig {
+  hsts: {
+    maxAge: number;
+    includeSubDomains: boolean;
+    preload: boolean;
+  };
+  contentSecurityPolicy: {
+    directives: Record<string, string[]>;
+    reportOnly: boolean;
+  };
+  frameOptions: 'DENY' | 'SAMEORIGIN' | 'ALLOW-FROM';
+  contentTypeOptions: boolean;
+  referrerPolicy: string;
+  permissionsPolicy: Record<string, string[]>;
+}
+
+export const PRODUCTION_SECURITY_HEADERS: SecurityHeadersConfig = {
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "wss:", "https://api.stripe.com", "https://api.openai.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: []
+    },
+    reportOnly: false
+  },
+  frameOptions: 'DENY',
+  contentTypeOptions: true,
+  referrerPolicy: 'strict-origin-when-cross-origin',
+  permissionsPolicy: {
+    camera: [],
+    microphone: [],
+    geolocation: [],
+    payment: ["'self'"],
+    usb: [],
+    bluetooth: [],
+    magnetometer: [],
+    gyroscope: [],
+    accelerometer: []
+  }
+};
+
+export const DEVELOPMENT_SECURITY_HEADERS: SecurityHeadersConfig = {
+  hsts: {
+    maxAge: 0, // No HSTS in development
+    includeSubDomains: false,
+    preload: false
+  },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:", "http:"],
+      connectSrc: ["'self'", "ws:", "wss:", "https:", "http:", "https://api.stripe.com", "https://api.openai.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
+    },
+    reportOnly: false
+  },
+  frameOptions: 'DENY',
+  contentTypeOptions: true,
+  referrerPolicy: 'strict-origin-when-cross-origin',
+  permissionsPolicy: {
+    camera: [],
+    microphone: [],
+    geolocation: [],
+    payment: ["'self'"]
+  }
+};
+
+/**
+ * Secure Cookie Configuration
+ */
+export interface SecureCookieConfig {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'strict' | 'lax' | 'none';
+  maxAge: number; // in seconds
+  domain?: string;
+  path: string;
+}
+
+export const PRODUCTION_COOKIE_CONFIG: SecureCookieConfig = {
+  httpOnly: true,
+  secure: true, // HTTPS only
+  sameSite: 'strict', // CSRF protection
+  maxAge: 24 * 60 * 60, // 24 hours
+  path: '/'
+};
+
+export const DEVELOPMENT_COOKIE_CONFIG: SecureCookieConfig = {
+  httpOnly: true,
+  secure: false, // Allow HTTP in development
+  sameSite: 'lax', // More permissive for development
+  maxAge: 24 * 60 * 60, // 24 hours
+  path: '/'
+};
+
+/**
+ * Get security headers configuration based on environment
+ */
+export function getSecurityHeadersConfig(): SecurityHeadersConfig {
+  return process.env.NODE_ENV === 'production' 
+    ? PRODUCTION_SECURITY_HEADERS 
+    : DEVELOPMENT_SECURITY_HEADERS;
+}
+
+/**
+ * Get secure cookie configuration based on environment
+ */
+export function getSecureCookieConfig(): SecureCookieConfig {
+  const baseConfig = process.env.NODE_ENV === 'production' 
+    ? PRODUCTION_COOKIE_CONFIG 
+    : DEVELOPMENT_COOKIE_CONFIG;
+
+  // Override domain if specified in environment
+  if (process.env.COOKIE_DOMAIN) {
+    return { ...baseConfig, domain: process.env.COOKIE_DOMAIN };
+  }
+
+  return baseConfig;
+}
+
+/**
+ * Generate Content Security Policy header value
+ */
+export function generateCSPHeader(config: SecurityHeadersConfig): string {
+  const directives = Object.entries(config.contentSecurityPolicy.directives)
+    .map(([directive, sources]) => {
+      if (sources.length === 0) {
+        return directive.replace(/([A-Z])/g, '-$1').toLowerCase();
+      }
+      return `${directive.replace(/([A-Z])/g, '-$1').toLowerCase()} ${sources.join(' ')}`;
+    });
+
+  return directives.join('; ');
+}
+
+/**
+ * Generate Permissions Policy header value
+ */
+export function generatePermissionsPolicyHeader(config: SecurityHeadersConfig): string {
+  return Object.entries(config.permissionsPolicy)
+    .map(([directive, allowlist]) => {
+      if (allowlist.length === 0) {
+        return `${directive}=()`;
+      }
+      return `${directive}=(${allowlist.join(' ')})`;
+    })
+    .join(', ');
+}
+
+/**
+ * Validate security headers configuration
+ */
+export function validateSecurityHeaders(): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const config = getSecurityHeadersConfig();
+  
+  console.log(`🔐 SECURITY: Applying ${isProduction ? 'production' : 'development'} security headers...`);
+  
+  if (isProduction) {
+    // Validate HSTS is enabled
+    if (config.hsts.maxAge === 0) {
+      console.warn('⚠️  SECURITY: HSTS disabled in production - this is not recommended');
+    }
+    
+    // Validate CSP is not in report-only mode
+    if (config.contentSecurityPolicy.reportOnly) {
+      console.warn('⚠️  SECURITY: CSP in report-only mode in production');
+    }
+    
+    // Validate secure cookie settings
+    const cookieConfig = getSecureCookieConfig();
+    if (!cookieConfig.secure) {
+      console.warn('⚠️  SECURITY: Secure cookies disabled in production');
+    }
+    
+    console.log(`✅ SECURITY: Production security headers configured`);
+    console.log(`✅ SECURITY: HSTS max-age: ${config.hsts.maxAge} seconds`);
+    console.log(`✅ SECURITY: Frame options: ${config.frameOptions}`);
+    console.log(`✅ SECURITY: Cookie security: HttpOnly=${cookieConfig.httpOnly}, Secure=${cookieConfig.secure}, SameSite=${cookieConfig.sameSite}`);
+  } else {
+    console.log(`🔄 SECURITY: Development security headers applied (relaxed for debugging)`);
+  }
+}
+
+/**
+ * Create secure session cookie
+ */
+export function createSecureSessionCookie(sessionId: string, options: Partial<SecureCookieConfig> = {}): string {
+  const config = { ...getSecureCookieConfig(), ...options };
+  
+  let cookie = `sessionId=${sessionId}; Path=${config.path}; Max-Age=${config.maxAge}`;
+  
+  if (config.httpOnly) {
+    cookie += '; HttpOnly';
+  }
+  
+  if (config.secure) {
+    cookie += '; Secure';
+  }
+  
+  if (config.sameSite) {
+    cookie += `; SameSite=${config.sameSite}`;
+  }
+  
+  if (config.domain) {
+    cookie += `; Domain=${config.domain}`;
+  }
+  
+  return cookie;
+}
+
+/**
+ * Parse secure session cookie
+ */
+export function parseSecureSessionCookie(cookieHeader: string): string | null {
+  if (!cookieHeader) {
+    return null;
+  }
+  
+  const match = cookieHeader.match(/sessionId=([^;]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Generate CSRF token for forms
+ */
+export function generateCSRFToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Validate CSRF token
+ */
+export function validateCSRFToken(token: string, expectedToken: string): boolean {
+  if (!token || !expectedToken) {
+    return false;
+  }
+  
+  // Use timing-safe comparison to prevent timing attacks
+  return crypto.timingSafeEqual(
+    Buffer.from(token, 'hex'),
+    Buffer.from(expectedToken, 'hex')
+  );
+}
+
+/**
+ * Enhanced security validation for production deployment
+ */
+export function validateProductionSecurity(): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (!isProduction) {
+    return;
+  }
+  
+  console.log('🔐 SECURITY: Performing enhanced production security validation...');
+  
+  // Check SSL/TLS configuration
+  if (!process.env.FORCE_HTTPS && !process.env.SSL_CERT) {
+    console.warn('⚠️  SECURITY: No SSL/TLS configuration detected - ensure proper SSL termination');
+  }
+  
+  // Check security headers configuration
+  validateSecurityHeaders();
+  
+  // Check cookie security
+  const cookieConfig = getSecureCookieConfig();
+  if (!cookieConfig.secure || !cookieConfig.httpOnly) {
+    throw new Error('🚨 SECURITY: Insecure cookie configuration in production');
+  }
+  
+  // Validate CSRF protection is enabled
+  if (!process.env.ENABLE_CSRF_PROTECTION || process.env.ENABLE_CSRF_PROTECTION !== 'true') {
+    console.warn('⚠️  SECURITY: CSRF protection not explicitly enabled');
+  }
+  
+  console.log('✅ SECURITY: Enhanced production security validation completed');
+}
+
 export { DEFAULT_SECURITY_CONFIG as securityConfig };

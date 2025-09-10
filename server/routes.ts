@@ -2,12 +2,19 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import validator from "validator";
-import helmet from "helmet";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
 import { mcpOrchestrator } from "./mcpOrchestrator";
+import { 
+  validateAIInput,
+  logSecurityEvent,
+  createSecureSessionCookie,
+  parseSecureSessionCookie,
+  generateCSRFToken,
+  validateCSRFToken
+} from "./security";
 import { 
   initializeQueue, 
   addTask, 
@@ -80,25 +87,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('❌ Failed to initialize queue system:', error);
   }
   
-  // Apply security middleware with development-friendly CSP
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  
-  app.use(helmet({
-    contentSecurityPolicy: isDevelopment ? false : {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        scriptSrc: ["'self'", "https://js.stripe.com"],
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'", "wss:", "https://api.stripe.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        objectSrc: ["'none'"],
-        frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
-        frameAncestors: ["'none'"],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-  }));
+  // Note: Enhanced Helmet security configuration is now applied in server/index.ts
+  // This provides comprehensive security headers including HSTS, CSP, and custom policies
   
   app.use(generalLimiter);
   
@@ -206,6 +196,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         taskDescription: null
       });
 
+      // SECURITY ENHANCEMENT: Set secure session cookie
+      const secureCookie = createSecureSessionCookie(session.id);
+      res.setHeader('Set-Cookie', secureCookie);
+
+      // Log successful session creation for security monitoring
+      logSecurityEvent('session_created', {
+        agentId: session.agentId,
+        sessionId: session.id,
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent'],
+        paymentIntentId: checkoutSession.payment_intent
+      });
+
       res.json({
         sessionId: session.id,
         agentId: session.agentId,
@@ -285,18 +288,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid agent ID format" });
       }
       
-      // Validate message content
-      let validatedContent;
-      try {
-        validatedContent = validateInput(content, 2000);
-      } catch (error: any) {
-        return res.status(400).json({ error: error.message });
-      }
-
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (new Date() > session.expiresAt) {
+        return res.status(410).json({ error: "Session expired" });
+      }
+
+      // SECURITY ENHANCEMENT: Enhanced AI input validation with prompt injection detection
+      let validatedContent;
+      try {
+        validatedContent = validateAIInput(content);
+        
+        // Log potential security concerns for monitoring
+        logSecurityEvent('user_message_processed', {
+          agentId,
+          sessionId: session.id,
+          contentLength: content.length,
+          clientIP: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+      } catch (error: any) {
+        // Log failed validation attempts for security monitoring
+        logSecurityEvent('ai_input_validation_failed', {
+          agentId,
+          sessionId: session.id,
+          error: error.message,
+          contentLength: content.length,
+          clientIP: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+        return res.status(400).json({ error: error.message });
       }
 
       if (new Date() > session.expiresAt) {
@@ -348,11 +373,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid agent ID format" });
       }
       
-      // Validate task description
+      // SECURITY ENHANCEMENT: Enhanced AI input validation for task descriptions
       let validatedTaskDescription;
       try {
-        validatedTaskDescription = validateInput(taskDescription, 1000);
+        validatedTaskDescription = validateAIInput(taskDescription);
+        
+        // Log task execution attempts for security monitoring
+        logSecurityEvent('task_execution_requested', {
+          agentId,
+          taskLength: taskDescription.length,
+          clientIP: req.ip,
+          userAgent: req.headers['user-agent']
+        });
       } catch (error: any) {
+        // Log failed validation attempts for security monitoring
+        logSecurityEvent('task_validation_failed', {
+          agentId,
+          error: error.message,
+          taskLength: taskDescription.length,
+          clientIP: req.ip,
+          userAgent: req.headers['user-agent']
+        });
         return res.status(400).json({ error: error.message });
       }
 
