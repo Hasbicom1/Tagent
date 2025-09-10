@@ -1,0 +1,134 @@
+CONTEXT & OBJECTIVE
+You need to integrate AI browser automation capabilities into our web application. The solution must:
+
+Be completely FREE to use/integrate
+Support Computer Use Models (CPM) for autonomous browser control
+Provide API/SDK integration for web app embedding
+Handle full browser control (mouse, keyboard, navigation)
+Execute natural language commands for web automation tasks
+
+TECHNICAL REQUIREMENTS
+
+Docker containerization support
+REST API endpoints for web app communication
+Python or Node.js SDK integration
+Webhook support for async task completion
+JSON response format for task results
+
+RECOMMENDED FREE SOLUTIONS
+1. BROWSER-USE (Primary Recommendation)
+Repository: https://github.com/browser-use/browser-use
+Documentation: https://docs.browser-use.com/
+Integration: Python SDK + Docker + REST API
+CPM Support: ✅ Native Anthropic Computer Use integration
+GitHub Stars: 69,000+
+Implementation Steps:
+bashpip install browser-use
+docker pull browseruse/browser-use
+Key Features:
+
+Multi-LLM provider support (OpenAI, Anthropic, Azure, Google)
+Parallel task processing
+Model Context Protocol integration
+Production-ready API endpoints
+
+2. SKYVERN
+Repository: https://github.com/Skyvern-AI/skyvern
+Documentation: https://docs.skyvern.com/
+Demo: https://app.skyvern.com/
+Integration: Python SDK + Docker
+CPM Support: ✅ LLM + Computer Vision approach
+Technical Advantage:
+
+Visual AI (DOM-independent automation)
+Multi-agent architecture (planner/executor/validator)
+Handles dynamic websites better than traditional automation
+Native 2FA support (QR codes, email, SMS)
+
+3. LAVAGUE
+Repository: https://github.com/lavague-ai/LaVague
+Documentation: https://docs.lavague.ai/
+Integration: Python package + web interface
+CPM Support: ✅ Local and cloud LLM compatibility
+Privacy Features:
+
+Local model deployment (Gemma-7b)
+RAG-powered automation
+Few-shot learning capabilities
+No external API dependencies required
+
+4. STAGEHAND
+Repository: https://github.com/browserbase/stagehand
+Documentation: https://docs.stagehand.dev/
+Integration: TypeScript/JavaScript SDK
+CPM Support: ✅ LLM + Playwright integration
+Best for Node.js applications:
+
+Combines traditional Playwright with AI decision-making
+TypeScript-first development
+Browser-native execution
+
+5. UI.VISION RPA
+Website: https://ui.vision/rpa
+Chrome Extension: https://chromewebstore.google.com/detail/uivision/gcbalfbdmfieckjlnblleoemohcganoc
+Documentation: https://ui.vision/rpa/docs
+CPM Support: ✅ 2025 Anthropic Computer Use integration
+Cross-platform support:
+
+Browser extension + desktop automation
+Works on Chrome, Firefox, Edge
+Local execution (privacy-focused)
+
+INTEGRATION ARCHITECTURE
+Recommended Stack:
+Frontend: Your Web App
+↓ API Calls
+Backend: Your Server
+↓ Docker/SDK
+Browser Agent: Browser-Use Container
+↓ Browser Control
+Target Websites: Automated Actions
+API Integration Pattern:
+python# Example integration with Browser-Use
+from browser_use import Agent
+import asyncio
+
+async def automate_task(instruction: str):
+    agent = Agent(
+        task=instruction,
+        llm=your_llm_provider,  # OpenAI, Anthropic, etc.
+    )
+    result = await agent.run()
+    return result
+
+# REST API endpoint
+@app.post("/automate")
+async def automation_endpoint(request: AutomationRequest):
+    result = await automate_task(request.instruction)
+    return {"success": True, "result": result}
+NEXT STEPS
+
+Start with Browser-Use - most mature and actively maintained
+Set up Docker environment for isolated browser execution
+Implement webhook system for async task completion
+Test with simple automation tasks before complex workflows
+Monitor performance and success rates for optimization
+
+IMPORTANT LINKS FOR RESEARCH
+
+WebArena Benchmark: https://arxiv.org/html/2307.13854v4 (Academic evaluation standard)
+Google Project Mariner: https://deepmind.google/models/project-mariner/ (State-of-the-art reference)
+Microsoft Magentic-UI: https://www.microsoft.com/en-us/research/blog/magentic-ui-an-experimental-human-centered-web-agent/
+Browser Automation Comparison: https://blog.skyvern.com/top-8-browser-automation-tools-in-2024/
+
+EVALUATION CRITERIA
+Test each solution against:
+
+Task completion success rate (target: >70%)
+API response time (target: <30 seconds)
+Error handling and recovery
+Resource consumption (CPU/memory)
+Documentation quality and community support
+
+Priority Order: Browser-Use → Skyvern → LaVague → Stagehand → UI.Vision
+Start implementation with Browser-Use and evaluate others as alternatives based on your specific technical requirements and constraints.

@@ -173,22 +173,11 @@ function AgentAccess() {
 }
 
 function Router() {
-  const [currentView, setCurrentView] = useState<'landing' | 'payment'>('landing');
-
   const handleStartPayment = () => {
     console.log('Starting payment flow');
-    setCurrentView('payment');
+    // Navigate to payment page using wouter
+    window.location.href = '/payment';
   };
-
-  // Route to payment flow
-  if (currentView === 'payment') {
-    return (
-      <PaymentFlow onPaymentSuccess={() => {
-        // This won't be called anymore since we redirect to Stripe
-        // But keeping the interface for compatibility
-      }} />
-    );
-  }
 
   return (
     <Switch>

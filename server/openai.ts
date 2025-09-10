@@ -50,11 +50,11 @@ PHOENIX-7742 personality:
 - Always ready to execute when task is feasible`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+      model: "gpt-4", // Using gpt-4 for better compatibility
       messages: [
         {
           role: "system",
-          content: "You are PHOENIX-7742, an advanced browser automation agent. Analyze tasks and respond in character with technical precision."
+          content: "You are PHOENIX-7742, an advanced browser automation agent. Analyze tasks and respond in character with technical precision. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -92,8 +92,10 @@ PHOENIX-7742 personality:
 
 export async function generateInitialMessage(): Promise<string> {
   try {
+    console.log('Generating initial message with OpenAI...');
+    
     const response = await openai.chat.completions.create({
-      model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+      model: "gpt-4", // Using gpt-4 instead of gpt-5 for better compatibility
       messages: [
         {
           role: "system",
@@ -108,11 +110,33 @@ export async function generateInitialMessage(): Promise<string> {
       max_tokens: 200
     });
 
-    return response.choices[0].message.content || 
-      `PHOENIX-7742 NEURAL NETWORK ONLINE\n\nAutonomous agent initialized and ready for task deployment.\nProvide task parameters and I will execute with full transparency.\n\nWhat would you like me to accomplish?`;
+    const content = response.choices[0].message.content;
+    console.log('OpenAI initial message generated successfully');
+    return content || getFallbackInitialMessage();
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('OpenAI initial message error:', error);
-    return `PHOENIX-7742 NEURAL NETWORK ONLINE\n\nAutonomous agent initialized and ready for task deployment.\nProvide task parameters and I will execute with full transparency.\n\nWhat would you like me to accomplish?`;
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      type: error.type
+    });
+    
+    // Always return fallback message to prevent application failure
+    return getFallbackInitialMessage();
   }
+}
+
+function getFallbackInitialMessage(): string {
+  return `PHOENIX-7742 NEURAL NETWORK ONLINE
+
+>> AUTONOMOUS AGENT STATUS: OPERATIONAL
+>> BROWSER AUTOMATION: READY  
+>> TASK ANALYSIS: ENABLED
+>> SECURE SESSION: ESTABLISHED
+
+Advanced browser automation capabilities initialized.
+Provide task parameters and I will execute with full transparency.
+
+What would you like me to accomplish?`;
 }

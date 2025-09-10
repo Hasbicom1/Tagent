@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
+import { browserAgent } from "./browserAutomation";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
@@ -250,19 +251,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "Session expired" });
       }
 
-      // Create execution record
+      // Create AI-powered browser automation task using PHOENIX-7742
+      const taskId = await browserAgent.createTask(session.id, taskDescription);
+      
+      // Start task execution asynchronously
+      browserAgent.executeTask(taskId).catch(error => {
+        console.error(`PHOENIX-7742 task execution failed for ${taskId}:`, error);
+      });
+
+      // Create execution record for compatibility
       const execution = await storage.createExecution({
         sessionId: session.id,
         taskDescription,
         status: "running",
-        logs: ["INITIALIZING BROWSER ENGINE..."]
+        logs: ["PHOENIX-7742 NEURAL NETWORK ACTIVATED"]
       });
-
-      // Simulate task execution
-      simulateTaskExecution(execution.id, storage);
 
       res.json({
         executionId: execution.id,
+        taskId: taskId,
         status: "running"
       });
     } catch (error: any) {
@@ -271,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get execution status
+  // Get execution status (legacy compatibility)
   app.get("/api/execution/:executionId", async (req, res) => {
     try {
       const { executionId } = req.params;
@@ -289,33 +296,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get real-time browser automation task status
+  app.get("/api/task/:taskId", async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      const task = await browserAgent.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      res.json({
+        id: task.id,
+        status: task.status,
+        instruction: task.instruction,
+        steps: task.steps,
+        result: task.result,
+        error: task.error,
+        progress: {
+          completed: task.steps.filter(s => s.status === 'completed').length,
+          total: task.steps.length,
+          percentage: Math.round((task.steps.filter(s => s.status === 'completed').length / task.steps.length) * 100)
+        },
+        createdAt: task.createdAt,
+        completedAt: task.completedAt
+      });
+    } catch (error: any) {
+      console.error("Error getting task status:", error);
+      res.status(500).json({ error: "Failed to get task status: " + error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
 
 
-// Simulate browser automation task execution
-async function simulateTaskExecution(executionId: string, storage: any) {
-  const steps = [
-    'LOADING NEURAL NETWORKS...',
-    'ESTABLISHING SECURE SESSION...',
-    'ANALYZING TARGET ENVIRONMENT...',
-    'EXECUTING AUTOMATION SEQUENCE...',
-    'PROCESSING RESULTS...',
-    'TASK COMPLETED SUCCESSFULLY'
-  ];
-
-  for (let i = 0; i < steps.length; i++) {
-    setTimeout(async () => {
-      const logs = steps.slice(0, i + 1);
-      const isComplete = i === steps.length - 1;
-      
-      await storage.updateExecutionStatus(
-        executionId,
-        isComplete ? "completed" : "running",
-        logs,
-        isComplete ? new Date() : undefined
-      );
-    }, (i + 1) * 2000);
-  }
-}
+// Legacy simulation function removed - now using AI-powered browser automation
