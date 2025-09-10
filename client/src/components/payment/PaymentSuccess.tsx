@@ -15,17 +15,18 @@ import {
 
 interface PaymentSuccessProps {
   sessionId: string;
+  agentId: string;
   expiresAt: Date;
   onEnterAgent: () => void;
 }
 
-export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSuccessProps) {
+export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: PaymentSuccessProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [sessionLink, setSessionLink] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const link = `${window.location.origin}/agent/${sessionId}`;
+    const link = `${window.location.origin}/browser/${agentId}`;
     setSessionLink(link);
 
     const interval = setInterval(() => {
@@ -45,7 +46,7 @@ export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSu
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [expiresAt, sessionId]);
+  }, [expiresAt, agentId]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -213,11 +214,11 @@ export function PaymentSuccess({ sessionId, expiresAt, onEnterAgent }: PaymentSu
               <Button 
                 size="lg" 
                 className="text-lg px-12 py-6 font-mono"
-                onClick={onEnterAgent}
+                onClick={() => window.location.href = `/browser/${agentId}`}
                 data-testid="button-access-agent"
               >
                 <Command className="w-5 h-5 mr-2" />
-                ACCESS_AGENT_INTERFACE
+                ACCESS_BROWSER_INTERFACE
               </Button>
               
               <div className="text-sm text-muted-foreground font-mono">

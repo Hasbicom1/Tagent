@@ -9,6 +9,7 @@ import { LandingPage } from "@/components/landing/LandingPage";
 import { AgentInterface } from "@/components/agent/AgentInterface";
 import { PaymentSuccess } from "@/components/payment/PaymentSuccess";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
+import { BrowserInterface } from "@/components/browser/BrowserInterface";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -52,8 +53,8 @@ function CheckoutSuccess() {
         const data = await response.json();
         
         setSessionData({
-          sessionId: data.sessionId,
-          agentId: data.agentId,
+          sessionId: data.sessionId, // This is the database session ID
+          agentId: data.agentId,     // This is the agent ID for browser interface
           expiresAt: new Date(data.expiresAt)
         });
         
@@ -110,6 +111,7 @@ function CheckoutSuccess() {
         </div>
         <PaymentSuccess
           sessionId={sessionData.sessionId}
+          agentId={sessionData.agentId}
           expiresAt={sessionData.expiresAt}
           onEnterAgent={handleEnterAgent}
         />
@@ -183,6 +185,9 @@ function Router() {
     <Switch>
       <Route path="/success" component={CheckoutSuccess} />
       <Route path="/agent" component={AgentAccess} />
+      <Route path="/browser/:sessionId" component={({ params }) => (
+        <BrowserInterface sessionId={params.sessionId} />
+      )} />
       <Route path="/payment" component={() => (
         <PaymentFlow onPaymentSuccess={() => {}} />
       )} />

@@ -1,0 +1,181 @@
+PROMPT FOR AI DEVELOPER: Command Section Interface with MCP Orchestrator Integration
+CONTEXT & OBJECTIVE
+Building on the Free AI Browser Agents Integration you've already implemented (Browser-Use, Skyvern, LaVague, Stagehand, UI.Vision), you now need to create a command section interface that integrates with an MCP orchestrator. The system must provide:
+
+Post-payment redirect: Users redirected to browser interface with command section after $1 payment
+Command section: Minimal, non-intrusive floating interface for task assignment (NO split-screen)
+Uninterrupted browsing: Full browser experience without UI interference
+MCP orchestrator: Routes tasks to your already integrated agents transparently
+Silent execution: Users see only "AI RAi" assistant, all agents work invisibly in background
+
+INTERFACE REQUIREMENTS (NO SPLIT SCREEN)
+Command Section Design Specifications
+
+Layout: Full browser window with small floating/overlay command section
+Position: Collapsible terminal-style box (bottom-right or user preference)
+Footprint: Minimal when collapsed (<5% screen space), expandable for input
+Style: Dark theme, terminal/command-line aesthetic, always-on-top but non-blocking
+Behavior: Toggleable visibility, smooth animations, keyboard shortcuts support
+
+User Experience Flow
+
+User pays $1 → payment processed successfully
+Auto-redirect to /browser/{session_id} (not chat interface)
+Full browser loads with small command section overlay
+User types natural language commands in command box
+AI RAi executes tasks using your integrated agents (Browser-Use, Skyvern, etc.)
+Browser shows real-time automation without interface disruption
+Command section shows minimal status updates only
+
+MCP ORCHESTRATOR INTEGRATION
+Agent Routing Requirements
+The MCP orchestrator must intelligently route commands to your already integrated agents:
+
+Browser-Use: Primary automation engine for standard browser tasks
+Skyvern: Visual AI tasks requiring computer vision
+LaVague: Complex multi-step workflows and RAG-powered automation
+Stagehand: TypeScript/JavaScript-based browser control
+UI.Vision: Extension-based automation and local execution
+Mem0: Session memory and context persistence (24-hour sessions)
+
+Command Processing Logic
+
+Task Analysis: Parse natural language commands to determine optimal agent
+Silent Routing: Route to appropriate agent without user awareness
+Transparent Execution: Users only see "AI RAi" responses, never specific agent names
+Context Preservation: Maintain session context across all agents using Mem0
+Parallel Processing: Handle multiple commands efficiently without blocking
+
+TECHNICAL INTEGRATION REQUIREMENTS
+Backend Architecture
+
+Payment Processing: Handle $1 payment and create 24-hour browser session
+Session Management: Initialize session with access to all integrated agents
+WebSocket Communication: Real-time command processing and status updates
+Agent Orchestration: Route commands through MCP to appropriate agents
+Memory Persistence: Store session context and command history with Mem0
+
+Frontend Interface Requirements
+
+Floating Command Box: Non-intrusive overlay that doesn't block browsing
+Real-time Updates: WebSocket connection for command status and results
+Session Timer: 24-hour countdown display in command section
+Command History: Access to previous commands and results
+Keyboard Shortcuts: Quick access to command section (e.g., Ctrl+Shift+C)
+
+Silent Automation Execution
+
+Background Processing: Execute automation without disrupting user browsing
+Minimal Feedback: Show status in command section only, not main browser
+Error Handling: Graceful failures with retry mechanisms across agents
+Performance Optimization: Ensure zero impact on browser responsiveness
+
+AGENT INTEGRATION SPECIFICATIONS
+Command Routing Logic
+Build intelligent routing to determine which of your integrated agents should handle each command:
+
+Visual Commands → Route to Skyvern (screenshots, visual element interaction)
+Form Automation → Route to Browser-Use (form filling, data entry)
+Complex Workflows → Route to LaVague (multi-step processes)
+JavaScript Tasks → Route to Stagehand (dynamic web apps)
+Local Operations → Route to UI.Vision (privacy-focused tasks)
+Default Tasks → Route to Browser-Use (general automation)
+
+Session Persistence
+
+Memory Integration: Use Mem0 to maintain context across all agents
+Command History: Store and retrieve previous automation tasks
+User Preferences: Learn and adapt to user command patterns
+Cross-Agent Context: Share relevant information between different agents
+
+COMMAND SECTION FEATURES
+Core Functionality
+
+Natural Language Input: Accept commands like "Login to Gmail", "Fill out this form", "Take a screenshot"
+Status Indicators: Real-time progress updates without interrupting browsing
+Quick Commands: Predefined shortcuts for common automation tasks
+Command Suggestions: AI-powered suggestions based on current webpage
+Session Management: Display remaining time, active tasks, command queue
+
+Advanced Features
+
+Command Scripting: Allow users to create and save command sequences
+Conditional Logic: Support for if/then commands and decision trees
+Website Context: Automatically suggest relevant commands based on current site
+Error Recovery: Automatic retry with different agents if primary agent fails
+Performance Metrics: Show task completion times and success rates
+
+USER INTERFACE SPECIFICATIONS
+Visual Design Requirements
+
+Theme: Dark terminal aesthetic with green/blue accent colors
+Typography: Monospace font for command line feel
+Animations: Smooth expand/collapse, subtle loading indicators
+Transparency: Semi-transparent background with blur effects
+Responsiveness: Adapt to different screen sizes and orientations
+
+Interaction Patterns
+
+Click to Expand: Single click on header to expand/collapse
+Enter to Execute: Press Enter to send commands
+Escape to Hide: ESC key to quickly hide command section
+Tab Completion: Auto-complete for common commands
+Command History: Up/down arrows to navigate previous commands
+
+INTEGRATION WITH EXISTING AGENT SETUP
+Reference Your Current Implementation
+Build upon the agent integration you've already completed:
+
+Browser-Use repository: https://github.com/browser-use/browser-use
+Skyvern repository: https://github.com/Skyvern-AI/skyvern
+LaVague repository: https://github.com/lavague-ai/LaVague
+Stagehand repository: https://github.com/browserbase/stagehand
+UI.Vision website: https://ui.vision/rpa
+
+MCP Protocol Implementation
+
+Message Routing: Implement Message Control Protocol for agent communication
+Load Balancing: Distribute tasks across available agents for optimal performance
+Failure Handling: Automatic failover between agents if primary selection fails
+Response Aggregation: Combine results from multiple agents when needed
+
+SUCCESS CRITERIA
+User Experience Metrics
+
+Command section uses less than 5% of screen space when collapsed
+Zero impact on browser performance and responsiveness
+Commands execute within 3 seconds of user input
+95%+ task completion rate across all integrated agents
+Seamless experience where users never know which specific agent is working
+
+Technical Performance
+
+24-hour session persistence with Mem0 integration
+Real-time WebSocket communication with <100ms latency
+Intelligent agent selection with 90%+ accuracy
+Graceful error handling and automatic retry mechanisms
+Support for 100+ concurrent user sessions
+
+IMPLEMENTATION PRIORITY
+Phase 1: Core Command Interface
+
+Create floating command section with expand/collapse functionality
+Implement WebSocket connection for real-time communication
+Connect to Browser-Use as primary agent for basic automation
+Add session timer and basic status indicators
+
+Phase 2: MCP Orchestrator
+
+Build command analysis and agent selection logic
+Integrate all 5 agents (Browser-Use, Skyvern, LaVague, Stagehand, UI.Vision)
+Implement intelligent routing based on command content
+Add Mem0 integration for session persistence
+
+Phase 3: Advanced Features
+
+Command history and auto-suggestions
+Multi-step command sequences and scripting
+Performance optimization and error recovery
+Advanced UI features and customization options
+
+Build this command section interface as a non-intrusive overlay that leverages your existing agent integration while providing a seamless, terminal-like experience for browser automation commands.

@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
+import { mcpOrchestrator } from "./mcpOrchestrator";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
@@ -324,6 +325,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error getting task status:", error);
       res.status(500).json({ error: "Failed to get task status: " + error.message });
+    }
+  });
+
+  // Browser interface command processing with MCP orchestrator
+  app.post("/api/browser/:sessionId/command", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const { command, timestamp } = req.body;
+      
+      if (!command) {
+        return res.status(400).json({ error: "Command required" });
+      }
+
+      // Verify session exists and is active
+      const session = await storage.getSessionByAgentId(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (new Date() > session.expiresAt) {
+        return res.status(410).json({ error: "Session expired" });
+      }
+
+      // Route command through MCP orchestrator
+      const response = await mcpOrchestrator.routeCommand({
+        sessionId: session.id,
+        command: command.trim(),
+        timestamp: timestamp || new Date().toISOString()
+      });
+
+      // Generate natural AI RAi response
+      const aiResponse = mcpOrchestrator.generateAIResponse(command, response.agent);
+
+      res.json({
+        commandId: response.commandId,
+        agent: "AI RAi", // Always show as AI RAi to user
+        status: response.status,
+        result: aiResponse,
+        actualAgent: response.agent // For internal tracking
+      });
+    } catch (error: any) {
+      console.error("Error processing browser command:", error);
+      res.status(500).json({ error: "Failed to process command: " + error.message });
+    }
+  });
+
+  // Get browser command status
+  app.get("/api/browser/command/:commandId", async (req, res) => {
+    try {
+      const { commandId } = req.params;
+      const command = mcpOrchestrator.getCommandStatus(commandId);
+      
+      if (!command) {
+        return res.status(404).json({ error: "Command not found" });
+      }
+
+      res.json({
+        id: command.commandId,
+        status: command.status,
+        result: command.result,
+        error: command.error,
+        agent: "AI RAi" // Always show as AI RAi to user
+      });
+    } catch (error: any) {
+      console.error("Error getting command status:", error);
+      res.status(500).json({ error: "Failed to get command status: " + error.message });
     }
   });
 
