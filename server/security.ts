@@ -4,6 +4,11 @@ import validator from 'validator';
 import { Request, Response, NextFunction } from 'express';
 import { Redis } from 'ioredis';
 
+// Global type declaration for memory-based activation store
+declare global {
+  var _sessionActivations: Set<string> | undefined;
+}
+
 // Security Configuration
 export interface SecurityConfig {
   maxInputLength: number;
@@ -1153,6 +1158,61 @@ export function verifyStripeWebhook(payload: string, sigHeader: string, webhookS
   } catch (error) {
     console.error('Stripe webhook verification failed:', error);
     return false;
+  }
+}
+
+/**
+ * Idempotent session activation with Redis locks
+ */
+export async function activateSessionIdempotent(
+  redis: Redis | null, 
+  paymentIntentId: string, 
+  activationFn: () => Promise<any>
+): Promise<{ success: boolean; result?: any; message: string }> {
+  if (!redis) {
+    // Fallback to memory-based check for development
+    const memStore = global._sessionActivations = global._sessionActivations || new Set();
+    if (memStore.has(paymentIntentId)) {
+      return { success: false, message: "SESSION_ALREADY_ACTIVATED" };
+    }
+    memStore.add(paymentIntentId);
+    const result = await activationFn();
+    return { success: true, result, message: "SESSION_ACTIVATED" };
+  }
+
+  const lockKey = `activation_lock:${paymentIntentId}`;
+  const activationKey = `activated:${paymentIntentId}`;
+  const lockTimeout = 30; // 30 seconds
+
+  try {
+    // Acquire distributed lock
+    const lockAcquired = await redis.set(lockKey, "1", "EX", lockTimeout, "NX");
+    if (!lockAcquired) {
+      return { success: false, message: "ACTIVATION_IN_PROGRESS" };
+    }
+
+    // Check if already activated
+    const alreadyActivated = await redis.get(activationKey);
+    if (alreadyActivated) {
+      return { success: false, message: "SESSION_ALREADY_ACTIVATED" };
+    }
+
+    // Execute activation
+    const result = await activationFn();
+    
+    // Mark as activated (24 hour expiry)
+    await redis.setex(activationKey, 86400, "true");
+    
+    return { success: true, result, message: "SESSION_ACTIVATED" };
+
+  } catch (error) {
+    console.error('Session activation error:', error);
+    return { success: false, message: "ACTIVATION_ERROR" };
+  } finally {
+    // Release lock
+    if (redis) {
+      await redis.del(lockKey);
+    }
   }
 }
 

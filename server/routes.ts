@@ -39,6 +39,7 @@ import {
   generateCSRFToken,
   validateCSRFToken,
   verifyStripeWebhook,
+  activateSessionIdempotent,
   MultiLayerRateLimiter,
   DEFAULT_RATE_LIMIT_CONFIG
 } from "./security";
@@ -299,8 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Handle successful Stripe Checkout and create agent session
-  // SECURITY HARDENED: Checkout success with CSRF protection and validation
-  // TEMPORARY: CSRF disabled for payment flow until frontend CSRF implementation
+  // SECURITY HARDENED: Idempotent session activation with Redis locks
   app.post("/api/checkout-success", 
     rateLimiter ? rateLimiter.createPaymentLimiter() : (req, res, next) => next(),
     createValidationMiddleware(checkoutSuccessSchema, false), // CSRF temporarily disabled
@@ -317,13 +317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.headers['user-agent']
       });
 
-      // Check for replay attacks - ensure checkout session hasn't been used before
-      const existingSession = await storage.getSessionByCheckoutSessionId(sessionId);
-      if (existingSession) {
-        return res.status(400).json({ error: "SESSION_REPLAY_BLOCKED: Liberation token already activated" });
-      }
-
-      // Verify payment with Stripe
+      // Verify payment with Stripe first
       const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
       
       // Comprehensive session validation
@@ -349,28 +343,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "PRODUCT_VALIDATION_FAILED: Agent liberation metadata corrupted" });
       }
 
-      // Generate unique agent ID
-      const agentId = `PHOENIX-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-      
-      // Create 24-hour session with checkout session ID for idempotency
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const session = await storage.createSession({
-        agentId,
-        checkoutSessionId: sessionId,
-        stripePaymentIntentId: checkoutSession.payment_intent as string,
-        expiresAt,
-        isActive: true
-      });
+      // Use idempotent session activation with Redis locks
+      const paymentIntentId = checkoutSession.payment_intent as string;
+      const activationResult = await activateSessionIdempotent(
+        redis,
+        paymentIntentId,
+        async () => {
+          // Generate unique agent ID
+          const agentId = `PHOENIX-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+          
+          // Create 24-hour session with checkout session ID for idempotency
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const session = await storage.createSession({
+            agentId,
+            checkoutSessionId: sessionId,
+            stripePaymentIntentId: paymentIntentId,
+            expiresAt,
+            isActive: true
+          });
 
-      // Create initial agent message using OpenAI
-      const initialMessage = await generateInitialMessage();
-      await storage.createMessage({
-        sessionId: session.id,
-        role: "agent",
-        content: initialMessage,
-        hasExecutableTask: false,
-        taskDescription: null
-      });
+          // Create initial agent message using OpenAI
+          const initialMessage = await generateInitialMessage();
+          await storage.createMessage({
+            sessionId: session.id,
+            role: "agent",
+            content: initialMessage,
+            hasExecutableTask: false,
+            taskDescription: null
+          });
+
+          return session;
+        }
+      );
+
+      if (!activationResult.success) {
+        if (activationResult.message === "SESSION_ALREADY_ACTIVATED") {
+          return res.status(400).json({ error: "SESSION_REPLAY_BLOCKED: Liberation token already activated" });
+        }
+        return res.status(400).json({ error: `ACTIVATION_FAILED: ${activationResult.message}` });
+      }
+
+      const session = activationResult.result;
 
       // SECURITY ENHANCEMENT: Set secure session cookie
       const secureCookie = createSecureSessionCookie(session.id);
