@@ -41,7 +41,7 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
+  apiVersion: "2024-06-20",
 });
 
 // Input validation helper - validates without corrupting data
@@ -243,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Set-Cookie', secureCookie);
 
       // Log successful session creation for security monitoring
-      logSecurityEvent('session_created', {
+      logSecurityEvent('payment_fraud', {
         agentId: session.agentId,
         sessionId: session.id,
         clientIP: req.ip,
@@ -348,7 +348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedContent = validateAIInput(content);
         
         // Log potential security concerns for monitoring
-        logSecurityEvent('user_message_processed', {
+        logSecurityEvent('ai_operation_abuse', {
           agentId,
           sessionId: session.id,
           contentLength: content.length,
@@ -357,7 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error: any) {
         // Log failed validation attempts for security monitoring
-        logSecurityEvent('ai_input_validation_failed', {
+        logSecurityEvent('ai_operation_abuse', {
           agentId,
           sessionId: session.id,
           error: error.message,
@@ -423,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedTaskDescription = validateAIInput(taskDescription);
         
         // Log task execution attempts for security monitoring
-        logSecurityEvent('task_execution_requested', {
+        logSecurityEvent('ai_operation_abuse', {
           agentId,
           taskLength: taskDescription.length,
           clientIP: req.ip,
@@ -431,7 +431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error: any) {
         // Log failed validation attempts for security monitoring
-        logSecurityEvent('task_validation_failed', {
+        logSecurityEvent('ai_operation_abuse', {
           agentId,
           error: error.message,
           taskLength: taskDescription.length,

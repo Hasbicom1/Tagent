@@ -165,7 +165,7 @@ export class MultiLayerRateLimiter {
         
         // Check if IP is blacklisted
         if (await this.store.isBlacklisted(clientIP)) {
-          logSecurityEvent('rate_limit_blacklisted_access', { 
+          logSecurityEvent('rate_limit_violation', { 
             ip: clientIP, 
             endpoint: req.path 
           });
@@ -373,7 +373,7 @@ export class MultiLayerRateLimiter {
       const penaltyDuration = this.calculatePenaltyDuration(count, type);
       await this.store.addToBlacklist(identifier, penaltyDuration);
       
-      logSecurityEvent('rate_limit_blacklist_applied', {
+      logSecurityEvent('rate_limit_violation', {
         identifier,
         type,
         durationMs: penaltyDuration,
