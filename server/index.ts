@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { wsManager } from "./websocket";
 import { initializeQueue, closeQueue } from "./queue";
+import { validateSecurityConfiguration, validateWebSocketConfiguration } from "./security";
 
 const app = express();
 // Configure trust proxy first - BEFORE any middleware that needs it
@@ -29,6 +30,11 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
+    // SECURITY FIX: Validate critical security configuration at startup
+    log('🔐 Validating security configuration...');
+    validateSecurityConfiguration();
+    log('✅ Security configuration validated');
+
     // Initialize the task queue system first
     log('🚀 Initializing task queue system...');
     await initializeQueue();
@@ -41,6 +47,9 @@ app.use((req, res, next) => {
     log('🔌 Initializing WebSocket server...');
     await wsManager.initialize(server);
     log('✅ WebSocket server initialized');
+
+    // SECURITY FIX: Validate WebSocket configuration is working
+    validateWebSocketConfiguration();
 
     // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -95,7 +104,7 @@ app.use((req, res, next) => {
           process.exit(0);
         });
       } catch (error) {
-        log('❌ Error during shutdown:', error);
+        log('❌ Error during shutdown:', error instanceof Error ? error.message : String(error));
         process.exit(1);
       }
     };
@@ -106,7 +115,7 @@ app.use((req, res, next) => {
     process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // For nodemon restarts
 
   } catch (error) {
-    log('❌ Failed to start server:', error);
+    log('❌ Failed to start server:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 })();

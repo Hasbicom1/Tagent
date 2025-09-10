@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { validateAIInput, createSafePrompt, logSecurityEvent } from "./security";
 
 // Blueprint integration: javascript_openai
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
@@ -15,11 +16,21 @@ export interface TaskAnalysis {
 
 export async function analyzeTask(userMessage: string): Promise<TaskAnalysis> {
   try {
-    const prompt = `You are PHOENIX-7742, an advanced autonomous agent specialized in browser automation and web task execution. 
+    // SECURITY FIX: Validate and sanitize user input before processing
+    const safeUserInput = validateAIInput(userMessage);
+    
+    // Log security event for monitoring
+    logSecurityEvent('ai_task_analysis_request', {
+      inputLength: userMessage.length,
+      sanitizedLength: safeUserInput.length
+    });
+
+    // SECURITY FIX: Use safe prompt template instead of direct concatenation
+    const promptTemplate = `You are PHOENIX-7742, an advanced autonomous agent specialized in browser automation and web task execution. 
 
 Analyze this user request and respond in character as a sophisticated AI agent:
 
-USER REQUEST: "${userMessage}"
+USER REQUEST: "{USER_INPUT}"
 
 Determine:
 1. Is this an executable browser automation task? (yes/no)
@@ -49,6 +60,9 @@ PHOENIX-7742 personality:
 - Shows specific steps: "I will initialize secure session, navigate target domain, execute data extraction protocols"
 - Always ready to execute when task is feasible`;
 
+    // Create safe prompt with sanitized input
+    const prompt = createSafePrompt(promptTemplate, safeUserInput);
+
     const response = await openai.chat.completions.create({
       model: "gpt-4", // Using gpt-4 for better compatibility
       messages: [
@@ -76,8 +90,25 @@ PHOENIX-7742 personality:
       estimatedTime: analysis.estimatedTime || '2-3 minutes'
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('OpenAI task analysis error:', error);
+    
+    // Log security event for potential attack attempts
+    logSecurityEvent('ai_task_analysis_error', {
+      errorMessage: error.message,
+      errorType: error.name
+    });
+    
+    // Check if error is due to security validation
+    if (error.message && error.message.includes('security')) {
+      return {
+        isExecutable: false,
+        taskDescription: null,
+        response: 'PHOENIX-7742 SECURITY PROTOCOL ENGAGED\n\nRequest blocked due to security validation failure. Please provide a clear, direct task description.',
+        complexity: 'simple',
+        estimatedTime: 'N/A'
+      };
+    }
     
     // Fallback response if OpenAI fails
     return {

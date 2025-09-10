@@ -1,0 +1,261 @@
+# Docker Compose for PHOENIX-7742 Browser Automation Workers
+# Supports horizontal scaling of containerized Playwright workers
+
+version: '3.8'
+
+services:
+  # Redis server for queue system (if not using external Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: phoenix-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - phoenix-network
+
+  # Primary browser automation worker
+  worker-1:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: phoenix-worker-1
+    restart: unless-stopped
+    environment:
+      # Worker Configuration
+      - WORKER_ID=worker-1
+      - NODE_ENV=production
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      
+      # Browser Configuration
+      - BROWSER_TYPE=chromium
+      - HEADLESS=true
+      - MAX_CONCURRENT_TASKS=3
+      - MAX_CONCURRENT_BROWSERS=3
+      
+      # Performance Configuration
+      - TASK_TIMEOUT=300000
+      - SESSION_TIMEOUT=600000
+      - GRACEFUL_SHUTDOWN_TIMEOUT=30000
+      
+      # Health Check Configuration
+      - HEALTH_CHECK_PORT=3001
+      
+      # AI Configuration (if using OpenAI)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+      # Resource Monitoring
+      - RESOURCE_MONITORING_INTERVAL=30000
+    
+    ports:
+      - "3001:3001"  # Health check endpoint
+    
+    volumes:
+      # Browser cache and downloads
+      - worker1_cache:/home/worker/.cache
+      - worker1_downloads:/home/worker/Downloads
+      
+    # Resource limits for browser automation
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('./dist/worker/health-check.js')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - phoenix-network
+    
+    # Security configuration
+    security_opt:
+      - no-new-privileges:true
+    
+    # Prevent container from running as root
+    user: "1000:1000"
+
+  # Secondary browser automation worker
+  worker-2:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: phoenix-worker-2
+    restart: unless-stopped
+    environment:
+      - WORKER_ID=worker-2
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - BROWSER_TYPE=chromium
+      - HEADLESS=true
+      - MAX_CONCURRENT_TASKS=3
+      - MAX_CONCURRENT_BROWSERS=3
+      - TASK_TIMEOUT=300000
+      - SESSION_TIMEOUT=600000
+      - GRACEFUL_SHUTDOWN_TIMEOUT=30000
+      - HEALTH_CHECK_PORT=3001
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - RESOURCE_MONITORING_INTERVAL=30000
+    
+    ports:
+      - "3002:3001"  # Health check endpoint (different host port)
+    
+    volumes:
+      - worker2_cache:/home/worker/.cache
+      - worker2_downloads:/home/worker/Downloads
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('./dist/worker/health-check.js')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - phoenix-network
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    user: "1000:1000"
+
+  # Scalable worker template (scale with: docker-compose up --scale worker-scale=5)
+  worker-scale:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      - WORKER_ID=worker-scale-${HOSTNAME}
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - BROWSER_TYPE=chromium
+      - HEADLESS=true
+      - MAX_CONCURRENT_TASKS=2  # Reduced for scaling
+      - MAX_CONCURRENT_BROWSERS=2
+      - TASK_TIMEOUT=300000
+      - SESSION_TIMEOUT=600000
+      - GRACEFUL_SHUTDOWN_TIMEOUT=30000
+      - HEALTH_CHECK_PORT=3001
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - RESOURCE_MONITORING_INTERVAL=30000
+    
+    volumes:
+      - /tmp:/tmp  # Shared temporary directory for scaled workers
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3G
+        reservations:
+          cpus: '0.3'
+          memory: 512M
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('./dist/worker/health-check.js')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - phoenix-network
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    user: "1000:1000"
+
+  # Optional: Monitoring and observability
+  worker-monitor:
+    image: redis:7-alpine
+    container_name: phoenix-monitor
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'PHOENIX-7742 Worker Monitor Starting...' &&
+        while true; do
+          echo '=== Worker Queue Status ===' &&
+          redis-cli -h redis -c info keyspace &&
+          echo '' &&
+          redis-cli -h redis -c eval '
+            local queues = redis.call(\"KEYS\", \"bull:agent-tasks:*\")
+            for i=1,#queues do
+              local qname = queues[i]
+              local qlen = redis.call(\"LLEN\", qname)
+              if qlen > 0 then
+                print(qname .. \": \" .. qlen .. \" items\")
+              end
+            end
+          ' 0 &&
+          sleep 60
+        done
+      "
+    depends_on:
+      - redis
+    networks:
+      - phoenix-network
+
+volumes:
+  redis_data:
+    driver: local
+  worker1_cache:
+    driver: local
+  worker1_downloads:
+    driver: local
+  worker2_cache:
+    driver: local
+  worker2_downloads:
+    driver: local
+
+networks:
+  phoenix-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Environment file example (.env)
+# OPENAI_API_KEY=your_openai_key_here
+# REDIS_URL=redis://localhost:6379  # For external Redis
+# WORKER_SCALE_COUNT=3               # Number of scaled workers

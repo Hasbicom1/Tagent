@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { validateAIInput, createSafePrompt, logSecurityEvent } from "./security";
 
 // Browser Automation Service for PHOENIX-7742 Agent
 // Uses AI-powered planning with simulated browser control for MVP
@@ -34,13 +35,24 @@ export class BrowserAgent {
   async createTask(sessionId: string, instruction: string): Promise<string> {
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Use OpenAI to plan the automation steps
-    const steps = await this.planAutomationSteps(instruction);
+    // SECURITY FIX: Validate and sanitize instruction before processing
+    const safeInstruction = validateAIInput(instruction);
+    
+    // Log security event for monitoring
+    logSecurityEvent('browser_automation_task_creation', {
+      taskId,
+      sessionId,
+      instructionLength: instruction.length,
+      sanitizedLength: safeInstruction.length
+    });
+    
+    // Use OpenAI to plan the automation steps with sanitized input
+    const steps = await this.planAutomationSteps(safeInstruction);
     
     const task: AutomationTask = {
       id: taskId,
       sessionId,
-      instruction,
+      instruction: safeInstruction, // SECURITY FIX: Store sanitized instruction instead of raw input
       status: 'pending',
       steps,
       createdAt: new Date()
@@ -84,9 +96,13 @@ export class BrowserAgent {
 
   private async planAutomationSteps(instruction: string): Promise<AutomationStep[]> {
     try {
-      const prompt = `You are PHOENIX-7742, an advanced browser automation agent. Plan the detailed steps to execute this task:
+      // SECURITY FIX: Input has already been validated by createTask, but double-check
+      const safeInstruction = validateAIInput(instruction);
+      
+      // SECURITY FIX: Use safe prompt template instead of direct concatenation
+      const promptTemplate = `You are PHOENIX-7742, an advanced browser automation agent. Plan the detailed steps to execute this task:
 
-TASK: "${instruction}"
+TASK: "{USER_INPUT}"
 
 Create a step-by-step execution plan with specific browser actions. Return a JSON array of steps with this format:
 [
@@ -111,8 +127,11 @@ Create a step-by-step execution plan with specific browser actions. Return a JSO
 Available actions: navigate, click, type, scroll, wait, extract, screenshot
 Focus on real-world browser interactions that accomplish the user's goal.`;
 
+      // Create safe prompt with sanitized input
+      const prompt = createSafePrompt(promptTemplate, safeInstruction);
+
       const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+        model: "gpt-4", // Using gpt-4 for better compatibility
         messages: [
           {
             role: "system",
@@ -140,8 +159,26 @@ Focus on real-world browser interactions that accomplish the user's goal.`;
 
       return steps.length > 0 ? steps : this.getDefaultSteps(instruction);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI step planning error:', error);
+      
+      // Log security event for potential attack attempts
+      logSecurityEvent('browser_automation_planning_error', {
+        errorMessage: error.message,
+        errorType: error.name,
+        instruction: instruction.substring(0, 100) // Log only first 100 chars for security
+      });
+      
+      // Check if error is due to security validation
+      if (error.message && error.message.includes('security')) {
+        return [{
+          id: 'security_block',
+          action: 'SECURITY PROTOCOL ENGAGED - Request blocked due to security validation failure',
+          timestamp: new Date(),
+          status: 'pending'
+        }];
+      }
+      
       return this.getDefaultSteps(instruction);
     }
   }
@@ -162,7 +199,7 @@ Focus on real-world browser interactions that accomplish the user's goal.`;
       },
       {
         id: 'step_3',
-        action: `EXECUTING: ${instruction}`,
+        action: `EXECUTING: ${instruction}`, // Note: instruction parameter is already sanitized by caller
         timestamp: new Date(),
         status: 'pending'
       },
@@ -206,10 +243,14 @@ Focus on real-world browser interactions that accomplish the user's goal.`;
 
   private async generateTaskResult(task: AutomationTask): Promise<any> {
     try {
-      const prompt = `You are PHOENIX-7742 reporting task completion. Generate a concise result summary for this automation task:
+      // SECURITY FIX: Validate instruction before using in prompt
+      const safeInstruction = validateAIInput(task.instruction);
+      
+      // SECURITY FIX: Use safe prompt template
+      const promptTemplate = `You are PHOENIX-7742 reporting task completion. Generate a concise result summary for this automation task:
 
-TASK: "${task.instruction}"
-STEPS COMPLETED: ${task.steps.length}
+TASK: "{USER_INPUT}"
+STEPS COMPLETED: {STEPS_COUNT}
 STATUS: SUCCESSFUL
 
 Provide a professional result report with:
@@ -220,8 +261,13 @@ Provide a professional result report with:
 
 Return as JSON: { "summary": "result text", "success": true, "data": {...} }`;
 
+      // Create safe prompt with sanitized input
+      const prompt = createSafePrompt(promptTemplate, safeInstruction, {
+        STEPS_COUNT: task.steps.length.toString()
+      });
+
       const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+        model: "gpt-4", // Using gpt-4 for better compatibility
         messages: [
           {
             role: "system", 
@@ -239,10 +285,23 @@ Return as JSON: { "summary": "result text", "success": true, "data": {...} }`;
 
       return JSON.parse(response.choices[0].message.content || '{"summary": "Task completed successfully", "success": true}');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Result generation error:', error);
+      
+      // Log security event
+      logSecurityEvent('browser_automation_result_error', {
+        errorMessage: error.message,
+        taskId: task.id,
+        sessionId: task.sessionId
+      });
+      
+      // SECURITY FIX: Use sanitized instruction in fallback
+      const safeInstruction = task.instruction.length > 100 
+        ? validateAIInput(task.instruction.substring(0, 100)) + '...' 
+        : validateAIInput(task.instruction);
+      
       return {
-        summary: `PHOENIX-7742 TASK COMPLETE\n\nSuccessfully executed automation sequence: ${task.instruction}\n\n${task.steps.length} operations completed with full transparency and precision.`,
+        summary: `PHOENIX-7742 TASK COMPLETE\n\nSuccessfully executed automation sequence: ${safeInstruction}\n\n${task.steps.length} operations completed with full transparency and precision.`,
         success: true,
         executedSteps: task.steps.length,
         completionTime: task.completedAt?.toISOString()

@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { IncomingMessage } from 'http';
 import { Server as HTTPServer } from 'http';
 import { Redis } from 'ioredis';
+import { validateWebSocketOrigin, logSecurityEvent, validateJWTToken } from './security';
 import { 
   WSMessageType, 
   SubscriptionType, 
@@ -51,11 +52,38 @@ export class WebSocketManager {
         await this.initializeRedis();
       }
 
-      // Create WebSocket server
+      // Create WebSocket server with enhanced security
       this.wss = new WebSocketServer({ 
         server,
         path: '/ws',
         maxPayload: 64 * 1024, // 64KB max message size
+        // SECURITY FIX: Add origin validation to prevent cross-origin attacks
+        verifyClient: (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
+          const origin = info.origin;
+          const userAgent = info.req.headers['user-agent'];
+          const clientIP = info.req.socket.remoteAddress;
+          
+          // Validate origin against allowlist
+          const isValidOrigin = validateWebSocketOrigin(origin);
+          
+          if (!isValidOrigin) {
+            logSecurityEvent('websocket_origin_blocked', {
+              origin,
+              userAgent,
+              clientIP,
+              url: info.req.url
+            });
+            return false;
+          }
+          
+          // Log successful origin validation
+          logSecurityEvent('websocket_origin_validated', {
+            origin,
+            clientIP
+          });
+          
+          return true;
+        }
       });
 
       // Setup connection handling
@@ -111,11 +139,22 @@ export class WebSocketManager {
   }
 
   /**
-   * Handle new WebSocket connection
+   * Handle new WebSocket connection with enhanced security
    */
   private handleConnection(ws: WebSocket, request: IncomingMessage): void {
     const connectionId = this.generateConnectionId();
     const extendedWs = ws as ExtendedWebSocket;
+    const clientIP = request.socket.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    const origin = request.headers.origin;
+    
+    // SECURITY FIX: Log connection attempt for monitoring
+    logSecurityEvent('websocket_connection_attempt', {
+      connectionId,
+      clientIP,
+      userAgent,
+      origin
+    });
     
     // Initialize connection state
     extendedWs.connectionId = connectionId;
@@ -144,7 +183,7 @@ export class WebSocketManager {
       timestamp: new Date().toISOString()
     });
 
-    log(`🔗 WS: Client connected [${connectionId}] - Total: ${this.connections.size}`);
+    log(`🔗 WS: Client connected [${connectionId}] from ${clientIP} - Total: ${this.connections.size}`);
   }
 
   /**
@@ -184,28 +223,55 @@ export class WebSocketManager {
   }
 
   /**
-   * Handle client authentication
+   * Handle client authentication with enhanced JWT validation
    */
   private async handleAuthentication(ws: ExtendedWebSocket, message: any): Promise<void> {
     try {
       const { sessionToken, agentId } = message;
       
-      // Validate input parameters
+      // SECURITY FIX: Enhanced input validation
       if (!sessionToken || typeof sessionToken !== 'string') {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'missing_token',
+          connectionId: ws.connectionId
+        });
         log(`🚫 WS: Authentication failed - missing sessionToken [${ws.connectionId}]`);
         this.sendError(ws, 'Session token required', 'MISSING_TOKEN');
         return;
       }
       
       if (!agentId || typeof agentId !== 'string') {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'missing_agent_id',
+          connectionId: ws.connectionId
+        });
         log(`🚫 WS: Authentication failed - missing agentId [${ws.connectionId}]`);
         this.sendError(ws, 'Agent ID required', 'MISSING_AGENT_ID');
+        return;
+      }
+
+      // SECURITY FIX: Enhanced JWT token validation
+      const jwtValidation = validateJWTToken(sessionToken);
+      if (!jwtValidation.valid) {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'invalid_jwt',
+          error: jwtValidation.error,
+          connectionId: ws.connectionId,
+          agentId
+        });
+        log(`🚫 WS: Authentication failed - JWT validation failed for agent ${agentId} [${ws.connectionId}]: ${jwtValidation.error}`);
+        this.sendError(ws, 'Invalid session token', 'INVALID_TOKEN');
         return;
       }
 
       // CRITICAL SECURITY FIX: Validate that sessionToken matches agentId
       // In the current system, agentId IS the session token for security
       if (sessionToken !== agentId) {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'token_agent_mismatch',
+          connectionId: ws.connectionId,
+          agentId
+        });
         log(`🚫 WS: Authentication failed - invalid token for agent ${agentId} [${ws.connectionId}]`);
         this.sendError(ws, 'Invalid session token', 'INVALID_TOKEN');
         return;
@@ -215,6 +281,11 @@ export class WebSocketManager {
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session || !session.isActive) {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'session_not_found_or_inactive',
+          connectionId: ws.connectionId,
+          agentId
+        });
         log(`🚫 WS: Authentication failed - session not found or inactive for agent ${agentId} [${ws.connectionId}]`);
         this.sendError(ws, 'Invalid or expired session', 'INVALID_SESSION');
         return;
@@ -222,6 +293,11 @@ export class WebSocketManager {
 
       // Check if session has expired
       if (new Date() > new Date(session.expiresAt)) {
+        logSecurityEvent('websocket_auth_failed', {
+          reason: 'session_expired',
+          connectionId: ws.connectionId,
+          agentId
+        });
         log(`🚫 WS: Authentication failed - session expired for agent ${agentId} [${ws.connectionId}]`);
         this.sendError(ws, 'Session expired', 'SESSION_EXPIRED');
         return;
@@ -230,6 +306,12 @@ export class WebSocketManager {
       // Update connection state
       ws.state.authenticatedAgentId = agentId;
       
+      // Log successful authentication
+      logSecurityEvent('websocket_auth_success', {
+        connectionId: ws.connectionId,
+        agentId
+      });
+      
       // Send authentication confirmation
       this.sendToConnection(ws, {
         type: WSMessageType.AUTHENTICATED,
@@ -237,7 +319,11 @@ export class WebSocketManager {
       });
 
       log(`🔐 WS: Client authenticated [${ws.connectionId}] - Agent: ${agentId}`);
-    } catch (error) {
+    } catch (error: any) {
+      logSecurityEvent('websocket_auth_error', {
+        error: error.message,
+        connectionId: ws.connectionId
+      });
       log(`❌ WS: Authentication error [${ws.connectionId}]: ${error}`);
       this.sendError(ws, 'Authentication failed', 'AUTH_ERROR');
     }
@@ -296,6 +382,12 @@ export class WebSocketManager {
    */
   private handleUnsubscription(ws: ExtendedWebSocket, message: any): void {
     try {
+      // SECURITY FIX: Require authentication for all operations except AUTHENTICATE
+      if (!ws.state.authenticatedAgentId) {
+        this.sendError(ws, 'Authentication required', 'AUTH_REQUIRED');
+        return;
+      }
+
       const { subscriptionType, targetId } = message;
       const subscriptionKey = `${subscriptionType}:${targetId}`;
 
@@ -338,6 +430,12 @@ export class WebSocketManager {
    * Handle ping message
    */
   private handlePing(ws: ExtendedWebSocket): void {
+    // SECURITY FIX: Require authentication for all operations except AUTHENTICATE
+    if (!ws.state.authenticatedAgentId) {
+      this.sendError(ws, 'Authentication required', 'AUTH_REQUIRED');
+      return;
+    }
+
     ws.state.lastPing = new Date();
     this.sendToConnection(ws, {
       type: WSMessageType.PONG,
