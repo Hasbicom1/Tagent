@@ -8,9 +8,16 @@ import {
   type Task,
   type InsertTask,
   type TaskResult,
-  type InsertTaskResult 
+  type InsertTaskResult,
+  sessions,
+  messages,
+  executions,
+  tasks,
+  taskResults
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from './db';
+import { eq, and, desc } from 'drizzle-orm';
 
 // Storage interface for Agent HQ sessions
 export interface IStorage {
@@ -256,4 +263,201 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database Storage implementation using PostgreSQL
+export class DatabaseStorage implements IStorage {
+  // Session management
+  async createSession(insertSession: InsertSession): Promise<Session> {
+    const [session] = await db
+      .insert(sessions)
+      .values(insertSession)
+      .returning();
+    return session;
+  }
+
+  async getSession(id: string): Promise<Session | undefined> {
+    const [session] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, id));
+    return session || undefined;
+  }
+
+  async getSessionByAgentId(agentId: string): Promise<Session | undefined> {
+    const [session] = await db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.agentId, agentId), eq(sessions.isActive, true)));
+    return session || undefined;
+  }
+
+  async getSessionByCheckoutSessionId(checkoutSessionId: string): Promise<Session | undefined> {
+    const [session] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.checkoutSessionId, checkoutSessionId));
+    return session || undefined;
+  }
+
+  async deactivateSession(id: string): Promise<void> {
+    await db
+      .update(sessions)
+      .set({ isActive: false })
+      .where(eq(sessions.id, id));
+  }
+
+  // Message management
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const [message] = await db
+      .insert(messages)
+      .values(insertMessage)
+      .returning();
+    return message;
+  }
+
+  async getSessionMessages(sessionId: string): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(messages.timestamp);
+  }
+
+  async getSessionChatHistory(sessionId: string): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.sessionId, sessionId), eq(messages.messageType, "chat")))
+      .orderBy(messages.timestamp);
+  }
+
+  async getSessionCommandHistory(sessionId: string): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.sessionId, sessionId), eq(messages.messageType, "command")))
+      .orderBy(messages.timestamp);
+  }
+
+  // Execution management
+  async createExecution(insertExecution: InsertExecution): Promise<Execution> {
+    const [execution] = await db
+      .insert(executions)
+      .values(insertExecution)
+      .returning();
+    return execution;
+  }
+
+  async updateExecutionStatus(
+    id: string, 
+    status: "running" | "completed" | "failed", 
+    logs?: string[], 
+    completedAt?: Date
+  ): Promise<void> {
+    const updateData: any = { status };
+    if (logs) updateData.logs = logs;
+    if (completedAt) updateData.completedAt = completedAt;
+    
+    await db
+      .update(executions)
+      .set(updateData)
+      .where(eq(executions.id, id));
+  }
+
+  async getExecution(id: string): Promise<Execution | undefined> {
+    const [execution] = await db
+      .select()
+      .from(executions)
+      .where(eq(executions.id, id));
+    return execution || undefined;
+  }
+
+  async getSessionExecutions(sessionId: string): Promise<Execution[]> {
+    return await db
+      .select()
+      .from(executions)
+      .where(eq(executions.sessionId, sessionId))
+      .orderBy(executions.startedAt);
+  }
+
+  // Task management
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const [task] = await db
+      .insert(tasks)
+      .values(insertTask)
+      .returning();
+    return task;
+  }
+
+  async createTaskWithId(id: string, insertTask: InsertTask): Promise<Task> {
+    const [task] = await db
+      .insert(tasks)
+      .values({ ...insertTask, id })
+      .returning();
+    return task;
+  }
+
+  async getTask(id: string): Promise<Task | undefined> {
+    const [task] = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.id, id));
+    return task || undefined;
+  }
+
+  async updateTaskStatus(
+    id: string, 
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED", 
+    completedAt?: Date
+  ): Promise<void> {
+    const updateData: any = { status, updatedAt: new Date() };
+    
+    if (status === "PROCESSING") {
+      updateData.processedAt = new Date();
+    } else if (status === "COMPLETED") {
+      updateData.completedAt = completedAt || new Date();
+    } else if (status === "FAILED") {
+      updateData.failedAt = completedAt || new Date();
+    }
+    
+    await db
+      .update(tasks)
+      .set(updateData)
+      .where(eq(tasks.id, id));
+  }
+
+  async getSessionTasks(sessionId: string): Promise<Task[]> {
+    return await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.sessionId, sessionId))
+      .orderBy(tasks.createdAt);
+  }
+
+  async getTasksByStatus(status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"): Promise<Task[]> {
+    return await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.status, status))
+      .orderBy(tasks.createdAt);
+  }
+
+  // Task result management
+  async createTaskResult(insertTaskResult: InsertTaskResult): Promise<TaskResult> {
+    const [taskResult] = await db
+      .insert(taskResults)
+      .values(insertTaskResult)
+      .returning();
+    return taskResult;
+  }
+
+  async getTaskResult(taskId: string): Promise<TaskResult | undefined> {
+    const [taskResult] = await db
+      .select()
+      .from(taskResults)
+      .where(eq(taskResults.taskId, taskId));
+    return taskResult || undefined;
+  }
+}
+
+// Use DatabaseStorage for persistent PostgreSQL storage
+export const storage = new DatabaseStorage();

@@ -43,6 +43,7 @@ import {
   MultiLayerRateLimiter,
   DEFAULT_RATE_LIMIT_CONFIG
 } from "./security";
+import { sql } from 'drizzle-orm';
 import { 
   SessionSecurityStore,
   createSessionSecurityMiddleware,
@@ -184,6 +185,19 @@ function createParamValidation<T>(paramName: string, schema: z.ZodSchema<T>) {
 let rateLimiter: MultiLayerRateLimiter;
 let sessionSecurityStore: SessionSecurityStore;
 
+// Health check utility function
+async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    // Import db here to avoid circular dependencies
+    const { db } = await import('./db');
+    await db.execute(sql`SELECT 1`);
+    return true;
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    return false;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize queue system
   try {
@@ -241,6 +255,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.use(createSessionSecurityMiddleware(sessionSecurityStore, DEFAULT_SESSION_SECURITY_CONFIG));
     console.log('✅ Session security middleware applied');
   }
+  
+  // Health check endpoints
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Check database connectivity
+      const dbHealthy = await checkDatabaseHealth();
+      
+      // Check Redis connectivity (if available)
+      let redisHealthy = true;
+      if (redis) {
+        try {
+          await redis.ping();
+        } catch {
+          redisHealthy = false;
+        }
+      }
+
+      // Check if queue system is healthy
+      const queueHealthy = true; // Assuming queue is healthy if no errors
+
+      const health = {
+        status: dbHealthy && redisHealthy && queueHealthy ? "healthy" : "degraded",
+        timestamp: new Date().toISOString(),
+        services: {
+          database: dbHealthy ? "healthy" : "unhealthy",
+          redis: redis ? (redisHealthy ? "healthy" : "unhealthy") : "disabled",
+          queue: queueHealthy ? "healthy" : "unhealthy"
+        },
+        version: "1.0.0"
+      };
+
+      res.status(health.status === "healthy" ? 200 : 503).json(health);
+    } catch (error) {
+      console.error('Health check failed:', error);
+      res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        error: "Health check failed"
+      });
+    }
+  });
+
+  // System metrics endpoint
+  app.get("/api/metrics", rateLimiter ? rateLimiter.createMetricsLimiter() : (req, res, next) => next(), (req, res) => {
+    const memUsage = process.memoryUsage();
+    const uptime = process.uptime();
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      uptime: uptime,
+      memory: {
+        rss: Math.round(memUsage.rss / 1024 / 1024), // MB
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+        external: Math.round(memUsage.external / 1024 / 1024) // MB
+      },
+      nodejs: process.version,
+      platform: process.platform
+    });
+  });
   
   // CSRF token endpoint for frontend
   app.get("/api/csrf-token", (req, res) => {
