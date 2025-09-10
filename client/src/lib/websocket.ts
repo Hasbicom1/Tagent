@@ -17,12 +17,12 @@ import {
 export { 
   WSMessageType,
   SubscriptionType,
-  TaskStatusMessage,
-  TaskProgressMessage,
-  TaskLogsMessage,
-  TaskErrorMessage,
-  SessionStatusMessage,
-  ConnectionStatusMessage
+  type TaskStatusMessage,
+  type TaskProgressMessage,
+  type TaskLogsMessage,
+  type TaskErrorMessage,
+  type SessionStatusMessage,
+  type ConnectionStatusMessage
 } from '@shared/websocket-types';
 
 // Event types for WebSocket client
