@@ -220,6 +220,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      // ✅ DEV MODE: Handle missing Stripe in development
+      if (!stripe) {
+        console.log('⚠️ DEV MODE: Stripe webhook received but Stripe not initialized');
+        return res.status(501).json({ error: 'Payments disabled in development mode' });
+      }
+      
       // Use Stripe's constructEvent for proper signature verification
       const event = stripe.webhooks.constructEvent(req.body, sig!, webhookSecret);
 

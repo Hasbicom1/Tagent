@@ -4,7 +4,31 @@ import { validateAIInput, createSafePrompt, logSecurityEvent } from "./security"
 // ✅ REAL BROWSER AUTOMATION SERVICE for PHOENIX-7742 Agent
 // Uses AI-powered planning with ACTUAL browser control - NO SIMULATION!
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// ✅ DEV MODE: Make OpenAI optional for development
+let openai: OpenAI | null = null;
+let hasOpenAI = false;
+
+// Initialize OpenAI conditionally
+function initOpenAI(): OpenAI | null {
+  if (openai) return openai;
+  
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      hasOpenAI = true;
+      console.log('✅ browserAutomation: OpenAI initialized for enhanced planning');
+      return openai;
+    } catch (error) {
+      console.log('⚠️ browserAutomation: OpenAI initialization failed, using fallback planning');
+      hasOpenAI = false;
+      return null;
+    }
+  } else {
+    console.log('💡 browserAutomation: No OpenAI API key - using fallback automation planning');
+    hasOpenAI = false;
+    return null;
+  }
+}
 
 export interface AutomationTask {
   id: string;
@@ -147,7 +171,14 @@ Always prioritize precision and element validation over speed.`;
       // Create safe prompt with sanitized input
       const prompt = createSafePrompt(promptTemplate, safeInstruction);
 
-      const response = await openai.chat.completions.create({
+      // ✅ DEV MODE: Use OpenAI if available, otherwise fallback
+      const aiClient = initOpenAI();
+      if (!aiClient) {
+        // Fallback: Return deterministic automation steps
+        return this.getDefaultSteps(safeInstruction);
+      }
+      
+      const response = await aiClient.chat.completions.create({
         model: "gpt-4", // Using gpt-4 for better compatibility
         messages: [
           {
@@ -219,7 +250,14 @@ Focus on real-world browser interactions that accomplish the user's goal.`;
       // Create safe prompt with sanitized input
       const prompt = createSafePrompt(promptTemplate, safeInstruction);
 
-      const response = await openai.chat.completions.create({
+      // ✅ DEV MODE: Use OpenAI if available, otherwise fallback
+      const aiClient = initOpenAI();
+      if (!aiClient) {
+        // Fallback: Return deterministic automation steps
+        return this.getDefaultSteps(safeInstruction);
+      }
+      
+      const response = await aiClient.chat.completions.create({
         model: "gpt-4", // Using gpt-4 for better compatibility
         messages: [
           {
@@ -417,7 +455,14 @@ Return as JSON: { "summary": "result text", "success": true, "data": {...} }`;
         STEPS_COUNT: task.steps.length.toString()
       });
 
-      const response = await openai.chat.completions.create({
+      // ✅ DEV MODE: Use OpenAI if available, otherwise fallback
+      const aiClient = initOpenAI();
+      if (!aiClient) {
+        // Fallback: Return deterministic automation steps
+        return this.getDefaultSteps(safeInstruction);
+      }
+      
+      const response = await aiClient.chat.completions.create({
         model: "gpt-4", // Using gpt-4 for better compatibility
         messages: [
           {
