@@ -1430,3 +1430,27 @@ export async function logSecurityEvent(
 
   await monitor.logSecurityEvent(event);
 }
+
+/**
+ * Redact secrets and sensitive information from strings before logging
+ */
+export function redactSecrets(text: string): string {
+  if (!text) return text;
+  
+  return text
+    // Redact OpenAI API keys
+    .replace(/sk-[A-Za-z0-9_-]{10,}/g, 'sk-***REDACTED***')
+    .replace(/sk-or-v1[A-Za-z0-9_-]{10,}/g, 'sk-or-v1***REDACTED***')
+    // Redact Stripe keys
+    .replace(/sk_live_[A-Za-z0-9]{10,}/g, 'sk_live_***REDACTED***')
+    .replace(/sk_test_[A-Za-z0-9]{10,}/g, 'sk_test_***REDACTED***')
+    .replace(/pk_live_[A-Za-z0-9]{10,}/g, 'pk_live_***REDACTED***')
+    .replace(/pk_test_[A-Za-z0-9]{10,}/g, 'pk_test_***REDACTED***')
+    .replace(/whsec_[A-Za-z0-9]{10,}/g, 'whsec_***REDACTED***')
+    // Redact JWT tokens
+    .replace(/eyJ[A-Za-z0-9_-]{10,}/g, 'eyJ***REDACTED***')
+    // Redact other common secret patterns
+    .replace(/[A-Za-z0-9+/]{32,}={0,2}/g, '***REDACTED***')
+    // Redact passwords in URLs
+    .replace(/:\/\/[^:]+:[^@]+@/g, '://***REDACTED***@');
+}

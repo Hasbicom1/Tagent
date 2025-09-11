@@ -566,7 +566,8 @@ export class SessionSecurityStore {
     try {
       // Clean up expired session tokens and user activity
       const now = Date.now();
-      const expiredCutoff = now - this.config.sessionTimeout;
+      const idleExpiredCutoff = now - this.config.idleTimeout;
+      const absoluteExpiredCutoff = now - this.config.absoluteTimeout;
       
       // Get all session keys
       const sessionKeys = await this.redis.keys('session:*:metadata');
@@ -576,7 +577,9 @@ export class SessionSecurityStore {
         const sessionData = await this.redis.get(key);
         if (sessionData) {
           const session = JSON.parse(sessionData);
-          if (session.lastActivity && (now - session.lastActivity) > this.config.sessionTimeout) {
+          if (session.lastActivity && 
+              ((now - session.lastActivity) > this.config.idleTimeout || 
+               (now - session.createdAt) > this.config.absoluteTimeout)) {
             // Remove expired session and related data
             const sessionId = key.split(':')[1];
             await this.redis.del(key);
@@ -683,15 +686,19 @@ export function createSessionSecurityMiddleware(
  */
 export function createRedisSessionStore(redis: Redis): RedisStore {
   
-  return new RedisStore({
+  const store = new RedisStore({
     client: redis,
     prefix: 'agent_session:',
     ttl: 24 * 60 * 60, // 24 hours in seconds
     disableTouch: false, // Allow session activity updates
-    disableTTL: false,
-    logErrors: (error: any) => {
-      console.error('Redis session store error:', error);
-      logSecurityEvent('redis_session_error', { error: error.message });
-    }
+    disableTTL: false
   });
+
+  // Add custom error logging
+  store.on('error', (error: any) => {
+    console.error('Redis session store error:', error);
+    logSecurityEvent('redis_session_error', { error: error.message });
+  });
+
+  return store;
 }

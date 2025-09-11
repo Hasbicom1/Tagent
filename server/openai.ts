@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { validateAIInput, createSafePrompt, logSecurityEvent } from "./security";
+import { validateAIInput, createSafePrompt, logSecurityEvent, redactSecrets } from "./security";
 
 // Blueprint integration: javascript_openai
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
@@ -91,12 +91,21 @@ PHOENIX-7742 personality:
     };
 
   } catch (error: any) {
-    console.error('OpenAI task analysis error:', error);
+    // SECURITY FIX: Redact API keys and secrets from error messages before logging
+    const redactedMessage = redactSecrets(error.message || 'Unknown error');
+    console.error('OpenAI task analysis error:', {
+      status: error.status,
+      type: error.type,
+      code: error.code,
+      requestId: error.requestID
+    });
     
-    // Log security event for potential attack attempts
+    // Log security event for potential attack attempts (with redacted details)
     logSecurityEvent('ai_task_analysis_error', {
-      errorMessage: error.message,
-      errorType: error.name
+      errorMessage: redactedMessage,
+      errorType: error.name,
+      errorCode: error.code,
+      errorStatus: error.status
     });
     
     // Check if error is due to security validation
@@ -146,11 +155,12 @@ export async function generateInitialMessage(): Promise<string> {
     return content || getFallbackInitialMessage();
 
   } catch (error: any) {
-    console.error('OpenAI initial message error:', error);
-    console.error('Error details:', {
-      message: error.message,
+    // SECURITY FIX: Redact secrets from error logging
+    console.error('OpenAI initial message error:', {
       status: error.status,
-      type: error.type
+      type: error.type,
+      code: error.code,
+      requestId: error.requestID
     });
     
     // Always return fallback message to prevent application failure
