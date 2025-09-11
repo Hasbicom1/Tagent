@@ -213,7 +213,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-background crt-screen scanlines">
+    <div className="fixed inset-0 bg-background font-mono crt-screen scanlines">
       {/* Main browser area - full screen */}
       <div className="h-full w-full bg-gradient-to-br from-background via-muted/20 to-background terminal-window crt-screen">
         <div className="flex items-center justify-center h-full text-center space-y-6">
@@ -224,7 +224,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
             <div className="text-xl text-muted-foreground font-mono phosphor-text matrix-text">
               Autonomous Browser Agent Active<span className="terminal-cursor">▊</span>
             </div>
-            <div className="text-sm text-muted-foreground/80 max-w-md mx-auto">
+            <div className="text-sm text-muted-foreground/80 max-w-md mx-auto phosphor-text">
               Your intelligent browser assistant is ready. Use the command section below or press Ctrl+Shift+C to give me tasks.
             </div>
           </div>
@@ -237,7 +237,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
           isExpanded ? 'w-96 h-80' : 'w-72 h-12'
         }`}
       >
-        <Card className="h-full bg-black/90 backdrop-blur-sm border-primary/30 shadow-2xl">
+        <Card className="h-full bg-black/90 backdrop-blur-sm border-primary/30 shadow-2xl terminal-window electric-glow">
           {/* Header */}
           <div 
             className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/5 transition-colors"
@@ -246,7 +246,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
           >
             <div className="flex items-center space-x-2">
               <Terminal className="w-4 h-4 text-primary" />
-              <span className="text-sm font-mono text-primary">AI RAi Command</span>
+              <span className="text-sm font-mono text-primary phosphor-text">AI RAi Command</span>
             </div>
             
             <div className="flex items-center space-x-2">

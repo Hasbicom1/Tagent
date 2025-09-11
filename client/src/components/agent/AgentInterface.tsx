@@ -297,7 +297,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   // Show loading state while fetching session
   if (!sessionInfo && !sessionError) {
     return (
-      <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines flex items-center justify-center">
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <Activity className="w-8 h-8 mx-auto animate-spin text-primary" />
@@ -312,7 +312,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   // Show error state
   if (sessionError) {
     return (
-      <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines flex items-center justify-center">
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <div className="text-lg font-mono text-destructive">SESSION_ERROR</div>
