@@ -31,6 +31,10 @@ const getRedisConnection = (): { connection: ConnectionOptions } | undefined => 
       port: parseInt(process.env.REDIS_PORT || '6379'),
       password: process.env.REDIS_PASSWORD,
       db: parseInt(process.env.REDIS_DB || '0'),
+      // Production Redis optimizations
+      lazyConnect: true,
+      maxRetriesPerRequest: 3,
+      retryDelayOnFailover: 100,
     }
   };
 };

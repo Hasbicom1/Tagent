@@ -134,11 +134,11 @@ async function initializeRedisSession(): Promise<any> {
   }
 }
 
-// Initialize Redis session store
-const redisStore = await initializeRedisSession();
+// Initialize Redis session store (will be set up in startup function)
+let redisStore: any = null;
 
 // Secure session configuration with Redis store for production
-const sessionConfig = {
+const getSessionConfig = (store: any) => ({
   secret: process.env.SESSION_SECRET || generateSecureSessionToken(),
   name: 'agentSessionId', // Use unique session name for security
   resave: false,
@@ -152,18 +152,31 @@ const sessionConfig = {
     domain: cookieConfig.domain
   },
   // Use Redis store in production, memory store in development
-  store: redisStore || undefined
-};
+  store: store || undefined
+});
 
-// Log session store configuration
-if (redisStore) {
-  console.log('✅ SECURITY: Using Redis session store for production-grade session management');
-  console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
-} else {
-  console.log('🔄 SECURITY: Using memory store for sessions in development');
+// Initialize session management (async startup)
+async function initializeSession() {
+  try {
+    redisStore = await initializeRedisSession();
+    
+    // Log session store configuration
+    if (redisStore) {
+      console.log('✅ SECURITY: Using Redis session store for production-grade session management');
+      console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
+    } else {
+      console.log('🔄 SECURITY: Using memory store for sessions in development');
+    }
+    
+    const sessionConfig = getSessionConfig(redisStore);
+    app.use(session(sessionConfig));
+    
+    return true;
+  } catch (error) {
+    console.error('❌ SECURITY: Session initialization failed:', error);
+    throw error;
+  }
 }
-
-app.use(session(sessionConfig));
 
 // Enhanced body parsing with security limits
 app.use(express.json({ 
@@ -209,6 +222,11 @@ app.use((req, res, next) => {
     log('🚀 Initializing task queue system...');
     await initializeQueue();
     log('✅ Task queue system initialized');
+
+    // Initialize session management with Redis
+    log('🔐 Initializing session management...');
+    await initializeSession();
+    log('✅ Session management initialized');
 
     // Set up Express routes and get HTTP server instance
     const server = await registerRoutes(app);
