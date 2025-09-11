@@ -21,18 +21,21 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
     const createCheckoutSession = async () => {
       try {
         // Get CSRF token first
-        const csrfResponse = await apiRequest('GET', '/api/csrf-token', {});
+        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
         const { csrfToken } = await csrfResponse.json();
         
         const response = await apiRequest('POST', '/api/create-checkout-session', { csrfToken });
         const data = await response.json();
-        console.log('Checkout session response:', data);
+        console.log('🎯 Checkout session response:', data);
+        console.log('🔍 Response keys:', Object.keys(data || {}));
+        console.log('🔍 checkoutUrl field:', data.checkoutUrl);
         
         if (data.checkoutUrl) {
+          console.log('✅ Setting checkoutUrl state:', data.checkoutUrl);
           setCheckoutUrl(data.checkoutUrl);
-          console.log('Checkout URL set:', data.checkoutUrl);
+          console.log('✅ checkoutUrl state set successfully');
         } else {
-          console.error('No checkoutUrl in response:', data);
+          console.error('❌ No checkoutUrl in response:', data);
           throw new Error('No checkout URL received from server');
         }
       } catch (error) {
@@ -51,18 +54,25 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
   }, [toast]);
 
   const handleProceedToCheckout = () => {
-    console.log('Proceeding to checkout, URL:', checkoutUrl);
+    console.log('🚀 HANDLE_PROCEED_TO_CHECKOUT called');
+    console.log('🔗 Checkout URL:', checkoutUrl);
+    console.log('🔄 Is redirecting:', isRedirecting);
+    
     if (checkoutUrl) {
+      console.log('✅ Checkout URL available, starting redirect');
       setIsRedirecting(true);
-      console.log('Redirecting to:', checkoutUrl);
-      // Force redirect with timeout fallback
-      setTimeout(() => {
+      console.log('🌐 Redirecting to:', checkoutUrl);
+      
+      // Try immediate redirect first  
+      try {
         window.location.href = checkoutUrl;
-      }, 100);
-      // Also try immediate redirect
-      window.open(checkoutUrl, '_self');
+        console.log('✅ window.location.href redirect attempted');
+      } catch (error) {
+        console.error('❌ window.location.href failed:', error);
+      }
     } else {
-      console.error('No checkout URL available!');
+      console.error('❌ No checkout URL available!');
+      console.error('❌ checkoutUrl value:', checkoutUrl);
       toast({
         title: "NEURAL_TRANSMISSION_ERROR", 
         description: "Liberation gateway not initialized. Refresh and try again.",
@@ -168,7 +178,10 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
               <Button
                 onClick={(e) => {
                   e.preventDefault();
-                  console.log('Button clicked! CheckoutUrl:', checkoutUrl);
+                  console.log('🔥 BUTTON CLICKED! CheckoutUrl:', checkoutUrl);
+                  console.log('🔥 Button disabled state:', isRedirecting || !checkoutUrl);
+                  console.log('🔥 isRedirecting:', isRedirecting);
+                  console.log('🔥 checkoutUrl exists:', !!checkoutUrl);
                   handleProceedToCheckout();
                 }}
                 disabled={isRedirecting || !checkoutUrl}

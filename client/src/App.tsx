@@ -45,9 +45,14 @@ function CheckoutSuccess() {
       }
 
       try {
-        // Process the successful checkout
+        // Get CSRF token first
+        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
+        const { csrfToken } = await csrfResponse.json();
+        
+        // Process the successful checkout with CSRF token
         const response = await apiRequest('POST', '/api/checkout-success', {
-          sessionId: checkoutSessionId
+          sessionId: checkoutSessionId,
+          csrfToken: csrfToken
         });
 
         const data = await response.json();

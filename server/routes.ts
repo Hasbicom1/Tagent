@@ -111,7 +111,7 @@ function createValidationMiddleware<T>(schema: z.ZodSchema<T>, requireCsrf: bool
           });
         }
         
-        const isValidCsrf = validateCSRFToken(csrfToken, req.session?.id || 'anonymous');
+        const isValidCsrf = validateCSRFToken(csrfToken, (req.session as any)?.csrfToken || '');
         if (!isValidCsrf) {
           logSecurityEvent('websocket_abuse', {
             endpoint: req.path,
@@ -364,6 +364,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // CSRF token endpoint for frontend
   app.get("/api/csrf-token", (req, res) => {
     const csrfToken = generateCSRFToken();
+    // Store CSRF token in session for later validation
+    if (req.session) {
+      (req.session as any).csrfToken = csrfToken;
+    }
     res.json({ csrfToken });
   });
 
