@@ -139,8 +139,8 @@ function CheckoutSuccess() {
 
 // Component to handle agent interface access
 function AgentAccess() {
-  const [location] = useLocation();
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  // ✅ FIX: Use window.location.search to get query parameters (wouter excludes them)
+  const urlParams = new URLSearchParams(window.location.search);
   const agentId = urlParams.get('id');
   const [timeRemaining, setTimeRemaining] = useState(0);
 

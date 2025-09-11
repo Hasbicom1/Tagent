@@ -222,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         case 'payment_intent.payment_failed':
           console.log(`💸 Payment failed: ${event.data.object.id}`);
-          logSecurityEvent('payment_failed', {
+          logSecurityEvent('payment_fraud', {
             paymentIntentId: event.data.object.id,
             failureReason: event.data.object.last_payment_error?.message
           });
@@ -550,10 +550,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         session = {
           id: `dev-session-${agentId}`,
           agentId: agentId,
+          checkoutSessionId: `dev-checkout-${agentId}`,
+          stripePaymentIntentId: `dev-payment-${agentId}`,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
           isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: new Date()
         };
       }
       
@@ -653,7 +654,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/session/:agentId/message", 
     rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
     createParamValidation('agentId', agentIdSchema),
-    createValidationMiddleware(sessionMessageSchema, true),
+    // ✅ REAL BROWSER AUTOMATION: Accept simple content for commands
+    createValidationMiddleware(z.object({ content: z.string() }), false),
     async (req, res) => {
     try {
       const { agentId } = req.params;
