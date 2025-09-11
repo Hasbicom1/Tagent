@@ -1256,7 +1256,9 @@ export { DEFAULT_SECURITY_CONFIG as securityConfig };
 
 // Security monitoring and alerting system
 export interface SecurityEvent {
-  type: 'rate_limit_violation' | 'session_hijacking' | 'payment_fraud' | 'websocket_abuse' | 'ai_operation_abuse';
+  type: 'rate_limit_violation' | 'session_hijacking' | 'payment_fraud' | 'websocket_abuse' | 'ai_operation_abuse' |
+        'session_regenerated' | 'session_ip_change_blocked' | 'session_ip_change_limit_exceeded' | 'session_ip_changed' |
+        'session_kicked_concurrent_limit' | 'session_destroyed' | 'redis_session_error' | 'ai_task_analysis_request' | 'ai_task_analysis_error';
   severity: 'low' | 'medium' | 'high' | 'critical';
   clientIP: string;
   userAgent?: string;

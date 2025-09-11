@@ -564,9 +564,40 @@ export class SessionSecurityStore {
    */
   private async cleanupExpiredSessions(): Promise<void> {
     try {
-      // This would be implemented based on your specific needs
-      // For now, Redis TTL handles most cleanup automatically
-      console.log('🧹 SESSION: Running session cleanup...');
+      // Clean up expired session tokens and user activity
+      const now = Date.now();
+      const expiredCutoff = now - this.config.sessionTimeout;
+      
+      // Get all session keys
+      const sessionKeys = await this.redis.keys('session:*:metadata');
+      let cleanupCount = 0;
+      
+      for (const key of sessionKeys) {
+        const sessionData = await this.redis.get(key);
+        if (sessionData) {
+          const session = JSON.parse(sessionData);
+          if (session.lastActivity && (now - session.lastActivity) > this.config.sessionTimeout) {
+            // Remove expired session and related data
+            const sessionId = key.split(':')[1];
+            await this.redis.del(key);
+            await this.redis.del(`session:${sessionId}:activity:*`);
+            await this.redis.del(`session:${sessionId}:ip`);
+            cleanupCount++;
+          }
+        }
+      }
+      
+      // Clean up expired user activity timelines (older than 7 days)
+      const userActivityKeys = await this.redis.keys('user:*:activity');
+      const weekAgo = now - (7 * 24 * 60 * 60 * 1000);
+      
+      for (const key of userActivityKeys) {
+        await this.redis.zremrangebyscore(key, 0, weekAgo);
+      }
+      
+      if (cleanupCount > 0) {
+        console.log(`🧹 SESSION: Cleaned up ${cleanupCount} expired sessions and old activity data`);
+      }
     } catch (error) {
       console.error('Session cleanup error:', error);
     }
@@ -650,8 +681,7 @@ export function createSessionSecurityMiddleware(
 /**
  * Create Redis session store for production
  */
-export function createRedisSessionStore(redis: Redis): ConnectRedis {
-  const RedisStore = ConnectRedis(session);
+export function createRedisSessionStore(redis: Redis): RedisStore {
   
   return new RedisStore({
     client: redis,
@@ -659,7 +689,7 @@ export function createRedisSessionStore(redis: Redis): ConnectRedis {
     ttl: 24 * 60 * 60, // 24 hours in seconds
     disableTouch: false, // Allow session activity updates
     disableTTL: false,
-    logErrors: (error) => {
+    logErrors: (error: any) => {
       console.error('Redis session store error:', error);
       logSecurityEvent('redis_session_error', { error: error.message });
     }
