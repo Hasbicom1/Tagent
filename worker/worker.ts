@@ -17,7 +17,7 @@ import { performance } from 'perf_hooks';
 // Environment configuration
 const config = {
   workerId: process.env.WORKER_ID || `worker-${Math.random().toString(36).substr(2, 9)}`,
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  redisUrl: process.env.REDIS_URL || null, // ✅ Allow null for development mode
   maxConcurrentTasks: parseInt(process.env.MAX_CONCURRENT_TASKS || '3'),
   taskTimeout: parseInt(process.env.TASK_TIMEOUT || '300000'), // 5 minutes
   browserType: process.env.BROWSER_TYPE as 'chromium' | 'firefox' | 'webkit' || 'chromium',
@@ -46,14 +46,21 @@ class ContainerWorker {
   constructor() {
     this.log('🚀 PHOENIX-7742 Worker initializing...', { workerId: config.workerId });
     
-    // Initialize Redis connection
-    this.redis = new Redis(config.redisUrl, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      keepAlive: 30000,
-      connectTimeout: 10000,
-      commandTimeout: 5000,
-    });
+    // ✅ DEV MODE: Skip Redis in development, connect to server's in-memory queue
+    if (config.redisUrl) {
+      // Initialize Redis connection for production
+      this.redis = new Redis(config.redisUrl, {
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+        keepAlive: 30000,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
+      });
+    } else {
+      // Development mode - no Redis needed
+      this.log('💡 DEV MODE: Running without Redis, will connect to server queue');
+      this.redis = null as any; // Skip Redis in development
+    }
 
     // Initialize core components
     this.browserEngine = new BrowserEngine(config);
@@ -70,9 +77,14 @@ class ContainerWorker {
    */
   async start(): Promise<void> {
     try {
-      this.log('🔌 Connecting to Redis...', { url: this.maskRedisUrl(config.redisUrl) });
-      await this.redis.connect();
-      this.log('✅ Redis connection established');
+      // ✅ DEV MODE: Skip Redis connection in development
+      if (config.redisUrl && this.redis) {
+        this.log('🔌 Connecting to Redis...', { url: this.maskRedisUrl(config.redisUrl) });
+        await this.redis.connect();
+        this.log('✅ Redis connection established');
+      } else {
+        this.log('💡 DEV MODE: Skipping Redis - will process tasks directly from server');
+      }
 
       this.log('🌐 Initializing browser engine...');
       await this.browserEngine.initialize();
