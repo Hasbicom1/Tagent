@@ -41,8 +41,24 @@ app.use(helmet({
     preload: securityConfig.hsts.preload
   } : false,
 
-  // Content Security Policy - disabled in favor of nginx CSP
-  contentSecurityPolicy: false,
+  // Content Security Policy - minimal CSP for production security
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://js.stripe.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "wss:", "https:", "https://api.stripe.com", "https://api.openai.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: []
+    },
+    reportOnly: false
+  } : false,
 
   // X-Frame-Options
   frameguard: {

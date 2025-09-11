@@ -70,13 +70,26 @@ railway env:set NODE_ENV=production
 railway env:set PORT=5000
 railway env:set HOST=0.0.0.0
 railway env:set DOMAIN="$DOMAIN"
-# Get Railway app URL for CORS configuration
-RAILWAY_URL=$(railway status --json 2>/dev/null | grep -o '"url":"[^"]*"' | cut -d'"' -f4 | head -1 || echo "")
+# Get Railway app URL for CORS configuration - improved detection
+RAILWAY_URL=""
+# Try multiple methods to detect Railway URL
+if command -v railway >/dev/null 2>&1; then
+    RAILWAY_URL=$(railway status --json 2>/dev/null | python3 -c "import sys, json; data=json.load(sys.stdin) if sys.stdin else {}; print(data.get('deployments', [{}])[0].get('url', ''))" 2>/dev/null || echo "")
+    if [ -z "$RAILWAY_URL" ]; then
+        RAILWAY_URL=$(railway status --json 2>/dev/null | grep -o '"url":"[^"]*"' | cut -d'"' -f4 | head -1 || echo "")
+    fi
+fi
+
+# Configure CORS origins with proper validation
 if [ -n "$RAILWAY_URL" ]; then
+    # Use detected Railway URL
     railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN,$RAILWAY_URL"
+    log_info "CORS configured with Railway URL: $RAILWAY_URL"
 else
-    # Fallback if Railway URL cannot be detected
-    railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN,https://*.railway.app"
+    # Safe fallback without invalid wildcard pattern
+    railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN"
+    log_warning "Railway URL not detected - CORS limited to domain only"
+    log_warning "You may need to manually add Railway URL to ALLOWED_ORIGINS in Railway dashboard"
 fi
 railway env:set FORCE_HTTPS=true
 
@@ -86,10 +99,10 @@ railway env:set ENABLE_RATE_LIMITING=true
 railway env:set MAX_REQUESTS_PER_MINUTE=100
 railway env:set MAX_PAYMENT_REQUESTS_PER_HOUR=10
 
-# Session configuration
+# Session configuration - Use lax for Stripe payment redirects
 railway env:set SESSION_MAX_AGE=86400
 railway env:set SESSION_SECURE=true
-railway env:set SESSION_SAME_SITE=strict
+railway env:set SESSION_SAME_SITE=lax
 
 # Feature flags
 railway env:set ENABLE_BROWSER_AUTOMATION=true

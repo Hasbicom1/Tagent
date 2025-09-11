@@ -163,6 +163,45 @@ log_warning "This step requires manual action in Railway dashboard"
 
 read -p "Press Enter once you've added PostgreSQL and Redis databases in Railway dashboard..."
 
+# CRITICAL: Validate that databases are actually configured before deployment
+log_step "Validating database configuration..."
+
+# Check DATABASE_URL
+DATABASE_STATUS=$(railway env get DATABASE_URL 2>/dev/null | head -n1 || echo "")
+if [ -z "$DATABASE_STATUS" ] || [ "$DATABASE_STATUS" = "null" ]; then
+    log_error "DATABASE_URL is not set in Railway environment!"
+    log_error ""
+    log_error "CRITICAL ERROR: PostgreSQL database is required but not configured."
+    log_error ""
+    log_error "To fix this:"
+    log_error "  1. Go to https://railway.app/dashboard"
+    log_error "  2. Select your project"
+    log_error "  3. Click 'New Service' → 'Database' → 'Add PostgreSQL'"
+    log_error "  4. Wait for DATABASE_URL to appear in Variables tab"
+    log_error "  5. Run this script again"
+    log_error ""
+    exit 1
+fi
+
+# Check REDIS_URL
+REDIS_STATUS=$(railway env get REDIS_URL 2>/dev/null | head -n1 || echo "")
+if [ -z "$REDIS_STATUS" ] || [ "$REDIS_STATUS" = "null" ]; then
+    log_error "REDIS_URL is not set in Railway environment!"
+    log_error ""
+    log_error "CRITICAL ERROR: Redis cache is required but not configured."
+    log_error ""
+    log_error "To fix this:"
+    log_error "  1. Go to https://railway.app/dashboard"
+    log_error "  2. Select your project"
+    log_error "  3. Click 'New Service' → 'Database' → 'Add Redis'"
+    log_error "  4. Wait for REDIS_URL to appear in Variables tab"
+    log_error "  5. Run this script again"
+    log_error ""
+    exit 1
+fi
+
+log_success "Database validation passed (PostgreSQL and Redis configured)"
+
 # Generate secure secrets
 log_step "Generating secure secrets..."
 SESSION_SECRET=$(openssl rand -base64 32)
