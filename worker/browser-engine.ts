@@ -103,7 +103,7 @@ export class BrowserEngine extends EventEmitter {
     
     this.config = {
       browserType: 'chromium',
-      headless: true,
+      headless: false, // ✅ REAL BROWSER VISIBLE - Users MUST see AI automation happening!
       taskTimeout: 300000, // 5 minutes
       maxConcurrentSessions: 3,
       sessionTimeout: 600000, // 10 minutes

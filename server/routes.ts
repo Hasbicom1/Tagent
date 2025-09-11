@@ -542,7 +542,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/session/:agentId", async (req, res) => {
     try {
       const { agentId } = req.params;
-      const session = await storage.getSessionByAgentId(agentId);
+      let session = await storage.getSessionByAgentId(agentId);
+      
+      // ✅ DEVELOPMENT MODE: Allow demo access for real browser automation testing
+      if (!session && process.env.NODE_ENV === 'development') {
+        console.log(`🔄 DEV MODE: Creating demo session for agent ${agentId} to test REAL browser automation`);
+        session = {
+          id: `dev-session-${agentId}`,
+          agentId: agentId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
       
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
