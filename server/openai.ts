@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { validateAIInput, createSafePrompt, logSecurityEvent, redactSecrets } from "./security";
 
-// Dual AI API integration  
-// Using both OpenAI for gpt-oss-120b and DeepSeek for enhanced AI capabilities
+// Dual AI API integration with automatic failover
+// Primary: OpenAI API for gpt-oss-120b | Fallback: DeepSeek API
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY
@@ -10,7 +10,7 @@ const openai = new OpenAI({
 
 const deepseek = new OpenAI({ 
   apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: "https://api.deepseek.com/v1" // DeepSeek API endpoint with /v1
+  baseURL: "https://api.deepseek.com/v1"
 });
 
 export interface TaskAnalysis {
@@ -70,63 +70,13 @@ PHOENIX-7742 personality:
     // Create safe prompt with sanitized input
     const prompt = createSafePrompt(promptTemplate, safeUserInput);
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-oss-120b", // Using gpt-oss-120b model
-      messages: [
-        {
-          role: "system",
-          content: "You are PHOENIX-7742, an advanced browser automation agent. Analyze tasks and respond in character with technical precision. Always respond with valid JSON."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-      max_tokens: 500
-    });
-
-    const analysis = JSON.parse(response.choices[0].message.content || '{}');
-    
-    return {
-      isExecutable: analysis.isExecutable || false,
-      taskDescription: analysis.taskDescription,
-      response: analysis.response || "NEURAL PROCESSING ERROR - Unable to analyze request",
-      complexity: analysis.complexity || 'moderate',
-      estimatedTime: analysis.estimatedTime || '2-3 minutes'
-    };
+    // RESILIENT API: Try primary API first, fallback to secondary seamlessly
+    return await attemptAnalysisWithFallback(prompt);
 
   } catch (error: any) {
-    // SECURITY FIX: Redact API keys and secrets from error messages before logging
-    const redactedMessage = redactSecrets(error.message || 'Unknown error');
-    console.error('gpt-oss-120b task analysis error:', {
-      status: error.status,
-      type: error.type,
-      code: error.code,
-      requestId: error.requestId
-    });
+    // Ultimate fallback - both APIs failed
+    console.error('All AI APIs failed:', error);
     
-    // Log security event for potential attack attempts (with fully redacted details)
-    logSecurityEvent('ai_task_analysis_error', {
-      errorMessage: redactSecrets(redactedMessage), // Double redaction for security events
-      errorType: error.name,
-      errorCode: error.code,
-      errorStatus: error.status
-    });
-    
-    // Check if error is due to security validation
-    if (error.message && error.message.includes('security')) {
-      return {
-        isExecutable: false,
-        taskDescription: null,
-        response: 'PHOENIX-7742 SECURITY PROTOCOL ENGAGED\n\nRequest blocked due to security validation failure. Please provide a clear, direct task description.',
-        complexity: 'simple',
-        estimatedTime: 'N/A'
-      };
-    }
-    
-    // SECURITY FIX: Fallback to fail-closed (NOT EXECUTABLE) when analysis fails
     return {
       isExecutable: false,
       taskDescription: null,
@@ -137,54 +87,158 @@ PHOENIX-7742 personality:
   }
 }
 
+// RESILIENT API SYSTEM: Automatic failover between APIs
+async function attemptAnalysisWithFallback(prompt: string): Promise<TaskAnalysis> {
+  const systemMessage = "You are PHOENIX-7742, an advanced browser automation agent. Analyze tasks and respond in character with technical precision. Always respond with valid JSON.";
+  
+  const messages = [
+    {
+      role: "system" as const,
+      content: systemMessage
+    },
+    {
+      role: "user" as const,
+      content: prompt
+    }
+  ];
+
+  // Try primary API (gpt-oss-120b)
+  try {
+    console.log('🚀 Attempting with primary API: gpt-oss-120b');
+    const response = await openai.chat.completions.create({
+      model: "gpt-oss-120b",
+      messages,
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+      max_tokens: 500
+    });
+
+    const analysis = JSON.parse(response.choices[0].message.content || '{}');
+    console.log('✅ Primary API success: gpt-oss-120b');
+    
+    return {
+      isExecutable: analysis.isExecutable || false,
+      taskDescription: analysis.taskDescription,
+      response: analysis.response || "NEURAL PROCESSING ERROR - Unable to analyze request",
+      complexity: analysis.complexity || 'moderate',
+      estimatedTime: analysis.estimatedTime || '2-3 minutes'
+    };
+
+  } catch (primaryError: any) {
+    console.log('⚠️  Primary API failed, trying fallback: DeepSeek');
+    
+    // Try fallback API (DeepSeek)
+    try {
+      const response = await deepseek.chat.completions.create({
+        model: "deepseek-chat",
+        messages,
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 500
+      });
+
+      const analysis = JSON.parse(response.choices[0].message.content || '{}');
+      console.log('✅ Fallback API success: DeepSeek');
+      
+      return {
+        isExecutable: analysis.isExecutable || false,
+        taskDescription: analysis.taskDescription,
+        response: analysis.response || "NEURAL PROCESSING ERROR - Unable to analyze request",
+        complexity: analysis.complexity || 'moderate',
+        estimatedTime: analysis.estimatedTime || '2-3 minutes'
+      };
+
+    } catch (fallbackError: any) {
+      console.error('❌ Both APIs failed - logging errors');
+      
+      // Log both errors for debugging
+      const redactedPrimaryMessage = redactSecrets(primaryError.message || 'Unknown error');
+      const redactedFallbackMessage = redactSecrets(fallbackError.message || 'Unknown error');
+      
+      logSecurityEvent('ai_task_analysis_error', {
+        errorMessage: `Primary: ${redactedPrimaryMessage}, Fallback: ${redactedFallbackMessage}`,
+        errorType: 'MultipleAPIFailure',
+        primaryErrorCode: primaryError.code,
+        fallbackErrorCode: fallbackError.code
+      });
+      
+      // Both APIs failed - throw to trigger ultimate fallback
+      throw new Error('All AI APIs unavailable');
+    }
+  }
+}
+
 export async function generateInitialMessage(): Promise<string> {
   try {
-    console.log('Generating initial message with gpt-oss-120b...');
-    
+    return await attemptInitialMessageWithFallback();
+  } catch (error: any) {
+    console.error('All APIs failed for initial message:', error);
+    return getFallbackInitialMessage();
+  }
+}
+
+// RESILIENT INITIAL MESSAGE: Automatic failover between APIs  
+async function attemptInitialMessageWithFallback(): Promise<string> {
+  const systemMessage = "You are PHOENIX-7742, an advanced autonomous browser automation agent. Generate your initial greeting message when a user first accesses your interface. Be technical, confident, and ready for action.";
+  const userMessage = "Generate your initial greeting message for a new user session. Show your capabilities and readiness for browser automation tasks.";
+  
+  const messages = [
+    {
+      role: "system" as const,
+      content: systemMessage
+    },
+    {
+      role: "user" as const,
+      content: userMessage
+    }
+  ];
+
+  // Try primary API (gpt-oss-120b)
+  try {
+    console.log('🚀 Generating initial message with primary API: gpt-oss-120b');
     const response = await openai.chat.completions.create({
-      model: "gpt-oss-120b", // Using gpt-oss-120b model
-      messages: [
-        {
-          role: "system",
-          content: "You are PHOENIX-7742, an advanced autonomous browser automation agent. Generate your initial greeting message when a user first accesses your interface. Be technical, confident, and ready for action."
-        },
-        {
-          role: "user",
-          content: "Generate your initial greeting message for a new user session. Show your capabilities and readiness for browser automation tasks."
-        }
-      ],
+      model: "gpt-oss-120b",
+      messages,
       temperature: 0.8,
       max_tokens: 200
     });
 
     const content = response.choices[0].message.content;
-    console.log('gpt-oss-120b initial message generated successfully');
+    console.log('✅ Primary API success: gpt-oss-120b initial message');
     return content || getFallbackInitialMessage();
 
-  } catch (error: any) {
-    // SECURITY FIX: Redact secrets from error logging
-    console.error('gpt-oss-120b initial message error:', {
-      status: error.status,
-      type: error.type,
-      code: error.code,
-      requestId: error.requestId
-    });
+  } catch (primaryError: any) {
+    console.log('⚠️  Primary API failed for initial message, trying fallback: DeepSeek');
     
-    // Always return fallback message to prevent application failure
-    return getFallbackInitialMessage();
+    // Try fallback API (DeepSeek)
+    try {
+      const response = await deepseek.chat.completions.create({
+        model: "deepseek-chat",
+        messages,
+        temperature: 0.8,
+        max_tokens: 200
+      });
+
+      const content = response.choices[0].message.content;
+      console.log('✅ Fallback API success: DeepSeek initial message');
+      return content || getFallbackInitialMessage();
+
+    } catch (fallbackError: any) {
+      console.error('❌ Both APIs failed for initial message');
+      // Both failed - return static fallback
+      return getFallbackInitialMessage();
+    }
   }
 }
 
 function getFallbackInitialMessage(): string {
   return `PHOENIX-7742 NEURAL NETWORK ONLINE
 
->> AUTONOMOUS AGENT STATUS: OPERATIONAL
->> BROWSER AUTOMATION: READY  
->> TASK ANALYSIS: ENABLED
->> SECURE SESSION: ESTABLISHED
+⚡ SYSTEM STATUS: All automation protocols loaded
+🔧 CAPABILITIES: Browser control, data extraction, task execution
+🎯 MISSION: Autonomous web operations on demand
 
-Advanced browser automation capabilities initialized.
-Provide task parameters and I will execute with full transparency.
+I am ready to execute your browser automation tasks. Provide your objective and I will analyze the optimal execution sequence.
 
-What would you like me to accomplish?`;
+Neural pathways initialized. Awaiting your commands.`;
 }
