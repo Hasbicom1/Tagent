@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { Redis } from "ioredis";
 import validator from "validator";
@@ -68,7 +68,7 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
+  apiVersion: "2024-09-30.acacia",
 });
 
 // SECURITY ENHANCEMENT: Comprehensive validation and CSRF protection middleware
@@ -199,6 +199,51 @@ async function checkDatabaseHealth(): Promise<boolean> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Stripe webhook endpoint - MUST be before JSON body parser
+  app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req, res) => {
+    const sig = req.get('stripe-signature');
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error('Missing STRIPE_WEBHOOK_SECRET');
+      return res.status(500).json({ error: 'Webhook secret not configured' });
+    }
+
+    try {
+      // Use Stripe's constructEvent for proper signature verification
+      const event = stripe.webhooks.constructEvent(req.body, sig!, webhookSecret);
+
+      // Handle the event
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          console.log(`💰 Payment succeeded: ${event.data.object.id}`);
+          // Note: Session activation is handled by checkout_success endpoint
+          break;
+        
+        case 'payment_intent.payment_failed':
+          console.log(`💸 Payment failed: ${event.data.object.id}`);
+          logSecurityEvent('payment_failed', {
+            paymentIntentId: event.data.object.id,
+            failureReason: event.data.object.last_payment_error?.message
+          });
+          break;
+        
+        default:
+          console.log(`🔔 Unhandled event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error('Webhook signature verification failed:', error);
+      logSecurityEvent('payment_fraud', {
+        endpoint: '/api/stripe/webhook',
+        error: 'Webhook processing failed',
+        clientIP: req.ip
+      });
+      res.status(400).json({ error: 'Webhook error' });
+    }
+  });
+
   // Initialize queue system
   try {
     await initializeQueue();
@@ -321,6 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const csrfToken = generateCSRFToken();
     res.json({ csrfToken });
   });
+
 
   // Create Stripe Checkout session for 24h agent access
   // SECURITY HARDENED: Create checkout session with CSRF protection and validation
