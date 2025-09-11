@@ -7,8 +7,8 @@ import { z } from "zod";
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   agentId: text("agent_id").notNull().unique(),
-  checkoutSessionId: text("checkout_session_id").notNull().unique(),
-  stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+  checkoutSessionId: text("checkout_session_id").unique(),  // ✅ Nullable for dev sessions
+  stripePaymentIntentId: text("stripe_payment_intent_id"),  // ✅ Nullable for dev sessions
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
