@@ -20,6 +20,7 @@ echo "🔑 Generating secure secrets..."
 SECRETS=$(node scripts/generate-secrets.js)
 SESSION_SECRET=$(echo "$SECRETS" | grep "SESSION_SECRET=" | cut -d'=' -f2)
 CSRF_SECRET=$(echo "$SECRETS" | grep "CSRF_SECRET=" | cut -d'=' -f2)
+REDIS_PASSWORD=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
 
 # Create production environment file
 cat > .env.production <<EOF
@@ -35,8 +36,8 @@ NODE_ENV=production
 DATABASE_URL=postgresql://username:password@hostname.neon.tech/dbname?sslmode=require
 
 # REQUIRED: Redis Configuration  
-REDIS_URL=redis://redis:6379
-REDIS_PASSWORD=agentforall2024
+REDIS_URL=redis://:$REDIS_PASSWORD@redis:6379
+REDIS_PASSWORD=$REDIS_PASSWORD
 
 # REQUIRED: Stripe Configuration (LIVE KEYS)
 STRIPE_SECRET_KEY=sk_live_YOUR_LIVE_KEY_HERE

@@ -41,11 +41,8 @@ app.use(helmet({
     preload: securityConfig.hsts.preload
   } : false,
 
-  // Content Security Policy
-  contentSecurityPolicy: {
-    directives: securityConfig.contentSecurityPolicy.directives,
-    reportOnly: securityConfig.contentSecurityPolicy.reportOnly
-  },
+  // Content Security Policy - disabled in favor of nginx CSP
+  contentSecurityPolicy: false,
 
   // X-Frame-Options
   frameguard: {

@@ -11,7 +11,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Set a strong Redis password}@redis:6379
       - SESSION_SECRET=${SESSION_SECRET:?Session secret required for production}
       - CSRF_SECRET=${CSRF_SECRET:?CSRF secret required for production}
       - DOMAIN=${DOMAIN:?Domain required for production}
@@ -34,14 +34,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-agentforall2024}
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Redis password required for production}
     volumes:
       - redis_data:/data
     restart: unless-stopped
     environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-agentforall2024}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Redis password required for production}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-agentforall2024}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Redis password required for production}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3

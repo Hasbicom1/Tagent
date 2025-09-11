@@ -13,9 +13,9 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Redis password required for production}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Redis password required for production}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -36,7 +36,7 @@ services:
       - NODE_ENV=production
       
       # Redis Configuration
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Redis password required for production}@redis:6379
       
       # Browser Configuration
       - BROWSER_TYPE=chromium
@@ -107,7 +107,7 @@ services:
     environment:
       - WORKER_ID=worker-2
       - NODE_ENV=production
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Redis password required for production}@redis:6379
       - BROWSER_TYPE=chromium
       - HEADLESS=true
       - MAX_CONCURRENT_TASKS=3
@@ -163,7 +163,7 @@ services:
     environment:
       - WORKER_ID=worker-scale-${HOSTNAME}
       - NODE_ENV=production
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Redis password required for production}@redis:6379
       - BROWSER_TYPE=chromium
       - HEADLESS=true
       - MAX_CONCURRENT_TASKS=2  # Reduced for scaling
