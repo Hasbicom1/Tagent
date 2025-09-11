@@ -139,79 +139,64 @@
   --opaque-button-border-intensity: 9;  /* In terms of percentages */
 
   /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(0, 255, 65, .08);
+  --elevate-2: rgba(0, 255, 65, .15);
 
-  --background: 220 20% 8%;
+  /* Terminal CRT Colors */
+  --background: 0 0% 4%; /* Deep black like old CRT */
+  --foreground: 120 100% 80%; /* Bright green phosphor */
 
-  --foreground: 0 0% 98%;
+  --border: 120 50% 25%; /* Dark green borders */
+  --card: 0 0% 8%; /* Slightly lighter black for cards */
+  --card-foreground: 120 100% 75%;
+  --card-border: 120 40% 30%;
 
-  --border: 220 13% 18%;
+  --sidebar: 0 0% 6%;
+  --sidebar-foreground: 120 100% 75%;
+  --sidebar-border: 120 30% 35%;
+  --sidebar-primary: 180 100% 50%; /* Electric cyan */
+  --sidebar-primary-foreground: 0 0% 8%;
+  --sidebar-accent: 120 20% 15%;
+  --sidebar-accent-foreground: 120 100% 70%;
+  --sidebar-ring: 180 100% 50%;
 
-  --card: 220 15% 12%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 120 100% 75%;
+  --popover-border: 120 40% 25%;
 
-  --card-foreground: 0 0% 95%;
-
-  --card-border: 220 13% 20%;
-
-  --sidebar: 220 20% 10%;
-
-  --sidebar-foreground: 0 0% 95%;
-
-  --sidebar-border: 220 13% 22%;
-
-  --sidebar-primary: 210 100% 60%;
-
-  --sidebar-primary-foreground: 220 15% 8%;
-
-  --sidebar-accent: 220 12% 18%;
-
-  --sidebar-accent-foreground: 0 0% 90%;
-
-  --sidebar-ring: 210 100% 60%;
-
-  --popover: 220 15% 14%;
-
-  --popover-foreground: 0 0% 95%;
-
-  --popover-border: 220 13% 24%;
-
+  /* Electric blue primary */
   --primary: 210 100% 65%;
+  --primary-foreground: 0 0% 8%;
 
-  --primary-foreground: 220 15% 8%;
+  --secondary: 120 20% 20%;
+  --secondary-foreground: 120 100% 70%;
 
-  --secondary: 220 12% 20%;
+  --muted: 120 15% 12%;
+  --muted-foreground: 120 30% 60%;
 
-  --secondary-foreground: 0 0% 90%;
+  --accent: 180 100% 50%; /* Bright cyan accents */
+  --accent-foreground: 0 0% 8%;
 
-  --muted: 220 12% 16%;
-
-  --muted-foreground: 220 8% 65%;
-
-  --accent: 220 12% 18%;
-
-  --accent-foreground: 0 0% 88%;
-
-  --destructive: 0 72% 51%;
-
+  --destructive: 0 85% 60%; /* Bright red for errors */
   --destructive-foreground: 0 0% 98%;
 
-  --input: 220 13% 28%;
-  --ring: 210 100% 60%;
-  --chart-1: 210 100% 70%;
-  --chart-2: 142 69% 58%;
-  --chart-3: 45 93% 58%;
-  --chart-4: 280 65% 65%;
-  --chart-5: 15 85% 65%;
+  --input: 120 40% 15%;
+  --ring: 180 100% 50%; /* Cyan focus rings */
+  --chart-1: 180 100% 60%;
+  --chart-2: 120 100% 60%;
+  --chart-3: 45 100% 60%;
+  --chart-4: 280 80% 60%;
+  --chart-5: 15 100% 60%;
 
-  --shadow-2xs: 0px 1px 2px 0px hsl(220 43% 2% / 0.15);
-  --shadow-xs: 0px 1px 2px 0px hsl(220 43% 2% / 0.25);
-  --shadow-sm: 0px 1px 3px 0px hsl(220 43% 2% / 0.3), 0px 1px 2px -1px hsl(220 43% 2% / 0.3);
-  --shadow: 0px 4px 6px -1px hsl(220 43% 2% / 0.3), 0px 2px 4px -2px hsl(220 43% 2% / 0.3);
-  --shadow-md: 0px 10px 15px -3px hsl(220 43% 2% / 0.3), 0px 4px 6px -4px hsl(220 43% 2% / 0.3);
-  --shadow-lg: 0px 20px 25px -5px hsl(220 43% 2% / 0.3), 0px 8px 10px -6px hsl(220 43% 2% / 0.3);
-  --shadow-xl: 0px 25px 50px -12px hsl(220 43% 2% / 0.4);
-  --shadow-2xl: 0px 50px 100px -20px hsl(220 43% 2% / 0.4);
+  /* Enhanced shadows with green glow */
+  --shadow-2xs: 0px 1px 2px 0px hsl(120 50% 20% / 0.2);
+  --shadow-xs: 0px 1px 2px 0px hsl(120 50% 20% / 0.3);
+  --shadow-sm: 0px 1px 3px 0px hsl(120 50% 20% / 0.4), 0px 1px 2px -1px hsl(120 50% 20% / 0.4);
+  --shadow: 0px 4px 6px -1px hsl(120 50% 20% / 0.4), 0px 2px 4px -2px hsl(120 50% 20% / 0.4);
+  --shadow-md: 0px 10px 15px -3px hsl(120 50% 20% / 0.4), 0px 4px 6px -4px hsl(120 50% 20% / 0.4);
+  --shadow-lg: 0px 20px 25px -5px hsl(120 50% 20% / 0.4), 0px 8px 10px -6px hsl(120 50% 20% / 0.4);
+  --shadow-xl: 0px 25px 50px -12px hsl(120 50% 20% / 0.5);
+  --shadow-2xl: 0px 50px 100px -20px hsl(120 50% 20% / 0.5);
 
 }
 
@@ -363,5 +348,148 @@
     font-family: 'Courier Prime', 'Courier New', Monaco, 'Lucida Console', monospace !important;
     -webkit-font-smoothing: none;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* CRT Terminal Effects */
+  .crt-screen {
+    position: relative;
+    background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+    box-shadow: 
+      inset 0 0 100px rgba(0, 255, 0, 0.1),
+      0 0 20px rgba(0, 255, 0, 0.2),
+      0 0 40px rgba(0, 255, 0, 0.1);
+    border: 2px solid #333;
+    border-radius: 8px;
+  }
+
+  .crt-screen::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 0, 0.03) 2px,
+        rgba(0, 255, 0, 0.03) 4px
+      );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .crt-screen::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 255, 0, 0.05) 100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Phosphor glow text */
+  .phosphor-text {
+    color: #00ff41;
+    text-shadow: 
+      0 0 5px #00ff41,
+      0 0 10px #00ff41,
+      0 0 15px #00ff41;
+    animation: phosphor-flicker 0.15s infinite linear alternate;
+  }
+
+  @keyframes phosphor-flicker {
+    0% { opacity: 1; }
+    100% { opacity: 0.98; }
+  }
+
+  /* Terminal cursor */
+  .terminal-cursor {
+    background-color: #00ff41;
+    animation: cursor-blink 1s infinite;
+  }
+
+  @keyframes cursor-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Retro terminal border */
+  .retro-border {
+    border: 2px solid #333;
+    border-top-color: #555;
+    border-left-color: #555;
+    box-shadow: 
+      inset 1px 1px 0 #666,
+      inset -1px -1px 0 #111;
+  }
+
+  /* Matrix-style typing effect */
+  .matrix-text {
+    overflow: hidden;
+    white-space: nowrap;
+    animation: matrix-type 2s steps(40, end);
+  }
+
+  @keyframes matrix-type {
+    from { width: 0; }
+    to { width: 100%; }
+  }
+
+  /* Boot sequence animation */
+  .boot-sequence {
+    animation: boot-fade 0.8s ease-in-out;
+  }
+
+  @keyframes boot-fade {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Electric glow for primary elements */
+  .electric-glow {
+    box-shadow: 
+      0 0 5px rgba(16, 185, 255, 0.5),
+      0 0 10px rgba(16, 185, 255, 0.3),
+      0 0 15px rgba(16, 185, 255, 0.2);
+  }
+
+  /* Terminal window styling */
+  .terminal-window {
+    background: linear-gradient(145deg, #0f0f0f, #1a1a1a);
+    border: 1px solid #333;
+    box-shadow: 
+      0 4px 8px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Scanline effect for large screens */
+  @media (min-width: 1024px) {
+    .scanlines {
+      position: relative;
+    }
+    
+    .scanlines::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 0, 0.02) 2px,
+        rgba(0, 255, 0, 0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
   }
 }

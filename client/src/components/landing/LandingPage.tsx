@@ -32,14 +32,14 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono">
+    <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines">
       {/* Terminal-style Header */}
       <div className="border-b border-primary/20 bg-card/50">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold">AGENT FOR ALL</span>
+              <span className="text-lg font-bold phosphor-text matrix-text">AGENT FOR ALL</span>
               <Badge variant="outline" className="text-xs font-mono border-primary/30">
                 v2.0.1
               </Badge>
@@ -57,7 +57,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
         
         <div className="relative max-w-6xl mx-auto px-6 py-20">
           {/* Terminal Window */}
-          <Card className="bg-background/90 border-primary/30 overflow-hidden mb-12">
+          <Card className="bg-background/90 border-primary/30 overflow-hidden mb-12 terminal-window crt-screen electric-glow">
             <div className="bg-card border-b border-primary/20 p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                       AI_FOR_EVERYONE
                     </Badge>
                     
-                    <h1 className="text-4xl lg:text-6xl font-bold tracking-tight">
+                    <h1 className="text-4xl lg:text-6xl font-bold tracking-tight phosphor-text">
                       <span className="text-primary text-5xl lg:text-7xl">AGENT</span>
                       <span className="text-foreground"> FOR </span>
                       <span className="text-primary text-5xl lg:text-7xl">ALL</span>
@@ -321,7 +321,7 @@ AGENT FOR ALL • $1
             
             <div className="p-8 space-y-6">
               <div className="text-center space-y-4">
-                <div className="text-6xl font-bold text-primary font-mono">$1</div>
+                <div className="text-6xl font-bold text-primary font-mono phosphor-text">$1</div>
                 <div className="text-lg font-mono text-muted-foreground">
                   24_HOUR_SESSION
                 </div>

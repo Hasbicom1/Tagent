@@ -330,9 +330,9 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono">
+    <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines">
       {/* Terminal Header */}
-      <div className="bg-card border-b border-primary/20">
+      <div className="bg-card border-b border-primary/20 terminal-window electric-glow">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -344,15 +344,15 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
               </Avatar>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-primary">
+                  <h1 className="text-xl font-bold text-primary phosphor-text matrix-text">
                     AGENT_{agentId}
                   </h1>
                   <Badge variant={isExecuting ? 'destructive' : 'secondary'} className="text-xs font-mono">
                     {isExecuting ? 'EXECUTING' : 'STANDBY'}
                   </Badge>
                 </div>
-                <div className="text-sm text-muted-foreground font-mono">
-                  Neural network status: OPTIMAL
+                <div className="text-sm text-muted-foreground font-mono phosphor-text">
+                  Neural network status: OPTIMAL<span className="terminal-cursor">▋</span>
                 </div>
               </div>
             </div>
@@ -392,12 +392,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         <div className="grid lg:grid-cols-2 gap-6 h-[calc(100vh-10rem)]">
           
           {/* Command Interface */}
-          <Card className="flex flex-col bg-card/50 border-primary/20">
-            <div className="p-4 border-b border-primary/10 bg-primary/5">
+          <Card className="flex flex-col bg-card/50 border-primary/20 terminal-window crt-screen">
+            <div className="p-4 border-b border-primary/10 bg-primary/5 retro-border">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Terminal className="w-5 h-5 text-primary" />
-                  <h3 className="font-bold text-lg font-mono">COMMAND_INTERFACE</h3>
+                  <h3 className="font-bold text-lg font-mono phosphor-text">COMMAND_INTERFACE</h3>
                   <Badge variant="outline" className="text-xs font-mono border-primary/30">
                     SECURE_CHANNEL
                   </Badge>
@@ -455,12 +455,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       )}
                     </div>
                     
-                    <div className={`p-4 rounded-lg border ${
+                    <div className={`p-4 rounded-lg border terminal-window ${
                       message.role === 'user' 
-                        ? 'bg-primary/10 border-primary/20' 
+                        ? 'bg-primary/10 border-primary/20 electric-glow' 
                         : 'bg-card border-primary/10'
                     }`}>
-                      <div className="whitespace-pre-wrap text-sm font-mono">
+                      <div className="whitespace-pre-wrap text-sm font-mono phosphor-text">
                         {message.content}
                       </div>
                       

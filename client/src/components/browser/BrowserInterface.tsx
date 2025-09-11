@@ -213,16 +213,16 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-background">
+    <div className="fixed inset-0 bg-background crt-screen scanlines">
       {/* Main browser area - full screen */}
-      <div className="h-full w-full bg-gradient-to-br from-background via-muted/20 to-background">
+      <div className="h-full w-full bg-gradient-to-br from-background via-muted/20 to-background terminal-window crt-screen">
         <div className="flex items-center justify-center h-full text-center space-y-6">
           <div className="space-y-4">
-            <div className="text-6xl font-mono font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
+            <div className="text-6xl font-mono font-bold phosphor-text matrix-text electric-glow">
               AI RAi
             </div>
-            <div className="text-xl text-muted-foreground font-mono">
-              Autonomous Browser Agent Active
+            <div className="text-xl text-muted-foreground font-mono phosphor-text matrix-text">
+              Autonomous Browser Agent Active<span className="terminal-cursor">▊</span>
             </div>
             <div className="text-sm text-muted-foreground/80 max-w-md mx-auto">
               Your intelligent browser assistant is ready. Use the command section below or press Ctrl+Shift+C to give me tasks.
@@ -333,7 +333,7 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
                     value={currentCommand}
                     onChange={(e) => setCurrentCommand(e.target.value)}
                     placeholder="Or type custom command..."
-                    className="flex-1 bg-black/50 border-primary/30 text-green-400 font-mono text-sm"
+                    className="flex-1 bg-black/50 border-primary/30 text-green-400 font-mono text-sm phosphor-text terminal-window"
                     data-testid="command-input"
                     disabled={executeCommand.isPending}
                   />
