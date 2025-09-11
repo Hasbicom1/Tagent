@@ -1,8 +1,12 @@
 import OpenAI from "openai";
 import { validateAIInput, createSafePrompt, logSecurityEvent, redactSecrets } from "./security";
 
-// DeepSeek API integration  
-// Using DeepSeek-V3.1 model for enhanced AI capabilities
+// Dual AI API integration  
+// Using both OpenAI for gpt-oss-120b and DeepSeek for enhanced AI capabilities
+
+const openai = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 const deepseek = new OpenAI({ 
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -66,8 +70,8 @@ PHOENIX-7742 personality:
     // Create safe prompt with sanitized input
     const prompt = createSafePrompt(promptTemplate, safeUserInput);
 
-    const response = await deepseek.chat.completions.create({
-      model: "deepseek-chat", // Using DeepSeek chat model
+    const response = await openai.chat.completions.create({
+      model: "gpt-oss-120b", // Using gpt-oss-120b model
       messages: [
         {
           role: "system",
@@ -96,7 +100,7 @@ PHOENIX-7742 personality:
   } catch (error: any) {
     // SECURITY FIX: Redact API keys and secrets from error messages before logging
     const redactedMessage = redactSecrets(error.message || 'Unknown error');
-    console.error('DeepSeek task analysis error:', {
+    console.error('gpt-oss-120b task analysis error:', {
       status: error.status,
       type: error.type,
       code: error.code,
@@ -127,7 +131,7 @@ PHOENIX-7742 personality:
       isExecutable: false,
       taskDescription: null,
       response: `PHOENIX-7742 ANALYSIS FAILURE\n\nUnable to analyze task due to system limitations.\nTask execution blocked for security.\n\nPlease try again later or contact support.`,
-      complexity: 'unknown',
+      complexity: 'simple',
       estimatedTime: 'N/A'
     };
   }
@@ -135,10 +139,10 @@ PHOENIX-7742 personality:
 
 export async function generateInitialMessage(): Promise<string> {
   try {
-    console.log('Generating initial message with DeepSeek...');
+    console.log('Generating initial message with gpt-oss-120b...');
     
-    const response = await deepseek.chat.completions.create({
-      model: "deepseek-chat", // Using DeepSeek chat model
+    const response = await openai.chat.completions.create({
+      model: "gpt-oss-120b", // Using gpt-oss-120b model
       messages: [
         {
           role: "system",
@@ -154,12 +158,12 @@ export async function generateInitialMessage(): Promise<string> {
     });
 
     const content = response.choices[0].message.content;
-    console.log('DeepSeek initial message generated successfully');
+    console.log('gpt-oss-120b initial message generated successfully');
     return content || getFallbackInitialMessage();
 
   } catch (error: any) {
     // SECURITY FIX: Redact secrets from error logging
-    console.error('DeepSeek initial message error:', {
+    console.error('gpt-oss-120b initial message error:', {
       status: error.status,
       type: error.type,
       code: error.code,
