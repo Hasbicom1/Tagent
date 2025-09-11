@@ -105,15 +105,26 @@ async function attemptAnalysisWithFallback(prompt: string): Promise<TaskAnalysis
   // Try primary API (gpt-oss-120b)
   try {
     console.log('🚀 Attempting with primary API: gpt-oss-120b');
-    const response = await openai.chat.completions.create({
-      model: "gpt-oss-120b",
-      messages,
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-      max_tokens: 500
-    });
+    const response = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-oss-120b",
+        messages,
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 500
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Primary API timeout')), 10000))
+    ]) as any;
 
-    const analysis = JSON.parse(response.choices[0].message.content || '{}');
+    // Safe JSON parsing to prevent failover from malformed responses
+    let analysis;
+    try {
+      analysis = JSON.parse(response.choices[0].message.content || '{}');
+    } catch (jsonError) {
+      console.warn('⚠️ Primary API returned invalid JSON, attempting fallback');
+      throw new Error('Invalid JSON response from primary API');
+    }
+    
     console.log('✅ Primary API success: gpt-oss-120b');
     
     return {
@@ -129,15 +140,26 @@ async function attemptAnalysisWithFallback(prompt: string): Promise<TaskAnalysis
     
     // Try fallback API (DeepSeek)
     try {
-      const response = await deepseek.chat.completions.create({
-        model: "deepseek-chat",
-        messages,
-        response_format: { type: "json_object" },
-        temperature: 0.7,
-        max_tokens: 500
-      });
+      const response = await Promise.race([
+        deepseek.chat.completions.create({
+          model: "deepseek-chat",
+          messages,
+          response_format: { type: "json_object" },
+          temperature: 0.7,
+          max_tokens: 500
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Fallback API timeout')), 8000))
+      ]) as any;
 
-      const analysis = JSON.parse(response.choices[0].message.content || '{}');
+      // Safe JSON parsing for fallback API
+      let analysis;
+      try {
+        analysis = JSON.parse(response.choices[0].message.content || '{}');
+      } catch (jsonError) {
+        console.error('❌ Fallback API returned invalid JSON');
+        throw new Error('Invalid JSON response from fallback API');
+      }
+      
       console.log('✅ Fallback API success: DeepSeek');
       
       return {
@@ -196,12 +218,15 @@ async function attemptInitialMessageWithFallback(): Promise<string> {
   // Try primary API (gpt-oss-120b)
   try {
     console.log('🚀 Generating initial message with primary API: gpt-oss-120b');
-    const response = await openai.chat.completions.create({
-      model: "gpt-oss-120b",
-      messages,
-      temperature: 0.8,
-      max_tokens: 200
-    });
+    const response = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-oss-120b",
+        messages,
+        temperature: 0.8,
+        max_tokens: 200
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Primary API timeout')), 8000))
+    ]) as any;
 
     const content = response.choices[0].message.content;
     console.log('✅ Primary API success: gpt-oss-120b initial message');
@@ -212,12 +237,15 @@ async function attemptInitialMessageWithFallback(): Promise<string> {
     
     // Try fallback API (DeepSeek)
     try {
-      const response = await deepseek.chat.completions.create({
-        model: "deepseek-chat",
-        messages,
-        temperature: 0.8,
-        max_tokens: 200
-      });
+      const response = await Promise.race([
+        deepseek.chat.completions.create({
+          model: "deepseek-chat",
+          messages,
+          temperature: 0.8,
+          max_tokens: 200
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Fallback API timeout')), 6000))
+      ]) as any;
 
       const content = response.choices[0].message.content;
       console.log('✅ Fallback API success: DeepSeek initial message');
