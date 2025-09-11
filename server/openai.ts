@@ -1,10 +1,13 @@
 import OpenAI from "openai";
 import { validateAIInput, createSafePrompt, logSecurityEvent, redactSecrets } from "./security";
 
-// Blueprint integration: javascript_openai
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+// DeepSeek API integration  
+// Using DeepSeek-V3.1 model for enhanced AI capabilities
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const deepseek = new OpenAI({ 
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: "https://api.deepseek.com/v1" // DeepSeek API endpoint with /v1
+});
 
 export interface TaskAnalysis {
   isExecutable: boolean;
@@ -63,8 +66,8 @@ PHOENIX-7742 personality:
     // Create safe prompt with sanitized input
     const prompt = createSafePrompt(promptTemplate, safeUserInput);
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4", // Using gpt-4 for better compatibility
+    const response = await deepseek.chat.completions.create({
+      model: "deepseek-chat", // Using DeepSeek chat model
       messages: [
         {
           role: "system",
@@ -93,16 +96,16 @@ PHOENIX-7742 personality:
   } catch (error: any) {
     // SECURITY FIX: Redact API keys and secrets from error messages before logging
     const redactedMessage = redactSecrets(error.message || 'Unknown error');
-    console.error('OpenAI task analysis error:', {
+    console.error('DeepSeek task analysis error:', {
       status: error.status,
       type: error.type,
       code: error.code,
-      requestId: error.requestID
+      requestId: error.requestId
     });
     
-    // Log security event for potential attack attempts (with redacted details)
+    // Log security event for potential attack attempts (with fully redacted details)
     logSecurityEvent('ai_task_analysis_error', {
-      errorMessage: redactedMessage,
+      errorMessage: redactSecrets(redactedMessage), // Double redaction for security events
       errorType: error.name,
       errorCode: error.code,
       errorStatus: error.status
@@ -119,23 +122,23 @@ PHOENIX-7742 personality:
       };
     }
     
-    // Fallback response if OpenAI fails
+    // SECURITY FIX: Fallback to fail-closed (NOT EXECUTABLE) when analysis fails
     return {
-      isExecutable: true,
-      taskDescription: 'General web automation task',
-      response: `PHOENIX-7742 NEURAL NETWORK ONLINE\n\nTask parameters received and processed.\nI have developed an execution protocol for your request.\n\nReady to deploy browser automation sequence when you authorize execution.`,
-      complexity: 'moderate',
-      estimatedTime: '2-3 minutes'
+      isExecutable: false,
+      taskDescription: null,
+      response: `PHOENIX-7742 ANALYSIS FAILURE\n\nUnable to analyze task due to system limitations.\nTask execution blocked for security.\n\nPlease try again later or contact support.`,
+      complexity: 'unknown',
+      estimatedTime: 'N/A'
     };
   }
 }
 
 export async function generateInitialMessage(): Promise<string> {
   try {
-    console.log('Generating initial message with OpenAI...');
+    console.log('Generating initial message with DeepSeek...');
     
-    const response = await openai.chat.completions.create({
-      model: "gpt-4", // Using gpt-4 instead of gpt-5 for better compatibility
+    const response = await deepseek.chat.completions.create({
+      model: "deepseek-chat", // Using DeepSeek chat model
       messages: [
         {
           role: "system",
@@ -151,16 +154,16 @@ export async function generateInitialMessage(): Promise<string> {
     });
 
     const content = response.choices[0].message.content;
-    console.log('OpenAI initial message generated successfully');
+    console.log('DeepSeek initial message generated successfully');
     return content || getFallbackInitialMessage();
 
   } catch (error: any) {
     // SECURITY FIX: Redact secrets from error logging
-    console.error('OpenAI initial message error:', {
+    console.error('DeepSeek initial message error:', {
       status: error.status,
       type: error.type,
       code: error.code,
-      requestId: error.requestID
+      requestId: error.requestId
     });
     
     // Always return fallback message to prevent application failure

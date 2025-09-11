@@ -1441,6 +1441,8 @@ export function redactSecrets(text: string): string {
     // Redact OpenAI API keys
     .replace(/sk-[A-Za-z0-9_-]{10,}/g, 'sk-***REDACTED***')
     .replace(/sk-or-v1[A-Za-z0-9_-]{10,}/g, 'sk-or-v1***REDACTED***')
+    // Redact DeepSeek API keys
+    .replace(/sk-[A-Za-z0-9_-]{48,}/g, 'sk-***REDACTED***')
     // Redact Stripe keys
     .replace(/sk_live_[A-Za-z0-9]{10,}/g, 'sk_live_***REDACTED***')
     .replace(/sk_test_[A-Za-z0-9]{10,}/g, 'sk_test_***REDACTED***')
