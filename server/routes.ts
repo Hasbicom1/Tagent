@@ -78,7 +78,7 @@ if (!process.env.OPENAI_API_KEY) {
 
 // ✅ DEVELOPMENT MODE: Make Stripe optional
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-09-30.acacia",
+  apiVersion: "2022-11-15",
 }) : null;
 
 // SECURITY ENHANCEMENT: Comprehensive validation and CSRF protection middleware
@@ -359,7 +359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // System metrics endpoint
-  app.get("/api/metrics", rateLimiter ? rateLimiter.createMetricsLimiter() : (req, res, next) => next(), (req, res) => {
+  app.get("/api/metrics", rateLimiter ? rateLimiter.createGlobalLimiter() : (req, res, next) => next(), (req, res) => {
     const memUsage = process.memoryUsage();
     const uptime = process.uptime();
     
@@ -404,6 +404,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.headers['user-agent'],
         sessionId: req.session?.id
       });
+      
+      // Check if Stripe is available
+      if (!stripe) {
+        return res.status(501).json({ 
+          error: "PAYMENT_SYSTEM_OFFLINE: Stripe not configured" 
+        });
+      }
       
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
@@ -462,6 +469,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.headers['user-agent']
       });
 
+      // Check if Stripe is available
+      if (!stripe) {
+        return res.status(501).json({ 
+          error: "PAYMENT_SYSTEM_OFFLINE: Stripe not configured" 
+        });
+      }
+      
       // Verify payment with Stripe first
       const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
       
