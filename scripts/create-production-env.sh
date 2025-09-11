@@ -70,7 +70,14 @@ railway env:set NODE_ENV=production
 railway env:set PORT=5000
 railway env:set HOST=0.0.0.0
 railway env:set DOMAIN="$DOMAIN"
-railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN"
+# Get Railway app URL for CORS configuration
+RAILWAY_URL=$(railway status --json 2>/dev/null | grep -o '"url":"[^"]*"' | cut -d'"' -f4 | head -1 || echo "")
+if [ -n "$RAILWAY_URL" ]; then
+    railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN,$RAILWAY_URL"
+else
+    # Fallback if Railway URL cannot be detected
+    railway env:set ALLOWED_ORIGINS="https://$DOMAIN,https://www.$DOMAIN,https://*.railway.app"
+fi
 railway env:set FORCE_HTTPS=true
 
 # Security settings

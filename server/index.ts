@@ -202,6 +202,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint for deployment monitoring
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
 (async () => {
   try {
     // SECURITY FIX: Validate critical security configuration at startup
