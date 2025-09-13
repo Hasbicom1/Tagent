@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { 
   ArrowLeft, 
   Heart, 
@@ -18,7 +19,14 @@ import {
   Fish,
   Rabbit,
   Sparkles,
-  Dice6
+  Dice6,
+  Terminal,
+  Rocket,
+  Users,
+  DollarSign,
+  Mail,
+  Coffee,
+  Check
 } from 'lucide-react';
 
 interface ViralCommandInterfaceProps {
@@ -26,6 +34,266 @@ interface ViralCommandInterfaceProps {
   data?: any;
   onBack: () => void;
   onPayment: (method: string) => void;
+}
+
+interface ProgressiveWebAppBuilderProps {
+  command: string;
+  onBack: () => void;
+  onPayment: (method: string) => void;
+}
+
+// AI Agent messages for building sections
+const AI_BUILDER_MESSAGES = {
+  show_hero: {
+    buildingMsg: "Building hero section...",
+    completedMsg: "✅ Hero section built successfully!",
+    icon: Rocket,
+    title: "AI FOR $1",
+    subtitle: "AI dreams shouldn't cost more than a coffee",
+    description: "Revolutionary $1 AI agent platform - making AI accessible for everyone, everywhere.",
+  },
+  show_features: {
+    buildingMsg: "Integrating features...",
+    completedMsg: "✅ Features integrated successfully!",
+    icon: Sparkles,
+    title: "Powerful Features",
+    subtitle: "Everything you need for $1",
+    description: "24-hour AI agent access, live browser automation, terminal interface, and seamless payment processing.",
+  },
+  show_pricing: {
+    buildingMsg: "Calculating pricing models...",
+    completedMsg: "✅ Pricing optimized successfully!",
+    icon: DollarSign,
+    title: "Simple Pricing",
+    subtitle: "One price, unlimited possibilities",
+    description: "Pay just $1 for 24 hours of full AI agent access. No subscriptions, no hidden fees, no corporate greed.",
+  },
+  show_specs: {
+    buildingMsg: "Loading technical specifications...",
+    completedMsg: "✅ Specs loaded successfully!",
+    icon: Terminal,
+    title: "Technical Specs",
+    subtitle: "Built for reliability & speed",
+    description: "React + TypeScript frontend, Express.js backend, PostgreSQL database, Stripe payments, WebSocket real-time communication.",
+  },
+  show_contact: {
+    buildingMsg: "Connecting contact systems...",
+    completedMsg: "✅ Contact systems connected!",
+    icon: Mail,
+    title: "Get In Touch",
+    subtitle: "Questions? We're here to help!",
+    description: "Reach out for support, partnerships, or just to say hello. We believe in building community around accessible AI.",
+  },
+};
+
+function ProgressiveWebAppBuilder({ command, onBack, onPayment }: ProgressiveWebAppBuilderProps) {
+  const [progress, setProgress] = useState(0);
+  const [isBuilding, setIsBuilding] = useState(true);
+  const [buildComplete, setBuildComplete] = useState(false);
+  const [showCard, setShowCard] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const sectionData = AI_BUILDER_MESSAGES[command as keyof typeof AI_BUILDER_MESSAGES] || AI_BUILDER_MESSAGES.show_hero;
+
+  useEffect(() => {
+    // Start building animation
+    const buildingInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(buildingInterval);
+          setIsBuilding(false);
+          setBuildComplete(true);
+          
+          // Show card with smooth animation after build complete
+          setTimeout(() => {
+            setShowCard(true);
+            // Smooth scroll to the card
+            setTimeout(() => {
+              if (cardRef.current) {
+                cardRef.current.scrollIntoView({ 
+                  behavior: 'smooth',
+                  block: 'center'
+                });
+              }
+            }, 300);
+          }, 500);
+          
+          return 100;
+        }
+        return prev + 2; // Increment by 2% for smooth animation
+      });
+    }, 80); // Update every 80ms for satisfying build feel
+
+    return () => clearInterval(buildingInterval);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground font-mono">
+      {/* Header */}
+      <div className="bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <Button 
+            variant="ghost" 
+            onClick={onBack}
+            className="text-muted-foreground hover:text-primary"
+            data-testid="button-back-home"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to chat
+          </Button>
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <Terminal className="w-4 h-4" />
+            AI_AGENT_BUILDING
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto p-6 space-y-8">
+        {/* AI Agent Building Interface */}
+        <div className="space-y-6">
+          {/* AI Agent Status */}
+          <Card className="border-primary/20 bg-card/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-3 h-3 rounded-full bg-primary animate-pulse"></div>
+                <span className="text-primary font-mono">AI Agent Status</span>
+              </div>
+              
+              {isBuilding && (
+                <div className="space-y-3">
+                  <div className="text-muted-foreground">
+                    {sectionData.buildingMsg}
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="text-sm text-muted-foreground">
+                    {progress.toFixed(0)}% Complete
+                  </div>
+                </div>
+              )}
+
+              {buildComplete && (
+                <div className="space-y-3">
+                  <div className="text-primary flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    {sectionData.completedMsg}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Ready to view your web app section
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Built Web App Section */}
+          {showCard && (
+            <div 
+              ref={cardRef}
+              className="animate-in slide-in-from-bottom duration-500 ease-out"
+            >
+              <Card className="border-primary/30 bg-gradient-to-br from-card to-card/80 shadow-xl">
+                <CardHeader className="text-center pb-4">
+                  <div className="mx-auto w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                    <sectionData.icon className="w-8 h-8 text-primary" />
+                  </div>
+                  <CardTitle className="text-3xl text-primary">
+                    {sectionData.title}
+                  </CardTitle>
+                  <p className="text-lg text-muted-foreground">
+                    {sectionData.subtitle}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <p className="text-foreground leading-relaxed">
+                    {sectionData.description}
+                  </p>
+
+                  {/* Action buttons for specific sections */}
+                  {command === 'show_pricing' && (
+                    <div className="flex gap-3 justify-center">
+                      <Button 
+                        onClick={() => onPayment('stripe')}
+                        className="bg-primary hover:bg-primary/90"
+                        data-testid="button-get-started"
+                      >
+                        <Rocket className="w-4 h-4 mr-2" />
+                        Get Started - $1
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => onPayment('custom')}
+                        className="border-primary/50 hover:bg-primary/10"
+                        data-testid="button-buy-coffee"
+                      >
+                        <Coffee className="w-4 h-4 mr-2" />
+                        Buy More Coffee
+                      </Button>
+                    </div>
+                  )}
+
+                  {command === 'show_hero' && (
+                    <div className="text-center">
+                      <Button 
+                        onClick={() => onPayment('stripe')}
+                        size="lg"
+                        className="bg-primary hover:bg-primary/90"
+                        data-testid="button-start-agent"
+                      >
+                        <Rocket className="w-4 h-4 mr-2" />
+                        Start Your AI Agent - $1
+                      </Button>
+                    </div>
+                  )}
+
+                  {command === 'show_contact' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="text-center p-4 rounded border border-primary/20">
+                          <Mail className="w-6 h-6 mx-auto mb-2 text-primary" />
+                          <div className="font-mono text-sm">support@agentforall.ai</div>
+                        </div>
+                        <div className="text-center p-4 rounded border border-primary/20">
+                          <Users className="w-6 h-6 mx-auto mb-2 text-primary" />
+                          <div className="font-mono text-sm">Community Discord</div>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <Button 
+                          onClick={() => onPayment('stripe')}
+                          variant="outline"
+                          className="border-primary hover:bg-primary/10"
+                          data-testid="button-get-support"
+                        >
+                          <Mail className="w-4 h-4 mr-2" />
+                          Get Personal Support - $1
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Continue Building Prompt */}
+          {buildComplete && (
+            <div className="text-center space-y-4 mt-8">
+              <div className="text-muted-foreground">
+                Want to build more sections? Go back and try other commands!
+              </div>
+              <div className="flex justify-center gap-2 text-sm">
+                <Badge variant="outline">h</Badge>
+                <Badge variant="outline">f</Badge>
+                <Badge variant="outline">p</Badge>
+                <Badge variant="outline">s</Badge>
+                <Badge variant="outline">c</Badge>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Pixel art for different animals
@@ -108,40 +376,9 @@ export function ViralCommandInterface({ command, data, onBack, onPayment }: Vira
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   
-  // Handle discovery commands - return simple placeholder for now
+  // Handle discovery commands - PROGRESSIVE WEB APP BUILDER
   if (command.includes('show_')) {
-    return (
-      <div className="min-h-screen bg-background text-foreground font-mono">
-        {/* Header */}
-        <div className="bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 sticky top-0 z-50">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <Button 
-              variant="ghost" 
-              onClick={onBack}
-              className="text-muted-foreground hover:text-primary"
-              data-testid="button-back-home"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to chat
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              DISCOVERY_MODE_ACTIVE
-            </div>
-          </div>
-        </div>
-
-        {/* Simple placeholder for discovery content */}
-        <div className="flex-1 p-6">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="text-2xl text-primary mb-4">Discovery Mode</div>
-            <div className="text-muted-foreground">Command: {command}</div>
-            <div className="text-sm text-muted-foreground mt-4">
-              This will show the {command.replace('show_', '')} section
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <ProgressiveWebAppBuilder command={command} onBack={onBack} onPayment={onPayment} />;
   }
 
   // For viral commands, continue with existing logic
