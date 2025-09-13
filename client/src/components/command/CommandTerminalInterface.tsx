@@ -163,21 +163,8 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
     switch (actualCmd) {
       case 'help':
         setShowHelp(true);
-        addToHistory('QUICK COMMANDS:', false, 'success');
-        addToHistory('  h        - Show hero section', false);
-        addToHistory('  f        - Show features', false);  
-        addToHistory('  p        - Show pricing', false);
-        addToHistory('  s        - Show specs', false);
-        addToHistory('  c        - Show contact', false);
-        addToHistory('  all      - Reveal everything', false);
-        addToHistory('  t        - List themes', false);
-        addToHistory('', false);
-        addToHistory('FULL COMMANDS:', false, 'success');
-        addToHistory('  hero, features, pricing, specs, contact', false);
-        addToHistory('  theme <name> - Change colors instantly', false);
-        addToHistory('  clear, reset', false);
-        addToHistory('', false);
-        addToHistory('TIP: Type naturally! "show pricing" works too', false);
+        addToHistory('COMMANDS: h(hero) f(features) p(pricing) s(specs) c(contact) all t(themes)', false, 'success');
+        addToHistory('ADVANCED: theme <name>, clear, reset | Natural language: "show pricing"', false);
         break;
 
       case 'themes':
@@ -371,7 +358,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
             {/* Terminal Output */}
             <div 
               ref={terminalRef}
-              className="min-h-[120px] max-h-[200px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
+              className="min-h-[80px] max-h-[120px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
             >
               {!showHelp && history.length === 0 && (
                 <div className="space-y-4 text-center">
