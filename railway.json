@@ -1,0 +1,33 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run build"
+  },
+  "deploy": {
+    "startCommand": "npm start",
+    "healthcheckPath": "/health/ready",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "NODE_ENV": "production",
+        "PORT": "5000",
+        "FORCE_HTTPS": "true"
+      },
+      "services": {
+        "web": {
+          "source": {
+            "repo": "github.com/user/agent-hq"
+          },
+          "variables": {
+            "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
+            "REDIS_URL": "${{Redis.REDIS_URL}}"
+          }
+        }
+      }
+    }
+  }
+}

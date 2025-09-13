@@ -6,6 +6,9 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { wsManager } from "./websocket";
 import { initializeQueue, closeQueue } from "./queue";
+import { validateEnvironment } from "./env-validation";
+import { logger, addRequestId } from "./logger";
+import { healthCheck, livenessCheck, readinessCheck } from "./health";
 import { 
   validateSecurityConfiguration, 
   validateWebSocketConfiguration,
@@ -23,10 +26,27 @@ import {
   DEFAULT_SESSION_SECURITY_CONFIG
 } from "./session";
 
+// Validate environment variables before starting anything
+validateEnvironment();
+
 const app = express();
 
 // Configure trust proxy first - BEFORE any middleware that needs it
 app.set('trust proxy', 1);
+
+// Add request ID and logging middleware early
+app.use(addRequestId);
+
+// Add health check endpoints (before other middleware)
+app.get('/health', healthCheck);
+app.get('/health/live', livenessCheck);
+app.get('/health/ready', readinessCheck);
+
+// Add compression for production performance
+if (process.env.NODE_ENV === 'production') {
+  // Note: compression middleware would be added here when package conflicts are resolved
+  logger.info('Production mode: compression middleware would be enabled');
+}
 
 // Apply enhanced security headers based on environment
 const securityConfig = getSecurityHeadersConfig();
@@ -261,15 +281,6 @@ app.get('/api/health', (req: Request, res: Response) => {
     // SECURITY FIX: Validate WebSocket configuration is working
     validateWebSocketConfiguration();
 
-    // Error handling middleware
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-
-      res.status(status).json({ message });
-      throw err;
-    });
-
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route
     // doesn't interfere with the other routes
@@ -278,6 +289,23 @@ app.get('/api/health', (req: Request, res: Response) => {
     } else {
       serveStatic(app);
     }
+
+    // Global error handler - MUST be after all routes to catch route errors
+    app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
+      logger.error({ 
+        error: error.message, 
+        stack: error.stack, 
+        requestId: (req as any).id,
+        url: req.url,
+        method: req.method
+      }, 'Unhandled application error');
+      
+      res.status(500).json({ 
+        error: process.env.NODE_ENV === 'production' 
+          ? 'Internal server error' 
+          : error.message 
+      });
+    });
 
     // ALWAYS serve the app on the port specified in the environment variable PORT
     // Other ports are firewalled. Default to 5000 if not specified.
