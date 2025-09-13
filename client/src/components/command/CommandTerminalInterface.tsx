@@ -26,6 +26,12 @@ interface RevealedSection {
   timestamp: number;
 }
 
+interface HistoryEntry {
+  text: string;
+  color: string;
+  isCommand?: boolean;
+}
+
 // Available themes
 const THEMES = {
   default: { name: 'Default Blue', primary: '217 91% 60%' },
@@ -38,14 +44,34 @@ const THEMES = {
   gold: { name: 'Digital Gold', primary: '45 100% 60%' }
 };
 
+// Che Guevara ASCII art with tech elements
+const CHE_ASCII = `
+    ░░░░░████████░░░░░
+  ░░██████████████░░
+  ░██████████████████
+  ████████▓▓████████░
+  ██▓▓████▓▓▓▓██▓▓██
+  ██▓▓████▓▓▓▓██▓▓██
+  ████████▓▓████████
+  ░████▓▓▓▓▓▓▓▓████░
+    ░██▓▓▓▓▓▓▓▓██░
+      ████▓▓████
+        ████████
+      [REVOLUTION]
+     {AI FOR ALL}
+`;
+
 export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInterfaceProps) {
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [revealedSections, setRevealedSections] = useState<RevealedSection[]>([]);
   const [currentTheme, setCurrentTheme] = useState('default');
   const [showHelp, setShowHelp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
 
@@ -71,12 +97,36 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
     }
   }, [history, revealedSections]);
 
-  const addToHistory = (text: string, isCommand = false) => {
-    setHistory(prev => [...prev, text]);
+  const addToHistory = (text: string, isCommand = false, color = 'default') => {
+    const colorClass = color === 'success' ? 'text-chart-2' : 
+                       color === 'error' ? 'text-destructive' :
+                       color === 'command' ? 'text-primary' : 'text-muted-foreground';
+    setHistory(prev => [...prev, { text, color: colorClass, isCommand }]);
     if (isCommand) {
       setCommandHistory(prev => [...prev, text]);
       setHistoryIndex(-1);
     }
+  };
+
+  const animateLoading = (text: string, callback: () => void) => {
+    setIsLoading(true);
+    setLoadingText(text);
+    setLoadingProgress(0);
+    
+    const totalSteps = 20;
+    let step = 0;
+    
+    const interval = setInterval(() => {
+      step++;
+      setLoadingProgress((step / totalSteps) * 100);
+      
+      if (step >= totalSteps) {
+        clearInterval(interval);
+        setIsLoading(false);
+        setLoadingProgress(0);
+        callback();
+      }
+    }, 80);
   };
 
   const isAlreadyRevealed = (sectionId: string) => {
@@ -95,34 +145,48 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
 
   const executeCommand = (command: string) => {
     const cmd = command.toLowerCase().trim();
-    addToHistory(`> ${command}`, true);
+    addToHistory(`> ${command}`, true, 'command');
 
-    switch (cmd) {
+    // Short command aliases
+    const aliasMap: { [key: string]: string } = {
+      'h': 'hero',
+      'f': 'features', 
+      'p': 'pricing',
+      's': 'specs',
+      'c': 'contact',
+      'all': 'reveal all',
+      't': 'themes'
+    };
+
+    const actualCmd = aliasMap[cmd] || cmd;
+
+    switch (actualCmd) {
       case 'help':
         setShowHelp(true);
-        addToHistory('AVAILABLE COMMANDS:');
-        addToHistory('  show header     - Reveal site header');
-        addToHistory('  show hero       - Display hero terminal');
-        addToHistory('  show features   - Show feature cards');  
-        addToHistory('  show specs      - Display technical specs');
-        addToHistory('  show pricing    - Reveal pricing section');
-        addToHistory('  show contact    - Display contact info');
-        addToHistory('  reveal all      - Show complete interface');
-        addToHistory('  theme <name>    - Change color theme');
-        addToHistory('  themes          - List available themes');
-        addToHistory('  clear           - Clear terminal');
-        addToHistory('  reset           - Reset to beginning');
-        addToHistory('');
-        addToHistory('TIP: Type naturally! "show me pricing" works too');
+        addToHistory('QUICK COMMANDS:', false, 'success');
+        addToHistory('  h        - Show hero section', false);
+        addToHistory('  f        - Show features', false);  
+        addToHistory('  p        - Show pricing', false);
+        addToHistory('  s        - Show specs', false);
+        addToHistory('  c        - Show contact', false);
+        addToHistory('  all      - Reveal everything', false);
+        addToHistory('  t        - List themes', false);
+        addToHistory('', false);
+        addToHistory('FULL COMMANDS:', false, 'success');
+        addToHistory('  hero, features, pricing, specs, contact', false);
+        addToHistory('  theme <name> - Change colors instantly', false);
+        addToHistory('  clear, reset', false);
+        addToHistory('', false);
+        addToHistory('TIP: Type naturally! "show pricing" works too', false);
         break;
 
       case 'themes':
-        addToHistory('AVAILABLE THEMES:');
+        addToHistory('AVAILABLE THEMES:', false, 'success');
         Object.entries(THEMES).forEach(([key, theme]) => {
-          addToHistory(`  ${key.padEnd(10)} - ${theme.name}`);
+          addToHistory(`  ${key.padEnd(10)} - ${theme.name}`, false);
         });
-        addToHistory('');
-        addToHistory('Usage: theme <name> (e.g., "theme neon")');
+        addToHistory('', false);
+        addToHistory('Usage: theme <name> (e.g., "theme neon")', false);
         break;
 
       case 'clear':
@@ -133,75 +197,67 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
         setHistory([]);
         setRevealedSections([]);
         setShowHelp(false);
-        addToHistory('Interface reset. Type "help" to start exploring!');
+        addToHistory('Interface reset. Type "help" to start exploring!', false, 'success');
         break;
 
-      case 'show header':
-      case 'header':
-        if (!isAlreadyRevealed('header')) {
-          addToHistory('Revealing site header...');
-          revealSection('header', <HeaderSection key="header" />);
-        } else {
-          addToHistory('Header already revealed');
-        }
-        break;
-
-      case 'show hero':
       case 'hero':
         if (!isAlreadyRevealed('hero')) {
-          addToHistory('Initializing hero terminal...');
-          revealSection('hero', <HeroSection key="hero" />);
+          animateLoading('Initializing hero section', () => {
+            addToHistory('Hero section loaded!', false, 'success');
+            revealSection('hero', <HeroSection key="hero" />);
+          });
         } else {
-          addToHistory('Hero already revealed');
+          addToHistory('Hero already revealed', false, 'error');
         }
         break;
 
-      case 'show features':
       case 'features':
         if (!isAlreadyRevealed('features')) {
-          addToHistory('Loading feature cards...');
-          revealSection('features', <FeaturesSection key="features" />);
+          animateLoading('Loading feature cards', () => {
+            addToHistory('Features loaded!', false, 'success');
+            revealSection('features', <FeaturesSection key="features" />);
+          });
         } else {
-          addToHistory('Features already revealed');
+          addToHistory('Features already revealed', false, 'error');
         }
         break;
 
-      case 'show specs':
       case 'specs':
-      case 'specifications':
         if (!isAlreadyRevealed('specs')) {
-          addToHistory('Displaying technical specifications...');
-          revealSection('specs', <SpecsSection key="specs" />);
+          animateLoading('Displaying technical specifications', () => {
+            addToHistory('Technical specs loaded!', false, 'success');
+            revealSection('specs', <SpecsSection key="specs" />);
+          });
         } else {
-          addToHistory('Specs already revealed');
+          addToHistory('Specs already revealed', false, 'error');
         }
         break;
 
-      case 'show pricing':
       case 'pricing':
         if (!isAlreadyRevealed('pricing')) {
-          addToHistory('Revealing pricing information...');
-          revealSection('pricing', <PricingSection key="pricing" onStartPayment={onStartPayment} />);
+          animateLoading('Revealing pricing information', () => {
+            addToHistory('Pricing information loaded!', false, 'success');
+            revealSection('pricing', <PricingSection key="pricing" onStartPayment={onStartPayment} />);
+          });
         } else {
-          addToHistory('Pricing already revealed');
+          addToHistory('Pricing already revealed', false, 'error');
         }
         break;
 
-      case 'show contact':
       case 'contact':
         if (!isAlreadyRevealed('contact')) {
-          addToHistory('Loading contact information...');
-          revealSection('contact', <ContactSection key="contact" />);
+          animateLoading('Loading contact information', () => {
+            addToHistory('Contact info loaded!', false, 'success');
+            revealSection('contact', <ContactSection key="contact" />);
+          });
         } else {
-          addToHistory('Contact already revealed');
+          addToHistory('Contact already revealed', false, 'error');
         }
         break;
 
       case 'reveal all':
-      case 'show all':
-        addToHistory('Revealing complete interface...');
+        addToHistory('Revealing complete interface...', false, 'success');
         const allSections = [
-          { id: 'header', component: <HeaderSection key="header" /> },
           { id: 'hero', component: <HeroSection key="hero" /> },
           { id: 'features', component: <FeaturesSection key="features" /> },
           { id: 'specs', component: <SpecsSection key="specs" /> },
@@ -224,35 +280,33 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
           const themeName = cmd.split(' ')[1];
           if (THEMES[themeName as keyof typeof THEMES]) {
             setCurrentTheme(themeName);
-            addToHistory(`Theme changed to: ${THEMES[themeName as keyof typeof THEMES].name}`);
+            addToHistory(`Theme changed to: ${THEMES[themeName as keyof typeof THEMES].name}`, false, 'success');
           } else {
-            addToHistory(`Unknown theme: ${themeName}. Type "themes" to see available options.`);
+            addToHistory(`Unknown theme: ${themeName}. Type "themes" to see available options.`, false, 'error');
           }
         }
         // Natural language processing
         else if (cmd.includes('show') || cmd.includes('display') || cmd.includes('reveal')) {
-          if (cmd.includes('header')) {
-            executeCommand('show header');
-          } else if (cmd.includes('hero') || cmd.includes('main')) {
-            executeCommand('show hero');
+          if (cmd.includes('hero') || cmd.includes('main')) {
+            executeCommand('hero');
           } else if (cmd.includes('feature')) {
-            executeCommand('show features');
+            executeCommand('features');
           } else if (cmd.includes('spec') || cmd.includes('technical')) {
-            executeCommand('show specs');
+            executeCommand('specs');
           } else if (cmd.includes('pricing') || cmd.includes('price') || cmd.includes('cost')) {
-            executeCommand('show pricing');
+            executeCommand('pricing');
           } else if (cmd.includes('contact') || cmd.includes('support')) {
-            executeCommand('show contact');
+            executeCommand('contact');
           } else if (cmd.includes('all') || cmd.includes('everything')) {
             executeCommand('reveal all');
           } else {
-            addToHistory(`I understood you want to show something, but not sure what.`);
-            addToHistory(`   Try: "show header", "show pricing", etc. Type "help" for all options.`);
+            addToHistory('I understood you want to show something, but not sure what.', false, 'error');
+            addToHistory('Try: "h", "f", "p" or "hero", "features", "pricing". Type "help" for all options.', false);
           }
         }
         else {
-          addToHistory(`Command not recognized: ${command}`);
-          addToHistory(`   Type "help" to see available commands.`);
+          addToHistory(`Command not recognized: ${command}`, false, 'error');
+          addToHistory('Type "help" to see available commands.', false);
         }
         break;
     }
@@ -286,23 +340,16 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
     }
   };
 
+  const ProgressBar = ({ progress }: { progress: number }) => {
+    const filled = Math.floor(progress / 5);
+    const blocks = Array.from({ length: 20 }, (_, i) => i < filled ? '█' : '▒');
+    return <span className="font-mono">{blocks.join('')}</span>;
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines">
-      {/* Revealed sections appear above the terminal */}
-      <div className="space-y-0">
-        {revealedSections.map((section) => (
-          <div 
-            key={section.id}
-            className="animate-in slide-in-from-top-4 fade-in duration-700"
-            style={{ animationDelay: '0ms' }}
-          >
-            {section.component}
-          </div>
-        ))}
-      </div>
-
-      {/* Main Command Terminal - Always at bottom */}
-      <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-primary/20 p-6">
+      {/* Terminal at TOP - Fixed Header */}
+      <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 z-50">
         <Card className="bg-background/90 border-primary/30 terminal-window crt-screen electric-glow">
           <div className="bg-card border-b border-primary/20 p-3">
             <div className="flex items-center justify-between">
@@ -311,34 +358,49 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
                 <div className="w-3 h-3 rounded-full bg-chart-3" />
                 <div className="w-3 h-3 rounded-full bg-chart-2" />
                 <div className="ml-4 text-sm font-mono text-muted-foreground">
-                  agent_discovery_terminal.exe
+                  dream_terminal.exe
                 </div>
               </div>
               <div className="text-xs text-muted-foreground font-mono">
-                INTERACTIVE_MODE_ACTIVE
+                AI_DREAMS_ACTIVE
               </div>
             </div>
           </div>
           
-          <div className="p-6">
+          <div className="p-4">
             {/* Terminal Output */}
             <div 
               ref={terminalRef}
-              className="min-h-[200px] max-h-[300px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
+              className="min-h-[120px] max-h-[200px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
             >
               {!showHelp && history.length === 0 && (
-                <div className="space-y-2 text-muted-foreground">
-                  <div className="text-primary">Welcome to Agent For All Discovery Terminal</div>
-                  <div>Type <span className="text-primary">"help"</span> to explore our UI interactively</div>
-                  <div>or try <span className="text-primary">"show hero"</span> to get started!</div>
+                <div className="space-y-4 text-center">
+                  <pre className="text-xs text-primary/60 leading-none">
+                    {CHE_ASCII}
+                  </pre>
+                  <div className="space-y-1 text-muted-foreground">
+                    <div className="text-primary">AI dreams shouldn't cost more than a coffee</div>
+                    <div>Type <span className="text-primary">"help"</span> to discover the interface</div>
+                    <div>or try <span className="text-primary">"h"</span> for hero section!</div>
+                  </div>
                 </div>
               )}
               
-              {history.map((line, index) => (
-                <div key={index} className={line.startsWith('>') ? 'text-primary' : 'text-muted-foreground'}>
-                  {line}
+              {history.map((entry, index) => (
+                <div key={index} className={entry.color}>
+                  {entry.text}
                 </div>
               ))}
+
+              {isLoading && (
+                <div className="space-y-1">
+                  <div className="text-primary">{loadingText}...</div>
+                  <div className="flex items-center gap-2">
+                    <ProgressBar progress={loadingProgress} />
+                    <span className="text-chart-2">{Math.round(loadingProgress)}%</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Command Input */}
@@ -350,43 +412,36 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                disabled={isLoading}
                 className="flex-1 bg-transparent border-none outline-none text-foreground font-mono placeholder:text-muted-foreground"
-                placeholder="Type a command... (try 'help')"
+                placeholder="Type a command... (try 'help' or 'h')"
                 data-testid="input-command"
               />
               <div className="text-xs text-muted-foreground">
-                Press Enter to execute
+                Press Enter
               </div>
             </div>
           </div>
         </Card>
       </div>
-    </div>
-  );
-}
 
-// Section Components
-function HeaderSection() {
-  return (
-    <div className="border-b border-primary/20 bg-card/50">
-      <div className="max-w-6xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Terminal className="w-6 h-6 text-primary" />
-            <span className="text-lg font-bold phosphor-text matrix-text">AGENT FOR ALL</span>
-            <Badge variant="outline" className="text-xs font-mono border-primary/30">
-              v2.0.1
-            </Badge>
+      {/* Revealed sections appear below terminal */}
+      <div className="space-y-0">
+        {revealedSections.map((section) => (
+          <div 
+            key={section.id}
+            className="animate-in slide-in-from-top-4 fade-in duration-700"
+            style={{ animationDelay: '0ms' }}
+          >
+            {section.component}
           </div>
-          <div className="text-sm text-muted-foreground font-mono">
-            ~/production/ready
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
 }
 
+// Section Components - UPDATED MESSAGING
 function HeroSection() {
   return (
     <div className="relative">
@@ -401,11 +456,11 @@ function HeroSection() {
                 <div className="w-3 h-3 rounded-full bg-chart-3" />
                 <div className="w-3 h-3 rounded-full bg-chart-2" />
                 <div className="ml-4 text-sm font-mono text-muted-foreground">
-                  agent_terminal.exe
+                  dream_accelerator.exe
                 </div>
               </div>
               <div className="text-xs text-muted-foreground font-mono">
-                SECURE_CONNECTION_ACTIVE
+                DREAMS_LOADING
               </div>
             </div>
           </div>
@@ -413,13 +468,13 @@ function HeroSection() {
           <div className="p-8 space-y-6 min-h-[400px]">
             <div className="space-y-4">
               <div className="text-primary font-mono text-sm">
-                $ ./initialize_agent_session --premium
+                $ ./activate_dream_accelerator --affordable
               </div>
               <div className="text-muted-foreground font-mono text-sm space-y-1">
-                <div>Initializing AI Agent UNIVERSAL-1...</div>
-                <div>Loading neural networks... ████████████ 100%</div>
-                <div>Establishing secure connection... ✓</div>
-                <div>Agent status: <span className="text-chart-2">READY</span></div>
+                <div>Loading AI dreams for everyone...</div>
+                <div>Breaking price barriers... ████████████ 100%</div>
+                <div>Connecting dreamers worldwide... ✓</div>
+                <div>Status: <span className="text-chart-2">DREAMS_READY</span></div>
               </div>
             </div>
 
@@ -428,28 +483,35 @@ function HeroSection() {
                 <div className="space-y-4">
                   <Badge variant="secondary" className="text-sm font-mono border-primary/30">
                     <Activity className="w-3 h-3 mr-2" />
-                    AI_FOR_EVERYONE
+                    DREAMS_FOR_EVERYONE
                   </Badge>
                   
                   <h1 className="text-4xl lg:text-6xl font-bold tracking-tight phosphor-text">
-                    <span className="text-primary text-5xl lg:text-7xl">AGENT</span>
-                    <span className="text-foreground"> FOR </span>
-                    <span className="text-primary text-5xl lg:text-7xl">ALL</span>
+                    <span className="text-foreground">AI SHOULD COST</span>
                     <br />
-                    <span className="text-foreground">PAY </span>
-                    <span className="text-primary text-5xl lg:text-7xl">$1</span>
-                    <span className="text-foreground"> NOT</span>
+                    <span className="text-primary text-5xl lg:text-7xl">JUST $1</span>
                     <br />
+                    <span className="text-foreground">NOT </span>
                     <span className="text-primary text-5xl lg:text-7xl">$100</span>
                     <span className="text-foreground">/MONTH</span>
                   </h1>
                 </div>
                 
                 <p className="text-lg text-muted-foreground max-w-3xl mx-auto font-sans">
-                  <strong>ENOUGH.</strong> AI belongs to <strong>everyone</strong>, not just Silicon Valley elites hoarding intelligence behind $100/month paywalls. 
-                  Get <span className="text-primary font-mono">UNIVERSAL-1</span> — your personal AI agent that's <strong>yours</strong> for 24 hours. 
-                  Break free from subscription slavery. <span className="text-primary">AI democracy starts with $1.</span>
+                  <strong>Your dreams matter.</strong> Poor people have dreams too. 
+                  Maybe <span className="text-primary font-mono">$1 and 24 hours</span> is all someone needs to speed up their dream. 
+                  Why should brilliant minds be stuck in $100/month subscriptions when 
+                  <span className="text-primary"> that money could change lives in countless other ways?</span>
                 </p>
+                
+                <div className="bg-card/50 rounded border border-primary/10 p-6 max-w-2xl mx-auto">
+                  <div className="text-center space-y-2">
+                    <div className="text-primary font-mono text-2xl">Maybe $1 + 24h = Life Change</div>
+                    <div className="text-muted-foreground font-sans text-sm">
+                      For millions of dreamers worldwide who deserve their shot at AI-powered acceleration
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -462,6 +524,15 @@ function HeroSection() {
 function FeaturesSection() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-16">
+      <div className="text-center mb-12">
+        <h2 className="text-3xl font-bold font-mono mb-4">
+          WHY_JUST_A_DOLLAR?
+        </h2>
+        <p className="text-muted-foreground font-sans">
+          Because everyone deserves a chance to accelerate their dreams
+        </p>
+      </div>
+
       <div className="grid md:grid-cols-3 gap-6">
         <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
           <div className="space-y-4">
@@ -470,13 +541,13 @@ function FeaturesSection() {
                 <Clock className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-bold font-mono">24H_SESSION</h3>
-                <div className="text-sm text-muted-foreground font-mono">--no-limits</div>
+                <h3 className="font-bold font-mono">24H_DREAMS</h3>
+                <div className="text-sm text-muted-foreground font-mono">--full-ownership</div>
               </div>
             </div>
             <p className="text-muted-foreground font-sans text-sm">
-              <strong>True ownership</strong> for 24 hours. No rental fees, no usage surveillance, 
-              no corporate middlemen extracting profits from <em>your</em> intelligence.
+              <strong>24 hours to chase your dream.</strong> No monthly chains, no recurring anxiety. 
+              Just pure focus on what matters - <em>your vision, your breakthrough, your moment.</em>
             </p>
           </div>
         </Card>
@@ -488,13 +559,13 @@ function FeaturesSection() {
                 <Code className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-bold font-mono">LIVE_EXECUTION</h3>
-                <div className="text-sm text-muted-foreground font-mono">--verbose</div>
+                <h3 className="font-bold font-mono">DREAM_TRANSPARENCY</h3>
+                <div className="text-sm text-muted-foreground font-mono">--watch-it-work</div>
               </div>
             </div>
             <p className="text-muted-foreground font-sans text-sm">
-              <strong>Complete transparency</strong> — no more black-box corporate AI controlling you. 
-              <em>You</em> watch every decision, <em>you</em> control every action, <em>you</em> own every result.
+              <strong>See every step of your journey.</strong> No black boxes hiding your progress. 
+              <em>You</em> watch your AI work, <em>you</em> understand each decision, <em>you</em> learn as you grow.
             </p>
           </div>
         </Card>
@@ -506,13 +577,13 @@ function FeaturesSection() {
                 <Shield className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-bold font-mono">SECURE_ISOLATION</h3>
-                <div className="text-sm text-muted-foreground font-mono">--sandboxed</div>
+                <h3 className="font-bold font-mono">DREAM_PRIVACY</h3>
+                <div className="text-sm text-muted-foreground font-mono">--yours-alone</div>
               </div>
             </div>
             <p className="text-muted-foreground font-sans text-sm">
-              <strong>Your privacy fortress.</strong> Isolated sessions, zero tracking, 
-              no Big Tech surveillance. What you create is <em>yours alone</em> — not theirs to monetize.
+              <strong>Your dreams are sacred.</strong> Private sessions, zero tracking, 
+              no corporate surveillance. What you create is <em>yours to keep</em> - not ours to monetize.
             </p>
           </div>
         </Card>
@@ -527,66 +598,66 @@ function SpecsSection() {
       <div className="max-w-6xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold font-mono mb-4">
-            TECHNICAL_SPECIFICATIONS
+            DREAM_SPECIFICATIONS
           </h2>
           <p className="text-muted-foreground font-sans">
-            Enterprise-grade power in the hands of real people, not just corporate overlords
+            Enterprise-level power at coffee shop pricing
           </p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
           <Card className="bg-background/50 border-primary/20 p-6">
             <h3 className="text-xl font-bold font-mono mb-4 text-primary">
-              AGENT_CAPABILITIES
+              AI_CAPABILITIES
             </h3>
             <div className="space-y-3 font-mono text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Browser Control:</span>
-                <span className="text-chart-2">FULL_AUTOMATION</span>
+                <span className="text-muted-foreground">Dream Analysis:</span>
+                <span className="text-chart-2">DEEP_LEARNING</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Task Analysis:</span>
-                <span className="text-chart-2">NEURAL_NETWORKS</span>
+                <span className="text-muted-foreground">Task Automation:</span>
+                <span className="text-chart-2">FULL_BROWSER</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Response Time:</span>
-                <span className="text-chart-2">SUB_SECOND</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Concurrency:</span>
-                <span className="text-chart-2">UNLIMITED</span>
+                <span className="text-muted-foreground">Response Speed:</span>
+                <span className="text-chart-2">INSTANT</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Learning Mode:</span>
-                <span className="text-chart-2">ADAPTIVE</span>
+                <span className="text-chart-2">YOUR_STYLE</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Dream Scaling:</span>
+                <span className="text-chart-2">UNLIMITED</span>
               </div>
             </div>
           </Card>
 
           <Card className="bg-background/50 border-primary/20 p-6">
             <h3 className="text-xl font-bold font-mono mb-4 text-primary">
-              SYSTEM_ARCHITECTURE
+              ACCESSIBILITY_PROMISE
             </h3>
             <div className="space-y-3 font-mono text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Runtime:</span>
-                <span className="text-foreground">CLOUD_NATIVE</span>
+                <span className="text-muted-foreground">Entry Price:</span>
+                <span className="text-foreground">JUST_ONE_DOLLAR</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Security:</span>
-                <span className="text-foreground">ENTERPRISE_GRADE</span>
+                <span className="text-muted-foreground">Dream Equality:</span>
+                <span className="text-foreground">FOR_EVERYONE</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Scaling:</span>
-                <span className="text-foreground">AUTO_HORIZONTAL</span>
+                <span className="text-muted-foreground">No Subscriptions:</span>
+                <span className="text-foreground">NEVER</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Monitoring:</span>
-                <span className="text-foreground">REAL_TIME</span>
+                <span className="text-muted-foreground">Hidden Fees:</span>
+                <span className="text-foreground">ZERO</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Uptime SLA:</span>
-                <span className="text-foreground">99.9%</span>
+                <span className="text-muted-foreground">Dream Support:</span>
+                <span className="text-foreground">24/7</span>
               </div>
             </div>
           </Card>
@@ -602,10 +673,10 @@ function PricingSection({ onStartPayment }: { onStartPayment: () => void }) {
       <div className="text-center space-y-8">
         <div className="space-y-4">
           <h2 className="text-4xl font-bold font-mono">
-            READY_TO_DEPLOY?
+            READY_TO_DREAM?
           </h2>
           <p className="text-xl text-muted-foreground font-sans max-w-2xl mx-auto">
-            <strong>AI for everyone</strong>, not just the wealthy. <span className="text-primary">One dollar breaks down their barriers.</span>
+            <strong>Just one dollar</strong> to accelerate your dreams. <span className="text-primary">Because that's all it should cost.</span>
           </p>
         </div>
         
@@ -616,7 +687,7 @@ function PricingSection({ onStartPayment }: { onStartPayment: () => void }) {
               <div className="w-3 h-3 rounded-full bg-chart-3" />
               <div className="w-3 h-3 rounded-full bg-chart-2" />
               <div className="ml-4 text-sm font-mono text-muted-foreground">
-                pricing_config.json
+                dream_pricing.json
               </div>
             </div>
           </div>
@@ -625,16 +696,16 @@ function PricingSection({ onStartPayment }: { onStartPayment: () => void }) {
             <div className="text-center space-y-4">
               <div className="text-6xl font-bold text-primary font-mono phosphor-text">$1</div>
               <div className="text-lg font-mono text-muted-foreground">
-                24_HOUR_SESSION
+                24_HOUR_DREAM_SESSION
               </div>
               
               <div className="bg-card/50 rounded border border-primary/10 p-4 space-y-2 text-left font-mono text-sm">
-                <div className="text-muted-foreground">// AI Revolution includes:</div>
-                <div className="text-chart-2">✓ Full UNIVERSAL-1 ownership (not rental)</div>
-                <div className="text-chart-2">✓ Zero usage restrictions (unlimited power)</div>
-                <div className="text-chart-2">✓ Complete browser control (true automation)</div>
-                <div className="text-chart-2">✓ No corporate monitoring (your data only)</div>
-                <div className="text-chart-2">✓ Privacy-first isolation (Big Tech blocked)</div>
+                <div className="text-muted-foreground">// Dream Package includes:</div>
+                <div className="text-chart-2">✓ Full AI agent ownership (24 hours yours)</div>
+                <div className="text-chart-2">✓ Unlimited dream exploration (no restrictions)</div>
+                <div className="text-chart-2">✓ Complete browser automation (real tasks)</div>
+                <div className="text-chart-2">✓ Zero surveillance (your privacy protected)</div>
+                <div className="text-chart-2">✓ Dream acceleration guaranteed (or refund)</div>
               </div>
               
               <Button 
@@ -644,11 +715,16 @@ function PricingSection({ onStartPayment }: { onStartPayment: () => void }) {
                 data-testid="button-initialize-payment"
               >
                 <Command className="w-5 h-5 mr-2" />
-                BREAK THE AI GATEKEEPERS • $1
+                START YOUR DREAM • $1
               </Button>
             </div>
           </div>
         </Card>
+
+        <div className="text-sm text-muted-foreground font-mono space-y-1">
+          <div>Dreams for everyone • Not just the wealthy • Your breakthrough awaits</div>
+          <div>One dollar can change a life • Why should AI cost more?</div>
+        </div>
       </div>
     </div>
   );
@@ -665,7 +741,7 @@ function ContactSection() {
               <div className="w-3 h-3 rounded-full bg-chart-3" />
               <div className="w-3 h-3 rounded-full bg-chart-2" />
               <div className="ml-4 text-sm font-mono text-muted-foreground">
-                contact_support.sh
+                dream_support.sh
               </div>
             </div>
           </div>
@@ -673,11 +749,11 @@ function ContactSection() {
           <div className="p-6 space-y-4">
             <div className="space-y-3">
               <div className="text-primary font-mono text-sm">
-                $ contact --support --agent-for-all
+                $ contact --support --dream-acceleration
               </div>
               <div className="text-muted-foreground font-mono text-sm space-y-2">
-                <div>Initializing contact protocols...</div>
-                <div>Democratic AI support channels: <span className="text-chart-2">ACTIVE</span></div>
+                <div>Connecting to dream support network...</div>
+                <div>Dream acceleration support: <span className="text-chart-2">ACTIVE</span></div>
               </div>
             </div>
             
@@ -700,24 +776,24 @@ function ContactSection() {
                 <Mail className="w-4 h-4 text-primary" />
                 <span className="font-mono text-sm text-muted-foreground">--email</span>
                 <a 
-                  href="mailto:support@agentforall.ai" 
+                  href="mailto:dreams@agentforall.ai" 
                   className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
                   data-testid="link-email"
                 >
-                  support@agentforall.ai
+                  dreams@agentforall.ai
                 </a>
               </div>
             </div>
             
             <div className="text-xs font-mono text-muted-foreground">
-              Contact channels established • AI democracy support ready
+              Dream support channels active • Affordable AI advocacy ready
             </div>
           </div>
         </Card>
         
         <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-          <div>AGENT FOR ALL © 2025 • <span className="text-primary">Liberating AI from corporate control</span></div>
-          <div>Built by rebels who believe AI should empower people, not exploit them</div>
+          <div>AGENT FOR ALL © 2025 • <span className="text-primary">Making AI dreams accessible to everyone</span></div>
+          <div>Built by dreamers who believe $1 can change a life</div>
         </div>
       </div>
     </div>
