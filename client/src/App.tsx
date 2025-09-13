@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { CommandTerminalInterface } from "@/components/command/CommandTerminalInterface";
+import { MoveableChatToggle } from "@/components/chat/MoveableChatToggle";
+import { ViralCommandInterface } from "@/components/viral/ViralCommandInterface";
 import { AgentInterface } from "@/components/agent/AgentInterface";
 import { PaymentSuccess } from "@/components/payment/PaymentSuccess";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
@@ -15,10 +17,11 @@ import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Rocket, Sparkles, MessageCircle } from "lucide-react";
 
 // Component to handle successful Stripe Checkout return
 function CheckoutSuccess() {
+  const [location, setLocation] = useLocation();
   const [sessionData, setSessionData] = useState<{
     sessionId: string;
     agentId: string;
@@ -41,7 +44,7 @@ function CheckoutSuccess() {
           variant: "destructive",
         });
         // Redirect to home after error
-        setTimeout(() => window.location.href = '/', 2000);
+        setTimeout(() => setLocation('/'), 2000);
         return;
       }
 
@@ -79,7 +82,7 @@ function CheckoutSuccess() {
           variant: "destructive",
         });
         // Redirect to home after error
-        setTimeout(() => window.location.href = '/', 3000);
+        setTimeout(() => setLocation('/'), 3000);
       } finally {
         setIsLoading(false);
       }
@@ -90,8 +93,8 @@ function CheckoutSuccess() {
 
   const handleEnterAgent = () => {
     if (sessionData) {
-      // Use URL-based navigation to agent interface
-      window.location.href = `/agent?id=${sessionData.agentId}`;
+      // Use wouter navigation to agent interface
+      setLocation(`/agent?id=${sessionData.agentId}`);
     }
   };
 
@@ -181,10 +184,67 @@ function AgentAccess() {
 }
 
 function Router() {
+  const [location, setLocation] = useLocation();
+  const [viralCommand, setViralCommand] = useState<{command: string, data?: any} | null>(null);
+  const [showViralInterface, setShowViralInterface] = useState(false);
+
   const handleStartPayment = () => {
     console.log('Starting payment flow');
     // Navigate to payment page using wouter
-    window.location.href = '/payment';
+    setLocation('/payment');
+  };
+
+  const handleViralCommand = (command: string, data?: any) => {
+    console.log('Viral command triggered:', command, data);
+
+    // Handle external links directly without full-page interface
+    if (command === 'open_twitter') {
+      window.open('https://twitter.com/agentforall', '_blank', 'noopener,noreferrer');
+      return;
+    } else if (command === 'open_instagram') {
+      window.open('https://instagram.com/agentforall.ai', '_blank', 'noopener,noreferrer');
+      return;
+    } else if (command === 'social_links') {
+      // Open social media links in new tabs
+      window.open('https://twitter.com/agentforall', '_blank', 'noopener,noreferrer');
+      window.open('https://instagram.com/agentforall.ai', '_blank', 'noopener,noreferrer');
+      return;
+    } else if (command === 'share_content') {
+      // Handle share content without full-page interface
+      console.log('Creating shareable content');
+      return;
+    } else if (command === 'tell_friends') {
+      // Handle tell friends without full-page interface  
+      console.log('Generating referral content');
+      return;
+    }
+
+    // Only show viral interface for transform commands (bet_on_*, lucky_*, etc.)
+    if (!command.startsWith('bet_on_') && command !== 'lucky_dollar' && command !== 'revolution_mode') {
+      console.log('Command does not require viral interface:', command);
+      return;
+    }
+
+    // Only show full-page viral interface for transform commands
+    setViralCommand({ command, data });
+    setShowViralInterface(true);
+  };
+
+  const handleViralPayment = (method: string) => {
+    console.log('Payment method selected:', method);
+    if (method === 'stripe') {
+      setLocation('/payment');
+    } else {
+      // Handle crypto payments
+      console.log(`Processing ${method} payment`);
+      // For now, redirect to stripe until crypto is implemented
+      setLocation('/payment');
+    }
+  };
+
+  const handleBackToHome = () => {
+    setShowViralInterface(false);
+    setViralCommand(null);
   };
 
   return (
@@ -197,14 +257,65 @@ function Router() {
       <Route path="/payment" component={() => (
         <PaymentFlow onPaymentSuccess={() => {}} />
       )} />
-      <Route path="/" component={() => (
-        <div>
-          <div className="fixed top-4 right-4 z-50">
-            <ThemeToggle />
+      <Route path="/" component={() => {
+        if (showViralInterface && viralCommand) {
+          return (
+            <div>
+              <div className="fixed top-4 right-4 z-50">
+                <ThemeToggle />
+              </div>
+              <ViralCommandInterface 
+                command={viralCommand.command}
+                data={viralCommand.data}
+                onBack={handleBackToHome}
+                onPayment={handleViralPayment}
+              />
+            </div>
+          );
+        }
+        
+        return (
+          <div className="min-h-screen bg-background text-foreground">
+            <div className="fixed top-4 right-4 z-50">
+              <ThemeToggle />
+            </div>
+            
+            {/* Original Terminal Interface - but hidden/replaced with viral mode */}
+            <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines">
+              {/* Welcome message for new users */}
+              <div className="flex items-center justify-center min-h-screen p-6">
+                <div className="text-center space-y-8 max-w-2xl">
+                  <div className="space-y-4">
+                    <Rocket className="w-16 h-16 mx-auto text-primary" />
+                    <h1 className="text-4xl lg:text-6xl font-bold tracking-tight phosphor-text">
+                      <span className="text-foreground">AI FOR </span>
+                      <span className="text-primary text-5xl lg:text-7xl">$1</span>
+                    </h1>
+                    <p className="text-lg text-muted-foreground">
+                      AI dreams shouldn't cost more than a coffee
+                    </p>
+                  </div>
+                  
+                  <div className="bg-card/50 rounded border border-primary/10 p-6 space-y-4">
+                    <div className="text-primary font-mono text-xl flex items-center justify-center gap-2"><Sparkles className="w-5 h-5" />Try Our Viral Commands!</div>
+                    <div className="text-muted-foreground text-sm space-y-2">
+                      <div>• "bet a dollar on your dog"</div>
+                      <div>• "bet a dollar on your cat"</div>
+                      <div>• "follow us" for social media</div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+Look for the chat toggle in the corner!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Moveable Chat Toggle */}
+            <MoveableChatToggle onViralCommand={handleViralCommand} />
           </div>
-          <CommandTerminalInterface onStartPayment={handleStartPayment} />
-        </div>
-      )} />
+        );
+      }} />
       <Route path="/classic" component={() => (
         <div>
           <div className="fixed top-4 right-4 z-50">
