@@ -17,7 +17,7 @@ import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
-import { Loader2, Rocket, Sparkles, MessageCircle } from "lucide-react";
+import { Loader2, Rocket, Sparkles, MessageCircle, Terminal } from "lucide-react";
 
 // Component to handle successful Stripe Checkout return
 function CheckoutSuccess() {
@@ -194,40 +194,18 @@ function Router() {
     setLocation('/payment');
   };
 
-  const handleViralCommand = (command: string, data?: any) => {
-    console.log('Viral command triggered:', command, data);
+  const handleDiscoveryCommand = (command: string, data?: any) => {
+    console.log('Discovery command triggered:', command, data);
 
-    // Handle external links directly without full-page interface
-    if (command === 'open_twitter') {
-      window.open('https://twitter.com/agentforall', '_blank', 'noopener,noreferrer');
-      return;
-    } else if (command === 'open_instagram') {
-      window.open('https://instagram.com/agentforall.ai', '_blank', 'noopener,noreferrer');
-      return;
-    } else if (command === 'social_links') {
-      // Open social media links in new tabs
-      window.open('https://twitter.com/agentforall', '_blank', 'noopener,noreferrer');
-      window.open('https://instagram.com/agentforall.ai', '_blank', 'noopener,noreferrer');
-      return;
-    } else if (command === 'share_content') {
-      // Handle share content without full-page interface
-      console.log('Creating shareable content');
-      return;
-    } else if (command === 'tell_friends') {
-      // Handle tell friends without full-page interface  
-      console.log('Generating referral content');
-      return;
+    // Handle discovery commands that show full-page sections
+    if (command === 'show_hero' || command === 'show_features' || command === 'show_pricing' || 
+        command === 'show_specs' || command === 'show_contact' || command === 'show_all') {
+      setViralCommand({ command, data });
+      setShowViralInterface(true);
+    } else {
+      // For other commands, just log them (themes, etc.)
+      console.log('Command does not require full interface:', command);
     }
-
-    // Only show viral interface for transform commands (bet_on_*, lucky_*, etc.)
-    if (!command.startsWith('bet_on_') && command !== 'lucky_dollar' && command !== 'revolution_mode') {
-      console.log('Command does not require viral interface:', command);
-      return;
-    }
-
-    // Only show full-page viral interface for transform commands
-    setViralCommand({ command, data });
-    setShowViralInterface(true);
   };
 
   const handleViralPayment = (method: string) => {
@@ -297,11 +275,17 @@ function Router() {
                   </div>
                   
                   <div className="bg-card/50 rounded border border-primary/10 p-6 space-y-4">
-                    <div className="text-primary font-mono text-xl flex items-center justify-center gap-2"><Sparkles className="w-5 h-5" />Try Our Viral Commands!</div>
+                    <button 
+                      onClick={() => handleDiscoveryCommand('h')}
+                      data-testid="button-quick-hero"
+                      className="text-primary font-mono text-xl flex items-center justify-center gap-2 hover:text-primary/80 transition-colors w-full"
+                    >
+                      <Terminal className="w-5 h-5" />Explore Our Platform!
+                    </button>
                     <div className="text-muted-foreground text-sm space-y-2">
-                      <div>• "bet a dollar on your dog"</div>
-                      <div>• "bet a dollar on your cat"</div>
-                      <div>• "follow us" for social media</div>
+                      <div>• "h" for hero section</div>
+                      <div>• "p" for pricing</div>
+                      <div>• "f" for features</div>
                     </div>
                     <div className="text-xs text-muted-foreground">
 Look for the chat toggle in the corner!
@@ -312,7 +296,7 @@ Look for the chat toggle in the corner!
             </div>
             
             {/* Moveable Chat Toggle */}
-            <MoveableChatToggle onViralCommand={handleViralCommand} />
+            <MoveableChatToggle onViralCommand={handleDiscoveryCommand} />
           </div>
         );
       }} />

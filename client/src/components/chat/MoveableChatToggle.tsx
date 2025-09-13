@@ -5,28 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Terminal, 
   MessageSquare, 
-  Maximize2, 
-  Minimize2, 
-  X,
+  Minimize2,
   Zap,
-  Dog,
-  Cat,
-  Twitter,
-  Instagram,
-  Share,
-  Bitcoin,
+  Code,
+  CreditCard,
+  Shield,
+  Mail,
   ChevronRight,
-  Rabbit,
-  Fish,
-  Smartphone,
-  Camera,
-  Send,
-  Users,
-  Dice6,
-  Trophy,
-  Flame,
-  Lightbulb,
-  Rocket
+  Activity
 } from 'lucide-react';
 
 interface MoveableChatToggleProps {
@@ -113,92 +99,99 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
     const cmd = command.toLowerCase().trim();
     addToHistory(`> ${command}`, true, 'command');
 
-    // VIRAL COMMANDS - Animal Betting
-    if (cmd.includes('bet') && cmd.includes('dollar') && cmd.includes('dog')) {
-      setIsLoading(true);
-      addToHistory('Generating your dog\'s encouragement...', false, 'success');
-      onViralCommand('bet_on_dog', { animal: 'dog', amount: 1 });
-      setTimeout(() => setIsLoading(false), 1500);
-      
-    } else if (cmd.includes('bet') && cmd.includes('dollar') && cmd.includes('cat')) {
-      setIsLoading(true);
-      addToHistory('Your cat believes in you...', false, 'success');
-      onViralCommand('bet_on_cat', { animal: 'cat', amount: 1 });
-      setTimeout(() => setIsLoading(false), 1500);
-      
-    } else if (cmd.includes('bet') && cmd.includes('dollar') && cmd.includes('hamster')) {
-      setIsLoading(true);
-      addToHistory('Even hamsters dream big...', false, 'success');
-      onViralCommand('bet_on_hamster', { animal: 'hamster', amount: 1 });
-      setTimeout(() => setIsLoading(false), 1500);
-      
-    } else if (cmd.includes('bet') && cmd.includes('dollar') && cmd.includes('fish')) {
-      setIsLoading(true);
-      addToHistory('Your fish swims toward your dreams...', false, 'success');
-      onViralCommand('bet_on_fish', { animal: 'fish', amount: 1 });
-      setTimeout(() => setIsLoading(false), 1500);
+    // Short command aliases
+    const aliasMap: { [key: string]: string } = {
+      'h': 'hero',
+      'f': 'features', 
+      'p': 'pricing',
+      's': 'specs',
+      'c': 'contact',
+      'all': 'reveal all',
+      't': 'themes'
+    };
 
-    // SOCIAL MEDIA COMMANDS
-    } else if (cmd === 'follow us' || cmd === 'social' || cmd === 'links') {
-      addToHistory('Opening social media links...', false, 'success');
-      onViralCommand('social_links');
-      
-    } else if (cmd === 'twitter' || cmd === 'x') {
-      addToHistory('Taking you to Twitter...', false, 'success');
-      onViralCommand('open_twitter');
-      
-    } else if (cmd === 'instagram' || cmd === 'insta') {
-      addToHistory('Opening Instagram...', false, 'success');
-      onViralCommand('open_instagram');
-      
-    } else if (cmd.includes('share') || cmd === 'share this') {
-      addToHistory('Creating shareable content...', false, 'success');
-      onViralCommand('share_content');
-      
-    } else if (cmd.includes('tell friends') || cmd.includes('invite')) {
-      addToHistory('Generating referral content...', false, 'success');
-      onViralCommand('tell_friends');
+    const actualCmd = aliasMap[cmd] || cmd;
 
-    // QUICK PAYMENT COMMANDS
-    } else if (cmd === 'lucky dollar' || cmd === 'lucky') {
+    // DISCOVERY COMMANDS - Web App Sections
+    if (actualCmd === 'hero' || actualCmd === 'main') {
       setIsLoading(true);
-      addToHistory('Feeling lucky? Your dreams are the best bet!', false, 'success');
-      onViralCommand('lucky_dollar');
-      setTimeout(() => setIsLoading(false), 1500);
+      addToHistory('Loading hero section...', false, 'success');
+      onViralCommand('show_hero');
+      setTimeout(() => setIsLoading(false), 1000);
       
-    } else if (cmd.includes('dollar challenge') || cmd === 'challenge') {
-      addToHistory('Challenge accepted! Dare your friends...', false, 'success');
-      onViralCommand('dollar_challenge');
+    } else if (actualCmd === 'features') {
+      setIsLoading(true);
+      addToHistory('Loading features...', false, 'success');
+      onViralCommand('show_features');
+      setTimeout(() => setIsLoading(false), 1000);
+      
+    } else if (actualCmd === 'pricing') {
+      setIsLoading(true);
+      addToHistory('Loading pricing...', false, 'success');
+      onViralCommand('show_pricing');
+      setTimeout(() => setIsLoading(false), 1000);
+      
+    } else if (actualCmd === 'specs') {
+      setIsLoading(true);
+      addToHistory('Loading technical specs...', false, 'success');
+      onViralCommand('show_specs');
+      setTimeout(() => setIsLoading(false), 1000);
+      
+    } else if (actualCmd === 'contact') {
+      setIsLoading(true);
+      addToHistory('Loading contact info...', false, 'success');
+      onViralCommand('show_contact');
+      setTimeout(() => setIsLoading(false), 1000);
+      
+    } else if (actualCmd === 'reveal all' || actualCmd === 'all') {
+      addToHistory('Revealing complete interface...', false, 'success');
+      onViralCommand('show_all');
+      
+    } else if (actualCmd === 'themes') {
+      addToHistory('Available themes:', false, 'success');
+      addToHistory('  default - Default Blue', false);
+      addToHistory('  neon    - Neon Green', false);
+      addToHistory('  purple  - Electric Purple', false);
+      addToHistory('Usage: theme <name>', false);
 
     // HELP COMMAND
     } else if (cmd === 'help' || cmd === '?') {
-      addToHistory('VIRAL COMMANDS:', false, 'success');
-      addToHistory('  bet a dollar on your dog', false);
-      addToHistory('  bet a dollar on your cat', false);
-      addToHistory('  bet a dollar on your hamster', false);
-      addToHistory('  lucky dollar', false);
-      addToHistory('  follow us', false);
-      addToHistory('  twitter', false);
-      addToHistory('  share this', false);
+      addToHistory('DISCOVERY COMMANDS:', false, 'success');
+      addToHistory('  h        - Show hero section', false);
+      addToHistory('  f        - Show features', false);
+      addToHistory('  p        - Show pricing', false);
+      addToHistory('  s        - Show specs', false);
+      addToHistory('  c        - Show contact', false);
+      addToHistory('  all      - Reveal everything', false);
+      addToHistory('  t        - List themes', false);
       addToHistory('', false);
-      addToHistory('Try: "bet a dollar on your dog" for viral magic!', false);
+      addToHistory('Try: "h" for hero or "p" for pricing!', false);
 
-    // EASTER EGG COMMANDS  
-    } else if (cmd === 'revolution' || cmd === 'viva la revolución') {
-      addToHistory('VIVA LA REVOLUCIÓN! AI FOR ALL!', false, 'success');
-      onViralCommand('revolution_mode');
+    // Handle theme commands
+    } else if (cmd.startsWith('theme ')) {
+      const themeName = cmd.split(' ')[1];
+      addToHistory(`Switching to ${themeName} theme...`, false, 'success');
+      // Theme switching logic would go here
       
     } else {
       // Try to understand intent
-      if (cmd.includes('dog') || cmd.includes('puppy')) {
-        addToHistory('Did you mean "bet a dollar on your dog"?', false, 'error');
-      } else if (cmd.includes('cat') || cmd.includes('kitty')) {
-        addToHistory('Try "bet a dollar on your cat"!', false, 'error');
-      } else if (cmd.includes('social') || cmd.includes('follow')) {
-        addToHistory('Try "follow us" for social media links!', false, 'error');
+      if (cmd.includes('show') || cmd.includes('display')) {
+        if (cmd.includes('hero')) {
+          executeViralCommand('h');
+        } else if (cmd.includes('feature')) {
+          executeViralCommand('f');
+        } else if (cmd.includes('pricing')) {
+          executeViralCommand('p');
+        } else if (cmd.includes('specs')) {
+          executeViralCommand('s');
+        } else if (cmd.includes('contact')) {
+          executeViralCommand('c');
+        } else {
+          addToHistory('Try: h, f, p, s, c or "help"', false, 'error');
+        }
       } else {
         addToHistory(`Command not recognized: ${command}`, false, 'error');
-        addToHistory('Type "help" to see viral commands!', false);
+        addToHistory('Type "help" or try: h, f, p, s, c', false);
       }
     }
   };
@@ -217,7 +210,7 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
         // Show welcome message when first opened
         setTimeout(() => {
           addToHistory('Welcome to Agent For All!', false, 'success');
-          addToHistory('Type "bet a dollar on your dog" to go viral!', false);
+          addToHistory('Type "h" for hero, "p" for pricing!', false);
           addToHistory('Or try "help" for all commands.', false);
         }, 100);
       }
@@ -244,10 +237,10 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
         >
           <MessageSquare className="w-5 h-5 text-primary" />
           <span className="text-sm font-mono text-primary hidden sm:inline">
-            Agent Chat
+            Explore AI
           </span>
           <Badge variant="secondary" className="text-xs animate-pulse">
-            NEW
+            $1
           </Badge>
         </div>
       ) : (
@@ -264,7 +257,7 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
                 <div className="w-3 h-3 rounded-full bg-chart-3" />
                 <div className="w-3 h-3 rounded-full bg-destructive" />
                 <div className="ml-2 text-sm font-mono text-primary">
-                  viral_commands.exe
+                  discovery_terminal.exe
                 </div>
               </div>
               <Button 
@@ -287,9 +280,9 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
             >
               {history.length === 0 && (
                 <div className="text-center space-y-2 text-muted-foreground">
-                  <Rocket className="text-primary w-6 h-6 mx-auto" />
-                  <div>Ready for viral commands!</div>
-                  <div className="text-xs">Try "bet a dollar on your dog"</div>
+                  <Terminal className="w-6 h-6 text-primary mx-auto" />
+                  <div>Explore our AI platform!</div>
+                  <div className="text-xs">Try "h" for hero or "p" for pricing</div>
                 </div>
               )}
               
@@ -304,7 +297,7 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <span className="ml-2">Generating magic...</span>
+                  <span className="ml-2">Loading section...</span>
                 </div>
               )}
             </div>
@@ -321,7 +314,7 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
                   onKeyDown={handleKeyDown}
                   disabled={isLoading}
                   className="flex-1 bg-transparent border-none outline-none text-foreground font-mono placeholder:text-muted-foreground text-sm"
-                  placeholder="Try: bet a dollar on your dog"
+                  placeholder="Try: h, f, p, s, or c"
                   data-testid="input-viral-command"
                 />
               </div>
@@ -331,40 +324,40 @@ export function MoveableChatToggle({ onViralCommand }: MoveableChatToggleProps) 
                 <Button 
                   size="sm" 
                   variant="outline" 
-                  onClick={() => executeViralCommand('bet a dollar on your dog')}
+                  onClick={() => executeViralCommand('h')}
                   disabled={isLoading}
                   className="text-xs h-6 px-2"
-                  data-testid="button-quick-dog"
+                  data-testid="button-quick-hero"
                 >
-                  <Dog className="w-3 h-3 mr-1" />
-                  Dog
+                  <Zap className="w-3 h-3 mr-1" />
+                  Hero
                 </Button>
                 <Button 
                   size="sm" 
                   variant="outline" 
-                  onClick={() => executeViralCommand('bet a dollar on your cat')}
+                  onClick={() => executeViralCommand('f')}
                   disabled={isLoading}
                   className="text-xs h-6 px-2"
-                  data-testid="button-quick-cat"
+                  data-testid="button-quick-features"
                 >
-                  <Cat className="w-3 h-3 mr-1" />
-                  Cat
+                  <Code className="w-3 h-3 mr-1" />
+                  Features
                 </Button>
                 <Button 
                   size="sm" 
                   variant="outline" 
-                  onClick={() => executeViralCommand('follow us')}
+                  onClick={() => executeViralCommand('p')}
                   disabled={isLoading}
                   className="text-xs h-6 px-2"
-                  data-testid="button-quick-social"
+                  data-testid="button-quick-pricing"
                 >
-                  <Share className="w-3 h-3 mr-1" />
-                  Social
+                  <CreditCard className="w-3 h-3 mr-1" />
+                  Pricing
                 </Button>
               </div>
               
               <div className="text-xs text-muted-foreground text-center">
-Drag me around • Try viral commands!
+                Drag me around • Discover our platform!
               </div>
             </div>
           </div>

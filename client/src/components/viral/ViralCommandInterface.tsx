@@ -108,6 +108,43 @@ export function ViralCommandInterface({ command, data, onBack, onPayment }: Vira
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   
+  // Handle discovery commands - return simple placeholder for now
+  if (command.includes('show_')) {
+    return (
+      <div className="min-h-screen bg-background text-foreground font-mono">
+        {/* Header */}
+        <div className="bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 sticky top-0 z-50">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <Button 
+              variant="ghost" 
+              onClick={onBack}
+              className="text-muted-foreground hover:text-primary"
+              data-testid="button-back-home"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to chat
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              DISCOVERY_MODE_ACTIVE
+            </div>
+          </div>
+        </div>
+
+        {/* Simple placeholder for discovery content */}
+        <div className="flex-1 p-6">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="text-2xl text-primary mb-4">Discovery Mode</div>
+            <div className="text-muted-foreground">Command: {command}</div>
+            <div className="text-sm text-muted-foreground mt-4">
+              This will show the {command.replace('show_', '')} section
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // For viral commands, continue with existing logic
   // Determine which content to show based on command
   const getContentKey = () => {
     if (command.includes('dog')) return 'dog';
