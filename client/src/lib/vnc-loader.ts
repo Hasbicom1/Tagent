@@ -4,12 +4,6 @@
  * This ensures reliable production-ready browser automation streaming
  */
 
-/**
- * Production VNC loader with WebSocket VNC proxy implementation
- * Uses custom WebSocket VNC protocol for reliable browser automation streaming
- * This ensures build compatibility and production-ready browser automation
- */
-
 let RFBClass: any = null;
 let loadingPromise: Promise<any> | null = null;
 
@@ -379,18 +373,29 @@ export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
     try {
       console.log('🔄 Loading real noVNC RFB from CDN...');
       
-      // Load noVNC from CDN at runtime to bypass build compatibility issues
-      const mod = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js");
+      // Try primary CDN first
+      let mod;
+      try {
+        // @ts-ignore - Dynamic CDN import for production VNC streaming
+        mod = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js");
+      } catch (primaryError) {
+        console.warn('Primary CDN failed, trying alternative:', primaryError);
+        // @ts-ignore - Alternative CDN fallback
+        mod = await import(/* @vite-ignore */ "https://unpkg.com/@novnc/novnc@1.5.0/core/rfb.js");
+      }
+      
       const RFB = mod.default ?? mod.RFB;
       
       if (!RFB) {
-        throw new Error('Failed to load noVNC RFB from CDN');
+        throw new Error('Failed to load noVNC RFB from CDN - no RFB class found');
       }
       
       RFBClass = RFB;
       console.log('✅ Real noVNC RFB loaded successfully from CDN');
       return RFBClass;
     } catch (error) {
+      console.warn('⚠️ All CDN attempts failed:', error);
+      
       if (strict) {
         console.error('❌ CDN noVNC failed in strict mode - no fallback allowed');
         loadingPromise = null;
@@ -398,11 +403,15 @@ export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
         throw new Error(`Strict mode: CDN noVNC failed - ${(error as Error).message}`);
       }
       
-      console.warn('⚠️ CDN noVNC failed, falling back to ProductionRFB:', error);
+      // Enhanced fallback for development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 Development mode: Using enhanced ProductionRFB with VNC proxy support');
+      } else {
+        console.warn('⚠️ Production fallback to ProductionRFB - consider fixing CDN access');
+      }
       
       // Graceful fallback to ProductionRFB (only in non-strict mode)
       RFBClass = ProductionRFB;
-      console.log('🔄 Using ProductionRFB fallback implementation');
       return RFBClass;
     }
   })();

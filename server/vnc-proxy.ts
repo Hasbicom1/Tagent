@@ -141,6 +141,20 @@ export class VNCProxy {
 
         // CRITICAL SECURITY FIX: Cookie-based session authentication
         const sessionId = this.extractSessionFromCookie(cookieHeader);
+        
+        // Development mode: Allow connections without session store
+        if (!sessionId && !this.sessionStore && process.env.NODE_ENV === 'development') {
+          console.warn('⚠️  VNC: Development mode - bypassing session authentication');
+          // Skip session validation for development
+          this.wss!.handleUpgrade(request, socket, head, (ws) => {
+            (ws as any).sessionId = 'dev-session';
+            (ws as any).agentId = 'dev-agent';
+            (ws as any).clientIP = clientIP;
+            this.wss!.emit('connection', ws, request);
+          });
+          return;
+        }
+        
         if (!sessionId) {
           logSecurityEvent('vnc_security_violation', {
             clientIP,
