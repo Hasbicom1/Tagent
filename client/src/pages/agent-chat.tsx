@@ -23,6 +23,7 @@ import {
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
+import { VNCClient } from '@/components/vnc/VNCClient';
 
 interface Message {
   id: string;
@@ -52,6 +53,11 @@ export default function AgentChat() {
   const [liveViewVisible, setLiveViewVisible] = useState(true);
   const [liveViewFullscreen, setLiveViewFullscreen] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [vncConnection, setVncConnection] = useState<{
+    webSocketURL?: string;
+    vncToken?: string;
+    isActive: boolean;
+  }>({ isActive: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -91,7 +97,7 @@ export default function AgentChat() {
     return () => {
       disconnect();
     };
-  }, [sessionInfo, agentId, connectWebSocket, subscribe, disconnect]);
+  }, [sessionInfo, agentId, connectWebSocket, subscribeToSession, disconnect]);
 
   useEffect(() => {
     scrollToBottom();
@@ -253,27 +259,17 @@ export default function AgentChat() {
       </div>
       
       {liveViewVisible && (
-        <div 
-          ref={vncContainerRef} 
-          className="flex-1 bg-black rounded-b-lg overflow-hidden"
-          data-testid="container-vnc-view"
-        >
-          {/* VNC Client will be rendered here */}
-          <div className="w-full h-full flex items-center justify-center text-white">
-            <div className="text-center">
-              <Monitor className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-semibold mb-2">Browser Live View</p>
-              <p className="text-sm opacity-75">
-                VNC stream will appear here when agent starts browser automation
-              </p>
-              {currentTaskId && (
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm">
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                  Initializing browser session...
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="flex-1 rounded-b-lg overflow-hidden">
+          <VNCClient
+            sessionId={sessionInfo.sessionId}
+            webSocketURL={vncConnection.webSocketURL}
+            vncToken={vncConnection.vncToken}
+            className="h-full"
+            onConnectionStateChange={(connected) => {
+              setVncConnection(prev => ({ ...prev, isActive: connected }));
+            }}
+            autoConnect={true}
+          />
         </div>
       )}
     </Card>

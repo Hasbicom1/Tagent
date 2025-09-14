@@ -78,7 +78,7 @@ export class WebSocketManager {
       // SECURITY FIX: Create WebSocket server with proper HTTP upgrade authentication
       // Replaces deprecated verifyClient with secure HTTP upgrade handling
       this.wss = new WebSocketServer({ 
-        server,
+        noServer: true, // Disable automatic upgrade handling since we handle it manually
         path: '/ws',
         maxPayload: 64 * 1024, // 64KB max message size
         perMessageDeflate: false, // Disable compression to prevent compression bombs
