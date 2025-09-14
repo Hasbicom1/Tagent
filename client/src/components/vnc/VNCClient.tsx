@@ -11,7 +11,7 @@ import {
   Wifi,
   WifiOff 
 } from 'lucide-react';
-import { createVNCConnection, isVNCLibraryLoaded } from '@/lib/vnc-loader';
+import { createVNCConnection, createProductionVNCClient, isVNCLibraryLoaded } from '@/lib/vnc-loader';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 

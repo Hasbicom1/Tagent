@@ -258,8 +258,8 @@ export default function AgentChat() {
       {liveViewVisible && (
         <div className="flex-1 rounded-b-lg overflow-hidden">
           <VNCClient
-            sessionId={sessionInfo.sessionId}
-            agentId={sessionInfo.agentId}
+            sessionId={sessionInfo?.sessionId || ''}
+            agentId={sessionInfo?.agentId || ''}
             webSocketURL={vncConnection.webSocketURL}
             vncToken={vncConnection.vncToken}
             className="h-full"
