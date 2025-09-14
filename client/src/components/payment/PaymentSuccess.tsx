@@ -28,7 +28,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const link = `${window.location.origin}/browser/${agentId}`;
+    const link = `${window.location.origin}/agent?id=${agentId}`;
     setSessionLink(link);
 
     const interval = setInterval(() => {
@@ -159,7 +159,7 @@ AGENT_ACTIVATED
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">AGENT_ID:</span>
                       <Badge variant="secondary" className="font-mono">
-                        {sessionId}
+                        {agentId}
                       </Badge>
                     </div>
                     <div className="flex justify-between">
@@ -216,7 +216,7 @@ AGENT_ACTIVATED
               <Button 
                 size="lg" 
                 className="text-lg font-mono"
-                onClick={() => window.location.href = `/browser/${agentId}`}
+                onClick={onEnterAgent}
                 data-testid="button-access-agent"
               >
                 <Command className="w-5 h-5 mr-2" />
