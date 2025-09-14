@@ -84,20 +84,17 @@ export default function AgentChat() {
   }, [agentId, setLocation]);
 
   useEffect(() => {
-    // Connect to WebSocket for real-time updates
-    if (sessionInfo && agentId) {
-      connectWebSocket();
-      
-      // Subscribe to agent and session updates
-      if (sessionInfo.sessionId) {
-        subscribeToSession(sessionInfo.sessionId);
-      }
+    // WebSocket connection is now handled automatically by useRealtimeTaskStatus hook
+    // Only subscribe to session updates once we have session info
+    if (sessionInfo?.sessionId && connectionStatus.isAuthenticated) {
+      subscribeToSession(sessionInfo.sessionId);
     }
 
+    // Cleanup on unmount
     return () => {
       disconnect();
     };
-  }, [sessionInfo, agentId, connectWebSocket, subscribeToSession, disconnect]);
+  }, [sessionInfo, connectionStatus.isAuthenticated, subscribeToSession, disconnect]);
 
   useEffect(() => {
     scrollToBottom();

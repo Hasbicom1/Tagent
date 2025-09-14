@@ -83,6 +83,8 @@ export class WebSocketClient {
   private lastPingTime: number = 0;
   private messageQueue: ClientMessage[] = [];
   private authenticatedAgentId: string | null = null;
+  private sessionToken: string | null = null;
+  private tokenRefreshCallback: (() => Promise<string>) | null = null;
 
   constructor(config: Partial<WSClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -152,12 +154,34 @@ export class WebSocketClient {
   }
 
   /**
-   * Authenticate with the server
+   * Authenticate with the server using stored or provided token
    */
-  public async authenticate(sessionToken: string, agentId: string): Promise<void> {
+  public async authenticate(sessionToken: string, agentId: string, tokenRefreshCallback?: () => Promise<string>): Promise<void> {
     return new Promise((resolve, reject) => {
+      console.log('🔐 [WS-AUTH] Starting authentication with:', {
+        hasToken: !!sessionToken,
+        tokenLength: sessionToken?.length || 0,
+        agentId,
+        state: this.state
+      });
+      
       if (this.state !== WSConnectionState.CONNECTED) {
+        console.error('❌ [WS-AUTH] Cannot authenticate - WebSocket not connected, state:', this.state);
         reject(new Error('Not connected to WebSocket server'));
+        return;
+      }
+
+      // Store token and callback for reconnection
+      this.sessionToken = sessionToken;
+      this.authenticatedAgentId = agentId;
+      if (tokenRefreshCallback) {
+        this.tokenRefreshCallback = tokenRefreshCallback;
+      }
+
+      // Validate token is present
+      if (!sessionToken || sessionToken.trim() === '') {
+        console.error('❌ [WS-AUTH] Authentication failed - empty or missing token');
+        reject(new Error('Valid session token required for authentication'));
         return;
       }
 
@@ -168,19 +192,35 @@ export class WebSocketClient {
         timestamp: new Date().toISOString(),
         messageId: `auth-${Date.now()}`
       };
+      
+      console.log('📤 [WS-AUTH] Sending authentication message:', {
+        type: authMessage.type,
+        hasToken: !!authMessage.sessionToken,
+        tokenLength: authMessage.sessionToken?.length || 0,
+        agentId: authMessage.agentId,
+        messageId: authMessage.messageId
+      });
 
       // Setup one-time listeners for auth response
       const handleAuthenticated = () => {
+        console.log('✅ [WS-AUTH] Authentication successful');
         this.off('authenticated', handleAuthenticated);
         this.off('error', handleError);
-        this.authenticatedAgentId = agentId;
         this.setState(WSConnectionState.AUTHENTICATED);
         resolve();
       };
 
       const handleError = (errorData: WSEventMap['error']) => {
+        console.error('❌ [WS-AUTH] Authentication error:', errorData);
         this.off('authenticated', handleAuthenticated);
         this.off('error', handleError);
+        
+        // If token is invalid, clear stored token
+        if (errorData.code === 'INVALID_TOKEN' || errorData.code === 'MISSING_TOKEN') {
+          console.log('🗑️ [WS-AUTH] Clearing invalid token');
+          this.sessionToken = null;
+        }
+        
         reject(new Error(errorData.error));
       };
 
@@ -191,6 +231,7 @@ export class WebSocketClient {
 
       // Authentication timeout
       setTimeout(() => {
+        console.error('⏰ [WS-AUTH] Authentication timeout');
         this.off('authenticated', handleAuthenticated);
         this.off('error', handleError);
         reject(new Error('Authentication timeout'));
@@ -316,6 +357,8 @@ export class WebSocketClient {
     this.setState(WSConnectionState.DISCONNECTED);
     this.subscriptions.clear();
     this.authenticatedAgentId = null;
+    this.sessionToken = null;
+    this.tokenRefreshCallback = null;
     this.messageQueue = [];
   }
 
@@ -465,7 +508,7 @@ export class WebSocketClient {
     }
   }
 
-  private scheduleReconnect(): void {
+  private async scheduleReconnect(): Promise<void> {
     if (this.reconnectTimeout) return;
 
     this.setState(WSConnectionState.RECONNECTING);
@@ -478,31 +521,64 @@ export class WebSocketClient {
 
     this.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
 
-    this.reconnectTimeout = window.setTimeout(() => {
+    this.reconnectTimeout = window.setTimeout(async () => {
       this.reconnectTimeout = null;
-      this.connect()
-        .then(() => {
-          // Re-authenticate if we were previously authenticated
-          if (this.authenticatedAgentId) {
-            return this.authenticate('', this.authenticatedAgentId);
-          }
-        })
-        .then(() => {
-          // Re-establish subscriptions
-          const subscriptions = Array.from(this.subscriptions);
-          this.subscriptions.clear();
+      
+      try {
+        // Connect to WebSocket
+        await this.connect();
+        
+        // Re-authenticate if we were previously authenticated
+        if (this.authenticatedAgentId) {
+          let token = this.sessionToken;
           
-          return Promise.all(
-            subscriptions.map(sub => {
-              const [type, targetId] = sub.split(':');
-              return this.subscribe(type as SubscriptionType, targetId);
-            })
-          );
-        })
-        .catch((error) => {
-          this.log('Reconnect failed:', error);
-          this.scheduleReconnect();
-        });
+          // If no stored token or token was invalidated, try to refresh
+          if (!token && this.tokenRefreshCallback) {
+            try {
+              token = await this.tokenRefreshCallback();
+              this.log('Token refreshed for reconnection');
+            } catch (refreshError) {
+              this.log('Token refresh failed:', refreshError);
+              throw new Error('Failed to refresh authentication token');
+            }
+          }
+          
+          if (!token) {
+            throw new Error('No valid authentication token available for reconnection');
+          }
+          
+          await this.authenticate(token, this.authenticatedAgentId);
+        }
+        
+        // Re-establish subscriptions
+        const subscriptions = Array.from(this.subscriptions);
+        this.subscriptions.clear();
+        
+        await Promise.all(
+          subscriptions.map(sub => {
+            const [type, targetId] = sub.split(':');
+            return this.subscribe(type as SubscriptionType, targetId);
+          })
+        );
+        
+        this.log('Reconnection successful');
+      } catch (error) {
+        this.log('Reconnect failed:', error);
+        
+        // If we've exceeded max attempts, stop trying
+        if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
+          this.log('Max reconnect attempts reached, stopping reconnection');
+          this.setState(WSConnectionState.ERROR);
+          this.emit('error', { 
+            error: 'Failed to reconnect after maximum attempts', 
+            code: 'MAX_RECONNECT_ATTEMPTS_EXCEEDED' 
+          });
+          return;
+        }
+        
+        // Schedule next reconnect attempt
+        this.scheduleReconnect();
+      }
     }, delay);
   }
 

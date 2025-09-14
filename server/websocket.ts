@@ -508,16 +508,17 @@ export class WebSocketManager {
         return;
       }
 
-      // CRITICAL SECURITY FIX: Validate that sessionToken matches agentId
-      // In the current system, agentId IS the session token for security
-      if (sessionToken !== agentId) {
+      // CRITICAL SECURITY FIX: Validate JWT payload contains correct agentId
+      const payload = jwtValidation.payload;
+      if (!payload || payload.agentId !== agentId) {
         logSecurityEvent('session_hijacking', {
-          reason: 'token_agent_mismatch',
+          reason: 'jwt_agent_mismatch',
           connectionId: ws.connectionId,
-          agentId
+          agentId,
+          tokenAgentId: payload?.agentId
         });
-        log(`🚫 WS: Authentication failed - invalid token for agent ${agentId} [${ws.connectionId}]`);
-        this.sendError(ws, 'SESSION_PROTOCOL_BREACH: Liberation token validation failed', 'INVALID_TOKEN');
+        log(`🚫 WS: Authentication failed - JWT agentId mismatch for agent ${agentId} [${ws.connectionId}]`);
+        this.sendError(ws, 'SESSION_PROTOCOL_BREACH: JWT agent validation failed', 'INVALID_TOKEN');
         return;
       }
       

@@ -466,7 +466,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     ? (process.env.ALLOWED_ORIGINS?.split(',') || (() => {
         throw new Error('ALLOWED_ORIGINS environment variable is required in production');
       })())
-    : ['http://localhost:5000', 'http://127.0.0.1:5000', 'https://localhost:5000'],
+    : ['http://localhost:5000', 'http://127.0.0.1:5000', 'https://localhost:5000', 'http://localhost:3000', 'https://localhost:3000'],
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-replace-in-production',
   sessionTimeout: 24 * 60 * 60 * 1000, // 24 hours
   rateLimitWindow: 15 * 60 * 1000, // 15 minutes
@@ -703,14 +703,20 @@ export function validateWebSocketOrigin(origin: string | undefined): boolean {
       return true;
     }
     
-    // Allow Replit preview domains
-    const replitPattern = /^https:\/\/[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+\.[\w-]+\.replit\.(?:dev|app)$/;
+    // Enhanced Replit domain pattern - more flexible for various UUID formats
+    const replitPattern = /^https?:\/\/[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-.+\.replit\.(?:dev|app)$/;
     if (replitPattern.test(origin)) {
       return true;
     }
     
+    // Allow any subdomain of replit.dev for development flexibility
+    const replitWildcardPattern = /^https?:\/\/.+\.replit\.dev$/;
+    if (replitWildcardPattern.test(origin)) {
+      return true;
+    }
+    
     // Allow Replit workspace URLs (for legacy domains)
-    const replitLegacyPattern = /^https:\/\/[\w-]+\.[\w-]+\.repl\.(?:co|run)$/;
+    const replitLegacyPattern = /^https?:\/\/[\w-]+\.[\w-]+\.repl\.(?:co|run)$/;
     if (replitLegacyPattern.test(origin)) {
       return true;
     }

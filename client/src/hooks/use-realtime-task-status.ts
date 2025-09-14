@@ -65,13 +65,63 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
   const activeSubscriptions = useRef<Set<string>>(new Set());
   const { toast } = useToast();
 
-  // Initialize WebSocket connection
+  // Token refresh function for WebSocket reconnections
+  const refreshToken = useCallback(async (): Promise<string> => {
+    if (!agentId) {
+      throw new Error('Agent ID required for token refresh');
+    }
+
+    console.log('🔑 [TOKEN] Fetching JWT token for agent:', agentId);
+    const sessionResponse = await fetch(`/api/session/${agentId}`);
+    
+    if (!sessionResponse.ok) {
+      console.error('❌ [TOKEN] Failed to fetch session:', sessionResponse.status);
+      throw new Error(`Failed to refresh session: ${sessionResponse.status}`);
+    }
+    
+    const sessionData = await sessionResponse.json();
+    console.log('📋 [TOKEN] Session data received:', {
+      hasToken: !!sessionData.token,
+      tokenLength: sessionData.token?.length || 0,
+      sessionId: sessionData.sessionId,
+      agentId: sessionData.agentId
+    });
+    
+    if (!sessionData.token) {
+      console.error('❌ [TOKEN] Session data missing JWT token:', sessionData);
+      throw new Error('Session does not contain JWT token');
+    }
+
+    console.log('✅ [TOKEN] JWT token fetched successfully, length:', sessionData.token.length);
+    return sessionData.token;
+  }, [agentId]);
+
+  // Initialize WebSocket connection with proper JWT handling
   const connect = useCallback(async () => {
     try {
-      if (!agentId) return;
+      if (!agentId) {
+        console.log('No agentId provided, skipping WebSocket connection');
+        return;
+      }
 
+      // Disconnect any existing connection first
+      if (wsClient.isReady() || wsClient.getState() !== WSConnectionState.DISCONNECTED) {
+        console.log('Disconnecting existing WebSocket connection');
+        wsClient.disconnect();
+        await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
+      }
+
+      // Fetch fresh JWT token
+      const token = await refreshToken();
+      console.log('🔌 [WS] Got token for authentication, length:', token?.length || 0);
+      
+      console.log('🔌 [WS] Connecting to WebSocket with fresh token...');
       await wsClient.connect();
-      await wsClient.authenticate(agentId, agentId); // Use agentId as session token per system design
+      
+      // Authenticate with JWT token and provide refresh callback
+      console.log('🔐 [WS] Starting authentication with token length:', token?.length || 0);
+      await wsClient.authenticate(token, agentId, refreshToken);
+      console.log('✅ [WS] WebSocket authenticated successfully');
 
       setConnectionStatus(prev => ({
         ...prev,
@@ -82,7 +132,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         reconnectAttempts: 0
       }));
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to connect to WebSocket:', error);
       setConnectionStatus(prev => ({
         ...prev,
@@ -92,13 +142,16 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         reconnectAttempts: prev.reconnectAttempts + 1
       }));
 
-      toast({
-        title: "Connection Error",
-        description: "Failed to establish real-time connection. Using fallback mode.",
-        variant: "destructive",
-      });
+      // Only show toast for first few attempts to avoid spam
+      if (prev.reconnectAttempts < 3) {
+        toast({
+          title: "Connection Error",
+          description: "Failed to establish real-time connection. Using fallback mode.",
+          variant: "destructive",
+        });
+      }
     }
-  }, [agentId, toast]);
+  }, [agentId, refreshToken, toast]);
 
   // Subscribe to task updates
   const subscribeToTask = useCallback(async (taskId: string) => {
@@ -172,6 +225,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
 
     // Connection status handlers
     const handleConnected = () => {
+      console.log('WebSocket connected event received');
       setConnectionStatus(prev => ({
         ...prev,
         isConnected: true,
@@ -181,6 +235,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     };
 
     const handleDisconnected = () => {
+      console.log('WebSocket disconnected event received');
       setConnectionStatus(prev => ({
         ...prev,
         isConnected: false,
@@ -192,6 +247,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     };
 
     const handleAuthenticated = () => {
+      console.log('WebSocket authenticated event received');
       setConnectionStatus(prev => ({
         ...prev,
         isAuthenticated: true,
@@ -249,11 +305,14 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     wsClient.on('taskError', handleTaskError);
     wsClient.on('error', handleError);
 
-    // Initial connection
-    connect();
+    // Initial connection with delay to avoid race conditions
+    const timeoutId = setTimeout(() => {
+      connect();
+    }, 100);
 
     // Cleanup
     return () => {
+      clearTimeout(timeoutId);
       wsClient.off('connected', handleConnected);
       wsClient.off('disconnected', handleDisconnected);
       wsClient.off('authenticated', handleAuthenticated);

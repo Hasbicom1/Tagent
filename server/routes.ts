@@ -605,12 +605,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const timeRemaining = Math.max(0, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000 / 60));
 
+      // Generate JWT token for WebSocket authentication
+      const tokenExpiration = Math.floor((session.expiresAt.getTime()) / 1000); // Use session expiration
+      const jwtPayload = {
+        agentId: session.agentId,
+        sessionId: session.id,
+        iat: Math.floor(Date.now() / 1000),
+        exp: tokenExpiration,
+        iss: 'phoenix-agent-system',
+        aud: 'websocket-client'
+      };
+
+      const jwtToken = jwt.sign(jwtPayload, DEFAULT_SECURITY_CONFIG.jwtSecret);
+
       res.json({
         sessionId: session.id,
         agentId: session.agentId,
         expiresAt: session.expiresAt,
         timeRemaining,
-        isActive: session.isActive
+        isActive: session.isActive,
+        token: jwtToken
       });
     } catch (error: any) {
       console.error("Error getting session:", error);
