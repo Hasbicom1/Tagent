@@ -285,7 +285,7 @@ app.get('/api/health', (req: Request, res: Response) => {
       vncHost: process.env.VNC_HOST || '127.0.0.1',
       vncPort: parseInt(process.env.VNC_PORT || '5901', 10),
       maxConnections: parseInt(process.env.VNC_MAX_CONNECTIONS || '10', 10)
-    }, redis); // Pass Redis connection for session validation
+    }, redis || undefined); // Pass Redis connection for session validation
     log('✅ VNC proxy server initialized');
 
     // SECURITY FIX: Validate WebSocket configuration is working

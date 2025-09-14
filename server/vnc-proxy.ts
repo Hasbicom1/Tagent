@@ -518,6 +518,52 @@ export class VNCProxy {
   }
 
   /**
+   * Force disconnect VNC connections for specific agent ID (cascade revocation)
+   */
+  public disconnectConnectionsByAgentId(agentId: string, reason: string = 'session_expired'): number {
+    let disconnectedCount = 0;
+    
+    const connectionsArray = Array.from(this.connections.entries());
+    for (const [connectionId, connection] of connectionsArray) {
+      if (connection.agentId === agentId) {
+        console.log(`🚫 VNC: Force disconnecting expired session [${connectionId}] - Agent: ${agentId}`);
+        
+        // Send session expired notification to client
+        if (connection.clientWS.readyState === WebSocket.OPEN) {
+          const expiredMessage = JSON.stringify({
+            type: 'vnc_error',
+            error: 'SESSION_REVOKED: 24-hour liberation window expired',
+            code: 'SESSION_EXPIRED',
+            connectionId,
+            agentId,
+            timestamp: new Date().toISOString()
+          });
+          connection.clientWS.send(expiredMessage);
+        }
+        
+        // Clean up the connection
+        this.cleanupConnection(connectionId);
+        disconnectedCount++;
+        
+        // Log security event for cascade revocation
+        logSecurityEvent('vnc_connection_closed', {
+          connectionId,
+          sessionId: connection.sessionId,
+          agentId,
+          clientIP: connection.clientIP,
+          reason: 'session_expired_cascade_revocation'
+        });
+      }
+    }
+    
+    if (disconnectedCount > 0) {
+      console.log(`🧹 VNC: Cascade revocation complete - ${disconnectedCount} connections closed for agent ${agentId}`);
+    }
+    
+    return disconnectedCount;
+  }
+
+  /**
    * Generate unique connection ID
    */
   private generateConnectionId(): string {

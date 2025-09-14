@@ -548,8 +548,9 @@ export class WebSocketManager {
         return;
       }
 
-      // Update connection state
+      // Update connection state with enhanced logging
       ws.state.authenticatedAgentId = agentId;
+      log(`✅ WS: Agent binding set [${ws.connectionId}] - authenticatedAgentId: ${agentId}`);
       
       // Log successful authentication
       logSecurityEvent('websocket_abuse', {
@@ -726,6 +727,45 @@ export class WebSocketManager {
     this.connections.delete(ws.connectionId);
     
     log(`🔌 WS: Client disconnected [${ws.connectionId}] - Total: ${this.connections.size}`);
+  }
+
+  /**
+   * Force disconnect WebSocket connections for specific agent ID (cascade revocation)
+   */
+  public disconnectConnectionsByAgentId(agentId: string, reason: string = 'session_expired'): number {
+    let disconnectedCount = 0;
+    
+    // Enhanced logging for debugging cascade revocation
+    log(`🔍 WS: Starting cascade revocation for agent ${agentId} - Total connections: ${this.connections.size}`);
+    
+    const connectionsArray = Array.from(this.connections.entries());
+    for (const [connectionId, ws] of connectionsArray) {
+      // Debug log all connection states
+      log(`🔍 WS: Checking connection [${connectionId}] - authenticatedAgentId: ${ws.state.authenticatedAgentId}, target: ${agentId}`);
+      
+      if (ws.state.authenticatedAgentId === agentId) {
+        log(`🚫 WS: Force disconnecting expired session [${connectionId}] - Agent: ${agentId}`);
+        
+        // Send notification before closing
+        this.sendToConnection(ws, {
+          type: WSMessageType.ERROR,
+          timestamp: new Date().toISOString(),
+          error: 'SESSION_REVOKED: 24-hour liberation window expired'
+        });
+        
+        // Force close the connection
+        ws.close(1000, `Session expired: ${reason}`);
+        disconnectedCount++;
+      }
+    }
+    
+    if (disconnectedCount > 0) {
+      log(`🧹 WS: Cascade revocation complete - ${disconnectedCount} connections closed for agent ${agentId}`);
+    } else {
+      log(`⚠️  WS: Cascade revocation found NO connections for agent ${agentId} - possible binding issue`);
+    }
+    
+    return disconnectedCount;
   }
 
   /**

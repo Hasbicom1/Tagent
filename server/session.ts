@@ -4,6 +4,8 @@ import session from 'express-session';
 import { RedisStore } from 'connect-redis';
 import crypto from 'crypto';
 import { logSecurityEvent } from './security';
+import { wsManager } from './websocket';
+import { vncProxy } from './vnc-proxy';
 
 // Session Security Configuration
 export interface SessionSecurityConfig {
@@ -569,23 +571,60 @@ export class SessionSecurityStore {
       const idleExpiredCutoff = now - this.config.idleTimeout;
       const absoluteExpiredCutoff = now - this.config.absoluteTimeout;
       
-      // Get all session keys
-      const sessionKeys = await this.redis.keys('session:*:metadata');
+      // Get all session keys (fix pattern to match actual session keys)
+      const sessionKeys = await this.redis.keys('session:*');
       let cleanupCount = 0;
       
       for (const key of sessionKeys) {
+        // Skip non-session keys that might match the pattern
+        if (key.includes(':metadata') || key.includes('ip_tracking') || key.includes('user_sessions')) {
+          continue;
+        }
+        
         const sessionData = await this.redis.get(key);
         if (sessionData) {
           const session = JSON.parse(sessionData);
-          if (session.lastActivity && 
-              ((now - session.lastActivity) > this.config.idleTimeout || 
-               (now - session.createdAt) > this.config.absoluteTimeout)) {
-            // Remove expired session and related data
-            const sessionId = key.split(':')[1];
-            await this.redis.del(key);
-            await this.redis.del(`session:${sessionId}:activity:*`);
-            await this.redis.del(`session:${sessionId}:ip`);
-            cleanupCount++;
+          if (session.lastActivity && session.createdAt) {
+            // CRITICAL FIX: Convert ISO timestamp strings to numbers before comparison
+            const lastActivityTime = new Date(session.lastActivity).getTime();
+            const createdAtTime = new Date(session.createdAt).getTime();
+            
+            if ((now - lastActivityTime) > this.config.idleTimeout || 
+                (now - createdAtTime) > this.config.absoluteTimeout) {
+              // Extract agent ID for cascade revocation
+              const sessionId = key.split(':')[1];
+              const agentId = session.agentId;
+              
+              // CRITICAL: Cascade revocation - close all associated connections
+              if (agentId) {
+                console.log(`🚫 SESSION: Expiring session and closing connections for agent ${agentId}`);
+                
+                // Close WebSocket connections for this agent
+                const wsDisconnected = wsManager.disconnectConnectionsByAgentId(agentId, 'session_expired');
+                
+                // Close VNC connections for this agent
+                const vncDisconnected = vncProxy.disconnectConnectionsByAgentId(agentId, 'session_expired');
+                
+                if (wsDisconnected > 0 || vncDisconnected > 0) {
+                  console.log(`🧹 SESSION: Cascade revocation - ${wsDisconnected} WebSocket + ${vncDisconnected} VNC connections closed`);
+                  
+                  // Log security event for cascade revocation
+                  logSecurityEvent('session_destroyed', {
+                    sessionId,
+                    agentId,
+                    reason: 'session_expired_cascade_revocation',
+                    wsConnectionsClosed: wsDisconnected,
+                    vncConnectionsClosed: vncDisconnected
+                  });
+                }
+              }
+              
+              // Remove expired session and related data
+              await this.redis.del(key);
+              await this.redis.del(`session:${sessionId}:activity:*`);
+              await this.redis.del(`session:${sessionId}:ip`);
+              cleanupCount++;
+            }
           }
         }
       }
