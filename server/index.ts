@@ -30,6 +30,21 @@ import {
 // Validate environment variables before starting anything
 validateEnvironment();
 
+// Add process-level error handlers for development debugging
+if (process.env.NODE_ENV === 'development') {
+  process.on('uncaughtException', (err) => {
+    console.error('🚨 Uncaught Exception:', err.message);
+    console.error(err.stack);
+  });
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+  });
+}
+
+// Define Replit environment detection
+const isReplit = !!(process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID);
+
 const app = express();
 
 // Configure trust proxy first - BEFORE any middleware that needs it
