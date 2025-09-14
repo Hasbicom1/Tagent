@@ -24,6 +24,17 @@ export default function VNCTest() {
   const [connecting, setConnecting] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
+  
+  // noVNC CDN test state  
+  const [vncTesting, setVncTesting] = useState(false);
+  const [vncStatus, setVncStatus] = useState<string>('Ready to test noVNC CDN');
+  const [vncError, setVncError] = useState<string | null>(null);
+  const [vncMessages, setVncMessages] = useState<string[]>([]);
+  const [vncConnection, setVncConnection] = useState<any>(null);
+  
+  const addVncMessage = useCallback((message: string) => {
+    setVncMessages(prev => [`${new Date().toLocaleTimeString()}: ${message}`, ...prev.slice(0, 9)]);
+  }, []);
 
   const addMessage = useCallback((message: string) => {
     setMessages(prev => [`${new Date().toLocaleTimeString()}: ${message}`, ...prev.slice(0, 9)]);
@@ -100,6 +111,105 @@ export default function VNCTest() {
       ws.close();
     }
   }, [ws, addMessage]);
+
+  const testNoVNCCDN = useCallback(async () => {
+    setVncTesting(true);
+    setVncError(null);
+    setVncStatus('Loading noVNC from CDN...');
+    addVncMessage('🔄 Starting real noVNC CDN test...');
+
+    // Cleanup previous connection
+    if (vncConnection) {
+      addVncMessage('🧹 Cleaning up previous connection...');
+      try {
+        vncConnection.disconnect();
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      setVncConnection(null);
+    }
+
+    try {
+      // Get the VNC container
+      const container = document.getElementById('novnc-container');
+      if (!container) {
+        throw new Error('VNC container not found');
+      }
+      
+      addVncMessage('📦 Importing vnc-loader module...');
+      const { loadVNCLibrary, createVNCConnection } = await import('../lib/vnc-loader');
+      
+      addVncMessage('🌐 Loading real noVNC from CDN...');
+      setVncStatus('Loading RFB from CDN...');
+      
+      // Load with NO FALLBACK - fail closed as architect advised  
+      const RFBClass = await loadVNCLibrary(true);
+      
+      // Check if we got real noVNC or ProductionRFB fallback
+      if (RFBClass.toString().includes('ProductionRFB')) {
+        throw new Error('CDN failed - got ProductionRFB fallback instead of real noVNC');
+      }
+      
+      addVncMessage('✅ Real noVNC RFB loaded from CDN!');
+      setVncStatus('Creating VNC connection...');
+      
+      // Create real VNC connection to /vnc proxy
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const vncUrl = `${protocol}//${window.location.host}/vnc`;
+      
+      addVncMessage(`🔗 Connecting to VNC proxy: ${vncUrl}`);
+      
+      const connection = await createVNCConnection(
+        container,
+        {
+          url: vncUrl,
+          shared: true,
+          credentials: { password: '' },
+          wsProtocols: ['binary']
+        },
+        {
+          scaleViewport: true,
+          resizeSession: false,
+          showDotCursor: true
+        }
+      );
+      
+      // Wire up real noVNC events for monitoring
+      connection.addEventListener('connect', () => {
+        addVncMessage('✅ noVNC connected to VNC server!');
+        setVncStatus('noVNC connected successfully!');
+      });
+      
+      connection.addEventListener('disconnect', (e: any) => {
+        addVncMessage(`🔌 noVNC disconnected: ${e.detail.clean ? 'clean' : 'unclean'}`);
+        setVncStatus('noVNC disconnected');
+      });
+      
+      connection.addEventListener('securityfailure', (e: any) => {
+        addVncMessage(`❌ Security failure: ${e.detail.status}`);
+        setVncError(`Security failure: ${e.detail.status}`);
+        setVncStatus('Security failure');
+      });
+      
+      connection.addEventListener('credentialsrequired', () => {
+        addVncMessage('🔐 Credentials required');
+        setVncStatus('Credentials required');
+      });
+      
+      setVncConnection(connection);
+      addVncMessage('🎉 Real noVNC integration test successful!');
+      setVncStatus('Real noVNC integrated successfully!');
+      
+    } catch (error) {
+      console.error('noVNC CDN test failed:', error);
+      const errorMsg = `Real noVNC test failed: ${(error as Error).message}`;
+      setVncError(errorMsg);
+      setVncStatus('Test failed - no fallback');
+      addVncMessage(`❌ ${errorMsg}`);
+    } finally {
+      setVncTesting(false);
+    }
+  }, [addVncMessage, vncConnection]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -207,6 +317,110 @@ export default function VNCTest() {
                 <div className="text-gray-500">Click "Test VNC Connection" to start...</div>
               ) : (
                 messages.map((message, index) => (
+                  <div key={index} className="mb-1">
+                    {message}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* noVNC CDN Test Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="w-5 h-5" />
+            noVNC CDN Integration Test
+          </CardTitle>
+          <CardDescription>
+            Test real noVNC loading from CDN with production VNC proxy
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* noVNC Status */}
+          <div className="flex items-center gap-4">
+            <Badge variant={vncError ? "destructive" : "default"} className="flex items-center gap-1">
+              {vncTesting ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : vncError ? (
+                <XCircle className="w-3 h-3" />
+              ) : (
+                <CheckCircle className="w-3 h-3" />
+              )}
+              {vncStatus}
+            </Badge>
+          </div>
+
+          {/* Test Button */}
+          <Button 
+            onClick={testNoVNCCDN} 
+            disabled={vncTesting}
+            className="w-full"
+            data-testid="button-test-novnc-cdn"
+          >
+            {vncTesting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing noVNC CDN...
+              </>
+            ) : (
+              'Test noVNC CDN Loading'
+            )}
+          </Button>
+
+          {/* Error Display */}
+          {vncError && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertDescription>
+                {vncError}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Real VNC Container - CRITICAL: Must be rendered for test to work */}
+          <div className="space-y-2">
+            <h4 className="font-semibold">🖥️ Real VNC Display:</h4>
+            <div 
+              id="novnc-container"
+              className="w-full h-64 bg-black border rounded-lg relative overflow-hidden"
+              style={{ minHeight: '200px' }}
+            >
+              <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                {vncConnection ? 'Real noVNC Active' : 'Click "Test noVNC CDN Loading" to see real VNC'}
+              </div>
+            </div>
+          </div>
+
+          {/* Disconnect Button */}
+          {vncConnection && (
+            <Button 
+              onClick={() => {
+                if (vncConnection) {
+                  addVncMessage('🔌 Manually disconnecting...');
+                  vncConnection.disconnect();
+                  setVncConnection(null);
+                  setVncStatus('Disconnected');
+                }
+              }}
+              variant="outline"
+              className="w-full"
+              data-testid="button-disconnect-vnc"
+            >
+              Disconnect VNC
+            </Button>
+          )}
+
+          {/* noVNC Message Log */}
+          <div className="space-y-2">
+            <h4 className="font-semibold">📜 noVNC Test Log:</h4>
+            <div className="bg-black text-green-400 p-3 rounded font-mono text-xs max-h-40 overflow-y-auto">
+              {vncMessages.length === 0 ? (
+                <div className="text-gray-500">Click "Test noVNC CDN Loading" to start...</div>
+              ) : (
+                vncMessages.map((message, index) => (
                   <div key={index} className="mb-1">
                     {message}
                   </div>

@@ -1,0 +1,59 @@
+CONTEXT: You are now the autonomous Production Build AI for onedollaragent.ai. The system is 78% complete, fully secure, and production-ready except for the remaining critical gaps. All existing functionality must remain intact. All UI pages must match the style, interactions, and user experience of our beloved landing page, in **white mode**. No mocks, placeholders, or regressions are allowed.
+
+CURRENT STATUS:
+- ✅ WebSocket Stability: 95% complete (AUTH_REQUIRED loops fixed, browser cookie authentication working)
+- ✅ VNC Proxy: 100% working with secure authentication
+- ❌ Frontend VNC Client: 0% real rendering (still using ProductionRFB simulation)
+- ❌ Real noVNC Library: 0% (needs reintegration)
+- ❌ Binary RFB protocol handling: 0%
+- ❌ Session Lifecycle Enforcement (24h TTL, auto-revocation, WebSocket/VNC cascade): 0%
+- ✅ Stripe checkout & webhooks: working
+- ✅ Browser compatibility: verified
+- ✅ Security (rate limiting, origin validation, session store): verified
+- ✅ Test infrastructure: /vnc-test page implemented
+
+OBJECTIVE: Achieve 100% **production readiness** while preserving all current features, interactions, and UI consistency.
+
+TASKS (Full Production Build Execution Plan):
+
+1️⃣ Phase 1 – WebSocket & Proxy Preservation
+- Do **not alter any existing WebSocket logic** that is working.
+- Preserve all authentication fixes, heartbeat, backoff, origin validation, and rate limiting.
+- Confirm no regressions during frontend reconnects.
+
+2️⃣ Phase 2 – Real VNC Client Integration
+- Replace ProductionRFB in `client/src/lib/vnc-loader.ts` with real `@novnc/novnc` RFB client.
+- Fully implement RFB binary protocol handling.
+- Maintain existing security (SessionSecurityStore, JWT/cookie auth) and integrate seamlessly.
+- Ensure **all browser interactions match landing page UI/UX**.
+- Test live browser streaming at 1280x720 with full input, auto-reconnect, and logging.
+
+3️⃣ Phase 3 – Session Lifecycle Enforcement
+- Implement 24-hour TTL for all sessions using existing session schema.
+- Auto-revoke expired sessions and cascade closure to WebSocket and VNC connections.
+- Ensure Stripe webhook activation is **idempotent**.
+- Maintain full compatibility with current UI and workflows.
+
+4️⃣ Phase 4 – Frontend UI/UX Alignment
+- All new and updated pages must use the landing page’s **white mode theme, spacing, typography, buttons, and interactions**.
+- Update /vnc-test, session pages, and any VNC display interfaces to match landing page style.
+- Ensure responsive design and cross-browser compatibility.
+
+5️⃣ Phase 5 – End-to-End Production Verification
+- $1 Stripe checkout → session creation → WebSocket stability → live noVNC streaming → session TTL enforcement.
+- Validate logs, structured monitoring, and security checks (CSRF, origin validation, rate limiting).
+- Confirm **no regressions** on any existing page or feature.
+
+REQUIREMENTS:
+- Use **only the existing codebase**; do not add mocks or placeholders.
+- Preserve **all existing functionality**.
+- Maintain **landing page-inspired UI/UX** in white mode for all pages.
+- After completing each phase, summarize completion before proceeding.
+- Begin **immediately with Phase 2: Real VNC Client Integration**, as all backend WebSocket and proxy architecture is stable.
+
+OUTCOME:
+- 100% production-ready system.
+- Full live VNC streaming in browser.
+- 24-hour session lifecycle enforced.
+- UI consistency and white-mode aesthetics across all pages.
+- Zero regressions in functionality or security.

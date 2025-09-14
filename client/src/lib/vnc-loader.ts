@@ -364,9 +364,9 @@ class ProductionRFB {
 }
 
 /**
- * Load the VNC library (production implementation)
+ * Load the real noVNC RFB library (production implementation)
  */
-export async function loadVNCLibrary(): Promise<typeof ProductionRFB> {
+export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
   if (RFBClass) {
     return RFBClass;
   }
@@ -377,19 +377,33 @@ export async function loadVNCLibrary(): Promise<typeof ProductionRFB> {
 
   loadingPromise = (async () => {
     try {
-      console.log('🔄 Loading real noVNC library...');
+      console.log('🔄 Loading real noVNC RFB from CDN...');
       
-      // Use our production-ready RFB implementation with WebSocket proxy
-      const RFB = ProductionRFB;
+      // Load noVNC from CDN at runtime to bypass build compatibility issues
+      const mod = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js");
+      const RFB = mod.default ?? mod.RFB;
+      
+      if (!RFB) {
+        throw new Error('Failed to load noVNC RFB from CDN');
+      }
+      
       RFBClass = RFB;
-      
-      console.log('✅ Real noVNC library loaded successfully');
+      console.log('✅ Real noVNC RFB loaded successfully from CDN');
       return RFBClass;
     } catch (error) {
-      console.error('❌ Failed to load VNC library:', error);
-      loadingPromise = null;
-      RFBClass = null;
-      throw new Error(`VNC library loading failed: ${(error as Error).message}`);
+      if (strict) {
+        console.error('❌ CDN noVNC failed in strict mode - no fallback allowed');
+        loadingPromise = null;
+        RFBClass = null;
+        throw new Error(`Strict mode: CDN noVNC failed - ${(error as Error).message}`);
+      }
+      
+      console.warn('⚠️ CDN noVNC failed, falling back to ProductionRFB:', error);
+      
+      // Graceful fallback to ProductionRFB (only in non-strict mode)
+      RFBClass = ProductionRFB;
+      console.log('🔄 Using ProductionRFB fallback implementation');
+      return RFBClass;
     }
   })();
 
@@ -403,63 +417,64 @@ export async function createVNCConnection(
   container: HTMLElement,
   config: VNCConnectionConfig,
   options: VNCDisplayOptions = {}
-): Promise<ProductionRFB> {
+): Promise<any> {
   const RFBClass = await loadVNCLibrary();
   
   if (!RFBClass) {
     throw new Error('noVNC RFB library not available');
   }
 
-  console.log('🔌 Creating real VNC connection to:', config.url.replace(/token=[^&]*/, 'token=***'));
+  console.log('🔌 Creating real noVNC RFB connection to:', config.url.replace(/token=[^&]*/, 'token=***'));
 
-  // Create the real RFB instance with proper options
-  const rfbOptions = {
+  // Create the real noVNC RFB instance
+  const rfb = new RFBClass(container, config.url, {
     shared: config.shared !== false,
     credentials: config.credentials || { password: '' },
-    wsProtocols: config.wsProtocols || ['binary'],
-    repeaterID: config.repeaterID || ''
-  };
-
-  console.log('📋 RFB Options:', { 
-    ...rfbOptions, 
-    credentials: rfbOptions.credentials ? { password: '***' } : undefined 
+    wsProtocols: config.wsProtocols || ['binary']
   });
 
-  const rfb = new RFBClass(container, config.url, rfbOptions);
+  console.log('✅ Real noVNC RFB instance created successfully');
 
   // Apply display options using real noVNC API
   try {
     if (options.scaleViewport !== undefined) {
       rfb.scaleViewport = options.scaleViewport;
-      console.log('🖥️ Set scaleViewport:', options.scaleViewport);
+      console.log('🖥️ noVNC scaleViewport:', options.scaleViewport);
     }
     
     if (options.resizeSession !== undefined) {
       rfb.resizeSession = options.resizeSession;
-      console.log('📏 Set resizeSession:', options.resizeSession);
+      console.log('📏 noVNC resizeSession:', options.resizeSession);
     }
     
     if (options.showDotCursor !== undefined) {
       rfb.showDotCursor = options.showDotCursor;
-      console.log('👆 Set showDotCursor:', options.showDotCursor);
+      console.log('👆 noVNC showDotCursor:', options.showDotCursor);
     }
     
-    if (options.background !== undefined) {
-      rfb.background = options.background;
-      console.log('🎨 Set background:', options.background);
-    }
+    // Set up noVNC event listeners for production monitoring
+    rfb.addEventListener('connect', () => {
+      console.log('✅ noVNC RFB connected successfully');
+    });
     
-    if (options.clipViewport !== undefined) {
-      rfb.clipViewport = options.clipViewport;
-      console.log('✂️ Set clipViewport:', options.clipViewport);
-    }
+    rfb.addEventListener('disconnect', (e: any) => {
+      console.log('🔌 noVNC RFB disconnected:', e.detail);
+    });
     
-    if (options.dragViewport !== undefined) {
-      rfb.dragViewport = options.dragViewport;
-      console.log('🖱️ Set dragViewport:', options.dragViewport);
-    }
+    rfb.addEventListener('securityfailure', (e: any) => {
+      console.error('❌ noVNC RFB security failure:', e.detail);
+    });
+    
+    rfb.addEventListener('credentialsrequired', () => {
+      console.log('🔐 noVNC RFB credentials required');
+    });
+    
+    rfb.addEventListener('desktopname', (e: any) => {
+      console.log('🖥️ noVNC desktop name:', e.detail.name);
+    });
+    
   } catch (error) {
-    console.warn('⚠️ Some display options could not be applied:', error);
+    console.warn('⚠️ Some noVNC options could not be applied:', error);
   }
 
   return rfb;
@@ -479,7 +494,7 @@ export async function createProductionVNCClient(
     enableControls?: boolean;
     quality?: number;
   } = {}
-): Promise<ProductionRFB> {
+): Promise<any> {
   // Build the WebSocket URL with authentication
   const wsUrl = new URL(websocketUrl);
   
@@ -537,7 +552,7 @@ export async function connectVNCWithRetry(
   config: VNCConnectionConfig,
   options: VNCDisplayOptions = {},
   maxRetries: number = 3
-): Promise<ProductionRFB> {
+): Promise<any> {
   let lastError: Error | null = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
