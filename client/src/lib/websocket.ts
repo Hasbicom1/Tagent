@@ -343,14 +343,34 @@ export class WebSocketClient {
   }
 
   /**
-   * Disconnect from WebSocket server
+   * Graceful disconnect (preserves authentication state for reconnection)
    */
   public disconnect(): void {
+    this.log('🔌 [DISCONNECT] Graceful disconnect - preserving auth state');
     this.stopReconnecting();
     this.stopHeartbeat();
     
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
+    }
+    
+    this.setState(WSConnectionState.DISCONNECTED);
+    this.subscriptions.clear();
+    this.messageQueue = [];
+    // NOTE: Preserving authenticatedAgentId, sessionToken, tokenRefreshCallback for reconnection
+  }
+
+  /**
+   * Force disconnect (clears all authentication state)
+   */
+  public forceDisconnect(): void {
+    this.log('💥 [FORCE-DISCONNECT] Force disconnect - clearing all auth state');
+    this.stopReconnecting();
+    this.stopHeartbeat();
+    
+    if (this.ws) {
+      this.ws.close(1000, 'Force disconnect');
       this.ws = null;
     }
     
@@ -502,11 +522,23 @@ export class WebSocketClient {
     this.setState(WSConnectionState.DISCONNECTED);
     this.emit('disconnected', { reason: reason || 'Connection closed' });
 
-    // Preserve authentication state across disconnections
-    // Don't clear authenticatedAgentId, sessionToken, or tokenRefreshCallback
+    // Preserve authentication state across network disconnections (not intentional disconnects)
+    // Only clear auth state for force disconnects
+    if (code === 1000 && reason === 'Force disconnect') {
+      this.log('🗑️ [DISCONNECT] Clearing auth state due to force disconnect');
+      this.authenticatedAgentId = null;
+      this.sessionToken = null;
+      this.tokenRefreshCallback = null;
+    } else {
+      this.log('🔄 [DISCONNECT] Preserving auth state for reconnection');
+    }
     
-    // Attempt reconnection if not a normal closure
-    if (code !== 1000 && this.reconnectAttempts < this.config.maxReconnectAttempts) {
+    // Clear subscriptions and message queue on any disconnect
+    this.subscriptions.clear();
+    this.messageQueue = [];
+    
+    // Attempt reconnection if not an intentional force disconnect
+    if ((code !== 1000 || reason !== 'Force disconnect') && this.reconnectAttempts < this.config.maxReconnectAttempts) {
       this.scheduleReconnect();
     }
   }

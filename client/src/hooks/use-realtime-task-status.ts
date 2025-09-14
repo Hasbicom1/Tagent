@@ -104,11 +104,22 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         return;
       }
 
-      // Disconnect any existing connection first
-      if (wsClient.isReady() || wsClient.getState() !== WSConnectionState.DISCONNECTED) {
-        console.log('Disconnecting existing WebSocket connection');
-        wsClient.disconnect();
-        await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
+      // Check if already authenticated with same agent - no need to reconnect
+      if (wsClient.isReady()) {
+        console.log('✅ [WS] Already authenticated and ready, skipping reconnection');
+        return;
+      }
+
+      // Only disconnect if connection is in error state or for fresh authentication
+      const currentState = wsClient.getState();
+      if (currentState !== WSConnectionState.DISCONNECTED) {
+        if (currentState === WSConnectionState.ERROR || currentState === WSConnectionState.RECONNECTING) {
+          console.log('🔄 [WS] Resetting connection from error state...');
+          wsClient.forceDisconnect(); // Use force disconnect for error recovery
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } else {
+          console.log('⚠️ [WS] Connection exists but not authenticated, continuing...');
+        }
       }
 
       // Fetch fresh JWT token
@@ -131,6 +142,9 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         lastConnected: new Date(),
         reconnectAttempts: 0
       }));
+      
+      // Mark successful connection to prevent unnecessary reconnections
+      console.log('🎉 [WS] Connection established successfully!');
 
     } catch (error: any) {
       console.error('Failed to connect to WebSocket:', error);
@@ -309,10 +323,17 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     wsClient.on('taskError', handleTaskError);
     wsClient.on('error', handleError);
 
-    // Initial connection with delay to avoid race conditions
-    const timeoutId = setTimeout(() => {
-      connect();
-    }, 100);
+    // Only attempt connection if we have an agentId to authenticate with
+    let timeoutId: number | null = null;
+    if (agentId) {
+      // Initial connection with delay to avoid race conditions
+      timeoutId = setTimeout(() => {
+        console.log('🔌 [WS-INIT] Starting connection for agent:', agentId);
+        connect();
+      }, 100);
+    } else {
+      console.log('⚠️ [WS-INIT] No agentId provided - skipping WebSocket connection');
+    }
 
     // Cleanup
     return () => {
@@ -379,9 +400,10 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     });
   }, []);
 
-  // Disconnect
+  // Disconnect (intentional disconnect, clears auth state)
   const disconnect = useCallback(() => {
-    wsClient.disconnect();
+    console.log('🔌 [WS] Intentionally disconnecting WebSocket...');
+    wsClient.forceDisconnect(); // Use force disconnect to clear auth state
     activeSubscriptions.current.clear();
     setConnectionStatus({
       isConnected: false,
