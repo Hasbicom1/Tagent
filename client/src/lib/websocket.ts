@@ -9,6 +9,7 @@ import {
   TaskErrorMessage,
   SessionStatusMessage,
   ConnectionStatusMessage,
+  BatchMessage,
   clientMessageSchema,
   serverMessageSchema
 } from '@shared/websocket-types';
@@ -22,7 +23,8 @@ export {
   type TaskLogsMessage,
   type TaskErrorMessage,
   type SessionStatusMessage,
-  type ConnectionStatusMessage
+  type ConnectionStatusMessage,
+  type BatchMessage
 } from '@shared/websocket-types';
 
 // Event types for WebSocket client
@@ -39,6 +41,7 @@ export interface WSEventMap {
   sessionStatus: SessionStatusMessage;
   connectionStatus: ConnectionStatusMessage;
   error: { error: string; code?: string; details?: any };
+  batch: BatchMessage;
 }
 
 export type WSEventHandler<T extends keyof WSEventMap> = (data: WSEventMap[T]) => void;
@@ -508,11 +511,115 @@ export class WebSocketClient {
           });
           break;
 
+        case WSMessageType.BATCH:
+          // PRODUCTION OPTIMIZATION: Unpack batched messages and process each one
+          this.handleBatchMessage(validatedMessage as BatchMessage);
+          break;
+
         default:
           this.log('Unknown message type:', message.type);
       }
     } catch (error) {
       this.log('Failed to parse message:', error);
+    }
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Handle batched messages by unpacking and processing each individually
+   */
+  private handleBatchMessage(batchMessage: BatchMessage): void {
+    this.log(`Processing batch: ${batchMessage.batchId} with ${batchMessage.count} messages (${batchMessage.totalSize} bytes)`);
+    
+    // Emit the batch event for components that want to track batches
+    this.emit('batch', batchMessage);
+    
+    // Process each message in the batch individually
+    try {
+      for (const individualMessage of batchMessage.messages) {
+        if (!individualMessage || typeof individualMessage !== 'object') {
+          this.log('Skipping invalid message in batch:', individualMessage);
+          continue;
+        }
+        
+        // Validate each message individually and process it
+        try {
+          const validatedMessage = serverMessageSchema.parse(individualMessage);
+          this.processIndividualMessage(validatedMessage);
+        } catch (validationError) {
+          this.log('Failed to validate batched message:', validationError, individualMessage);
+        }
+      }
+    } catch (error) {
+      this.log('Error processing batch messages:', error);
+    }
+  }
+
+  /**
+   * Process an individual message (extracted from handleMessage logic for reuse)
+   */
+  private processIndividualMessage(validatedMessage: ServerMessage): void {
+    switch (validatedMessage.type) {
+      case WSMessageType.PONG:
+        this.log(`Pong received (RTT: ${Date.now() - this.lastPingTime}ms)`);
+        break;
+
+      case WSMessageType.AUTHENTICATED:
+        this.emit('authenticated', { agentId: this.authenticatedAgentId! });
+        break;
+
+      case WSMessageType.SUBSCRIBED:
+        this.emit('subscribed', {
+          type: validatedMessage.subscriptionType,
+          targetId: validatedMessage.targetId
+        });
+        break;
+
+      case WSMessageType.UNSUBSCRIBED:
+        this.emit('unsubscribed', {
+          type: validatedMessage.subscriptionType,
+          targetId: validatedMessage.targetId
+        });
+        break;
+
+      case WSMessageType.TASK_STATUS:
+        this.emit('taskStatus', validatedMessage as TaskStatusMessage);
+        break;
+
+      case WSMessageType.TASK_PROGRESS:
+        this.emit('taskProgress', validatedMessage as TaskProgressMessage);
+        break;
+
+      case WSMessageType.TASK_LOGS:
+        this.emit('taskLogs', validatedMessage as TaskLogsMessage);
+        break;
+
+      case WSMessageType.TASK_ERROR:
+        this.emit('taskError', validatedMessage as TaskErrorMessage);
+        break;
+
+      case WSMessageType.SESSION_STATUS:
+        this.emit('sessionStatus', validatedMessage as SessionStatusMessage);
+        break;
+
+      case WSMessageType.CONNECTION_STATUS:
+        this.emit('connectionStatus', validatedMessage as ConnectionStatusMessage);
+        break;
+
+      case WSMessageType.ERROR:
+        this.emit('error', {
+          error: validatedMessage.error,
+          code: validatedMessage.code,
+          details: validatedMessage.details
+        });
+        break;
+
+      case WSMessageType.BATCH:
+        // Nested batches not supported - log warning
+        this.log('Warning: Nested BATCH messages are not supported');
+        break;
+
+      default:
+        this.log('Unknown message type in batch:', (validatedMessage as any).type);
     }
   }
 

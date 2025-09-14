@@ -26,7 +26,10 @@ export enum WSMessageType {
   
   // System messages
   CONNECTION_STATUS = 'CONNECTION_STATUS',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
+  
+  // PRODUCTION OPTIMIZATION: Batching support
+  BATCH = 'BATCH'
 }
 
 // Subscription types
@@ -162,6 +165,17 @@ export const errorMessageSchema = z.object({
   messageId: z.string().optional()
 });
 
+// PRODUCTION OPTIMIZATION: Batch message schema for high-throughput scenarios
+export const batchMessageSchema = z.object({
+  type: z.literal(WSMessageType.BATCH),
+  messages: z.array(z.any()), // Array of individual messages
+  batchId: z.string(),
+  count: z.number(),
+  totalSize: z.number(), // Size in bytes for monitoring
+  timestamp: z.string(),
+  messageId: z.string().optional()
+});
+
 // Union type for all client messages
 export const clientMessageSchema = z.union([
   subscribeMessageSchema,
@@ -179,6 +193,7 @@ export const serverMessageSchema = z.union([
   sessionStatusMessageSchema,
   connectionStatusMessageSchema,
   errorMessageSchema,
+  batchMessageSchema,
   z.object({ type: z.literal(WSMessageType.PONG), timestamp: z.string(), messageId: z.string().optional() }),
   z.object({ type: z.literal(WSMessageType.AUTHENTICATED), timestamp: z.string(), messageId: z.string().optional() }),
   z.object({ type: z.literal(WSMessageType.SUBSCRIBED), subscriptionType: z.nativeEnum(SubscriptionType), targetId: z.string(), timestamp: z.string(), messageId: z.string().optional() }),
@@ -198,6 +213,7 @@ export type TaskErrorMessage = z.infer<typeof taskErrorMessageSchema>;
 export type SessionStatusMessage = z.infer<typeof sessionStatusMessageSchema>;
 export type ConnectionStatusMessage = z.infer<typeof connectionStatusMessageSchema>;
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
+export type BatchMessage = z.infer<typeof batchMessageSchema>;
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

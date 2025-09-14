@@ -41,6 +41,8 @@ interface ExtendedWebSocket extends WebSocket {
   messageQueue: any[];
   isProcessingMessages: boolean;
   maxQueueSize: number;
+  batchedMessages: any[];
+  batchTimeout?: NodeJS.Timeout;
 }
 
 export class WebSocketManager {
@@ -52,6 +54,11 @@ export class WebSocketManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private redisSubscriber: Redis | null = null;
   private rateLimiter: MultiLayerRateLimiter | null = null;
+
+  // PRODUCTION OPTIMIZATION: Batching constants
+  private static readonly BATCH_SIZE_LIMIT = 50; // Max messages per batch
+  private static readonly BATCH_TIMEOUT_MS = 100; // Flush batches every 100ms
+  private static readonly BATCH_SIZE_BYTES = 60 * 1024; // 60KB limit (under 64KB WebSocket frame limit)
 
   constructor(config: Partial<WSServerConfig> = {}) {
     this.config = { ...DEFAULT_WS_CONFIG, ...config };
@@ -242,6 +249,8 @@ export class WebSocketManager {
     extendedWs.messageQueue = [];
     extendedWs.isProcessingMessages = false;
     extendedWs.maxQueueSize = 50; // Prevent memory exhaustion
+    extendedWs.batchedMessages = [];
+    extendedWs.batchTimeout = undefined;
     extendedWs.state = {
       isConnected: true,
       connectionId,
@@ -358,7 +367,40 @@ export class WebSocketManager {
         return;
       }
       
-      // SECURITY: Comprehensive schema validation
+      // PROTOCOL FIX: Check for server-only messages that should never be inbound
+      if (rawMessage?.type === WSMessageType.BATCH) {
+        log(`⚠️  WS: PROTOCOL_VIOLATION - Client sent BATCH message [${ws.connectionId}] - dropping silently`);
+        logSecurityEvent('websocket_abuse', {
+          connectionId: ws.connectionId,
+          error: 'Client sent server-only BATCH message',
+          messageType: 'BATCH',
+          correlationId
+        });
+        // Drop message silently - don't disconnect client as this might be a benign protocol error
+        return;
+      }
+      
+      // Check for other server-only message types
+      const serverOnlyTypes = [
+        WSMessageType.TASK_STATUS, WSMessageType.TASK_PROGRESS, WSMessageType.TASK_LOGS,
+        WSMessageType.TASK_ERROR, WSMessageType.SESSION_STATUS, WSMessageType.CONNECTION_STATUS,
+        WSMessageType.ERROR, WSMessageType.PONG, WSMessageType.AUTHENTICATED,
+        WSMessageType.SUBSCRIBED, WSMessageType.UNSUBSCRIBED, WSMessageType.SESSION_EXPIRED
+      ];
+      
+      if (serverOnlyTypes.includes(rawMessage?.type)) {
+        log(`⚠️  WS: PROTOCOL_VIOLATION - Client sent server-only message [${ws.connectionId}] type: ${rawMessage.type} - dropping silently`);
+        logSecurityEvent('websocket_abuse', {
+          connectionId: ws.connectionId,
+          error: `Client sent server-only message: ${rawMessage.type}`,
+          messageType: rawMessage.type,
+          correlationId
+        });
+        // Drop message silently
+        return;
+      }
+
+      // SECURITY: Comprehensive schema validation for valid client messages only
       let validatedMessage;
       try {
         validatedMessage = clientMessageSchema.parse(rawMessage);
@@ -704,6 +746,13 @@ export class WebSocketManager {
    * Handle client disconnection
    */
   private handleDisconnection(ws: ExtendedWebSocket): void {
+    // PRODUCTION OPTIMIZATION: Flush any pending batched messages before disconnect
+    try {
+      this.flushBatch(ws);
+    } catch (error) {
+      log(`❌ WS: Failed to flush batch on disconnect [${ws.connectionId}]: ${error}`);
+    }
+
     // Clean up subscriptions
     const subscriptionKeysArray = Array.from(ws.state.subscriptions);
     for (const subscriptionKey of subscriptionKeysArray) {
@@ -917,15 +966,117 @@ export class WebSocketManager {
   }
 
   /**
-   * Send message to specific connection
+   * Send message to specific connection with batching optimization
    */
   private sendToConnection(ws: ExtendedWebSocket, message: ServerMessage): void {
     try {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
+        // PRODUCTION OPTIMIZATION: Batch non-urgent messages for better performance
+        if (this.shouldBatchMessage(message)) {
+          this.addToBatch(ws, message);
+        } else {
+          // Send immediately for urgent messages (errors, auth, etc.)
+          ws.send(JSON.stringify(message));
+        }
       }
     } catch (error) {
       log(`❌ WS: Failed to send message to [${ws.connectionId}]: ${error}`);
+    }
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Check if message should be batched
+   */
+  private shouldBatchMessage(message: ServerMessage): boolean {
+    // Batch status updates and progress messages, but not auth/error messages
+    return message.type === WSMessageType.TASK_STATUS || 
+           message.type === WSMessageType.TASK_PROGRESS ||
+           message.type === WSMessageType.TASK_LOGS;
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Add message to batch queue with size-aware flushing
+   */
+  private addToBatch(ws: ExtendedWebSocket, message: ServerMessage): void {
+    ws.batchedMessages.push(message);
+    
+    // Schedule batch send if not already scheduled
+    if (!ws.batchTimeout) {
+      ws.batchTimeout = setTimeout(() => {
+        this.flushBatch(ws);
+      }, WebSocketManager.BATCH_TIMEOUT_MS);
+    }
+    
+    // PRODUCTION OPTIMIZATION: Size-aware flushing - check both count and size limits
+    const shouldFlushByCount = ws.batchedMessages.length >= WebSocketManager.BATCH_SIZE_LIMIT;
+    const batchSize = this.estimateBatchSize(ws.batchedMessages);
+    const shouldFlushBySize = batchSize >= WebSocketManager.BATCH_SIZE_BYTES;
+    
+    if (shouldFlushByCount || shouldFlushBySize) {
+      log(`🚀 WS: Force flushing batch [${ws.connectionId}] - count: ${ws.batchedMessages.length}, size: ${batchSize} bytes`);
+      this.flushBatch(ws);
+    }
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Estimate batch size in bytes to stay under 64KB limit
+   */
+  private estimateBatchSize(messages: any[]): number {
+    try {
+      const batchMessage = {
+        type: WSMessageType.BATCH,
+        messages,
+        batchId: 'size_check',
+        count: messages.length,
+        totalSize: 0,
+        timestamp: new Date().toISOString()
+      };
+      return JSON.stringify(batchMessage).length;
+    } catch (error) {
+      // Fallback: estimate roughly 1KB per message
+      return messages.length * 1024;
+    }
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Flush batched messages with proper protocol compliance
+   */
+  private flushBatch(ws: ExtendedWebSocket): void {
+    if (ws.batchedMessages.length === 0) return;
+    
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const totalSize = this.estimateBatchSize(ws.batchedMessages);
+        
+        // PRODUCTION OPTIMIZATION: Send all batched messages in proper BATCH format
+        const batchMessage = {
+          type: WSMessageType.BATCH,
+          messages: ws.batchedMessages,
+          batchId,
+          count: ws.batchedMessages.length,
+          totalSize,
+          timestamp: new Date().toISOString()
+        };
+        
+        ws.send(JSON.stringify(batchMessage));
+        log(`📤 WS: Flushed batch [${ws.connectionId}] - ${ws.batchedMessages.length} messages, ${totalSize} bytes`);
+        
+        // Clear batch
+        ws.batchedMessages = [];
+        if (ws.batchTimeout) {
+          clearTimeout(ws.batchTimeout);
+          ws.batchTimeout = undefined;
+        }
+      }
+    } catch (error) {
+      log(`❌ WS: Failed to flush batch for [${ws.connectionId}]: ${error}`);
+      // Clear batch anyway to prevent accumulation
+      ws.batchedMessages = [];
+      if (ws.batchTimeout) {
+        clearTimeout(ws.batchTimeout);
+        ws.batchTimeout = undefined;
+      }
     }
   }
 
@@ -1039,9 +1190,18 @@ export class WebSocketManager {
       clearInterval(this.heartbeatInterval);
     }
 
-    // Close all connections
+    // Close all connections and cleanup batches
     const connectionsArray = Array.from(this.connections.entries());
     for (const [connectionId, ws] of connectionsArray) {
+      // PRODUCTION OPTIMIZATION: Clear batch timeouts before closing
+      if (ws.batchTimeout) {
+        clearTimeout(ws.batchTimeout);
+        ws.batchTimeout = undefined;
+      }
+      
+      // Flush any pending batched messages before closing
+      this.flushBatch(ws);
+      
       ws.close(1000, 'Server shutdown');
     }
     this.connections.clear();
