@@ -23,16 +23,6 @@ if (!STRIPE_SECRET_KEY || !VITE_STRIPE_PUBLIC_KEY || !OPENAI_API_KEY) {
 console.log('✅ Successfully retrieved all API keys from secure Replit environment');
 console.log('');
 
-// Generate cryptographically secure secrets
-const crypto = require('crypto');
-const generateSecret = () => crypto.randomBytes(32).toString('hex');
-
-const sessionSecret = generateSecret();
-const csrfSecret = generateSecret();
-
-console.log('🔐 Generated unique security secrets');
-console.log('');
-
 // Ask for domain only (safe to share)
 const readline = require('readline');
 const fs = require('fs');
@@ -65,8 +55,8 @@ FORCE_HTTPS=true
 # ═══════════════════════════════════════
 # SECURITY SECRETS (Generated)
 # ═══════════════════════════════════════
-SESSION_SECRET=${sessionSecret}
-CSRF_SECRET=${csrfSecret}
+SESSION_SECRET=a1e6d64dadc3e52cf7903e965bfc53cf2392cbcfae0c99d9d7bcaa83e4d9d3c8
+CSRF_SECRET=74f23ad8eeb4579c3375b1ba097605b30c614d7c6a442aa69223a413fb0065a2
 
 # ═══════════════════════════════════════
 # DATABASE CONNECTIONS (Railway Auto-Generated)
