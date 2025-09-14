@@ -135,23 +135,49 @@ let sessionSecurityStore: SessionSecurityStore | null = null;
 async function initializeRedisSession(): Promise<any> {
   try {
     const redisUrl = process.env.REDIS_URL;
+    const isDevelopment = process.env.NODE_ENV === 'development';
     
     if (redisUrl) {
-      redis = new Redis(redisUrl);
-      
-      // Test Redis connection
-      await redis.ping();
-      console.log('✅ SECURITY: Redis connection established for session storage');
-      
-      // Initialize session security store
-      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-      console.log('✅ SECURITY: Session security store initialized');
-      
-      // Create Redis session store for production
-      const redisStore = createRedisSessionStore(redis);
-      console.log('✅ SECURITY: Redis session store created');
-      
-      return redisStore;
+      // Test Redis connection before creating the main connection
+      try {
+        const testRedis = new Redis(redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 5000,
+          commandTimeout: 3000,
+        });
+        
+        await testRedis.ping();
+        testRedis.disconnect();
+        console.log('✅ SECURITY: Redis connection test successful');
+        
+        // Create the actual connection for session storage
+        redis = new Redis(redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+        });
+        
+        // Test the actual connection
+        await redis.ping();
+        console.log('✅ SECURITY: Redis connection established for session storage');
+        
+        // Initialize session security store
+        sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+        console.log('✅ SECURITY: Session security store initialized');
+        
+        // Create Redis session store for production
+        const redisStore = createRedisSessionStore(redis);
+        console.log('✅ SECURITY: Redis session store created');
+        
+        return redisStore;
+      } catch (connectionError) {
+        console.error('❌ SECURITY: Redis connection failed:', connectionError instanceof Error ? connectionError.message : connectionError);
+        if (isDevelopment) {
+          console.log('🔄 SECURITY: Falling back to memory store in development');
+          return null;
+        }
+        throw connectionError;
+      }
     } else if (process.env.NODE_ENV === 'production') {
       throw new Error('REDIS_URL required for production session storage and security features');
     } else {

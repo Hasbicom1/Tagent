@@ -193,33 +193,70 @@ export class WebSocketManager {
   private async initializeRedis(): Promise<void> {
     try {
       const redisUrl = process.env.REDIS_URL;
+      const isDevelopment = process.env.NODE_ENV === 'development';
       
-      if (!redisUrl && process.env.NODE_ENV === 'development') {
+      if (!redisUrl && isDevelopment) {
         log('🔄 WS: Skipping Redis in development mode');
         return;
       }
 
       if (!redisUrl) {
+        if (isDevelopment) {
+          log('🔄 WS: No REDIS_URL in development - skipping Redis');
+          return;
+        }
         throw new Error('REDIS_URL required for WebSocket Redis coordination');
       }
 
-      // Publisher Redis connection
-      this.redis = new Redis(redisUrl);
-      
-      // Subscriber Redis connection (separate for pub/sub)
-      this.redisSubscriber = new Redis(redisUrl);
-      
-      // Subscribe to WebSocket broadcast channel
-      await this.redisSubscriber.subscribe('ws:broadcast');
-      this.redisSubscriber.on('message', this.handleRedisMessage.bind(this));
+      // Test Redis connection first
+      const testRedis = new Redis(redisUrl, {
+        lazyConnect: true,
+        connectTimeout: 5000,
+        commandTimeout: 3000,
+      });
 
-      log('✅ WS: Redis coordination initialized');
-    } catch (error) {
-      log(`❌ WS: Redis initialization failed: ${error}`);
-      // Don't throw in development, continue without Redis
-      if (process.env.NODE_ENV !== 'development') {
-        throw error;
+      try {
+        await testRedis.ping();
+        testRedis.disconnect();
+        log('✅ WS: Redis connection test successful');
+
+        // Create actual connections if test passes
+        this.redis = new Redis(redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+        });
+        
+        this.redisSubscriber = new Redis(redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+        });
+        
+        // Subscribe to WebSocket broadcast channel
+        await this.redisSubscriber.subscribe('ws:broadcast');
+        this.redisSubscriber.on('message', this.handleRedisMessage.bind(this));
+
+        log('✅ WS: Redis coordination initialized');
+      } catch (connectionError) {
+        testRedis.disconnect();
+        throw connectionError;
       }
+    } catch (error) {
+      log(`❌ WS: Redis initialization failed: ${error instanceof Error ? error.message : error}`);
+      
+      // Always fall back gracefully in development
+      if (process.env.NODE_ENV === 'development') {
+        log('🔄 WS: Falling back to local-only mode in development');
+        this.redis = null;
+        this.redisSubscriber = null;
+        return;
+      }
+      
+      // In production, this might be acceptable for single-instance deployments
+      log('⚠️  WS: Continuing without Redis - WebSocket coordination will be local-only');
+      this.redis = null;
+      this.redisSubscriber = null;
     }
   }
 

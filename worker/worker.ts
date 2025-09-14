@@ -48,14 +48,31 @@ class ContainerWorker {
     
     // ✅ DEV MODE: Skip Redis in development, connect to server's in-memory queue
     if (config.redisUrl) {
-      // Initialize Redis connection for production
-      this.redis = new Redis(config.redisUrl, {
-        maxRetriesPerRequest: 3,
-        lazyConnect: true,
-        keepAlive: 30000,
-        connectTimeout: 10000,
-        commandTimeout: 5000,
-      });
+      try {
+        // Test Redis connection first
+        const testRedis = new Redis(config.redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 5000,
+          commandTimeout: 3000,
+        });
+        
+        // Don't await the ping here - delay the test until start() method
+        testRedis.disconnect();
+        
+        // Initialize Redis connection for production only if not in development
+        this.redis = new Redis(config.redisUrl, {
+          maxRetriesPerRequest: 3,
+          lazyConnect: true,
+          keepAlive: 30000,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+        });
+        
+        this.log('🔌 Redis client initialized (will test connection on start)');
+      } catch (error) {
+        this.log('❌ WORKER: Redis initialization failed, falling back to development mode', { error: error instanceof Error ? error.message : error });
+        this.redis = null as any;
+      }
     } else {
       // Development mode - no Redis needed
       this.log('💡 DEV MODE: Running without Redis, will connect to server queue');
@@ -79,9 +96,20 @@ class ContainerWorker {
     try {
       // ✅ DEV MODE: Skip Redis connection in development
       if (config.redisUrl && this.redis) {
-        this.log('🔌 Connecting to Redis...', { url: this.maskRedisUrl(config.redisUrl) });
-        await this.redis.connect();
-        this.log('✅ Redis connection established');
+        try {
+          this.log('🔌 Testing Redis connection...', { url: this.maskRedisUrl(config.redisUrl) });
+          await this.redis.ping();
+          this.log('✅ Redis connection test successful');
+          this.log('🔌 Connecting to Redis...', { url: this.maskRedisUrl(config.redisUrl) });
+          await this.redis.connect();
+          this.log('✅ Redis connection established');
+        } catch (error) {
+          this.log('❌ WORKER: Redis connection failed, falling back to development mode', { error: error instanceof Error ? error.message : error });
+          if (this.redis) {
+            this.redis.disconnect();
+          }
+          this.redis = null as any;
+        }
       } else {
         this.log('💡 DEV MODE: Skipping Redis - will process tasks directly from server');
       }

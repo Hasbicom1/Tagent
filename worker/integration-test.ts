@@ -42,8 +42,19 @@ class IntegrationTester {
       ...config,
     };
 
-    this.redis = new Redis(this.config.redisUrl);
-    this.queue = new Queue('agent-tasks', { connection: this.redis });
+    try {
+      this.redis = new Redis(this.config.redisUrl, {
+        lazyConnect: true,
+        connectTimeout: 5000,
+        commandTimeout: 3000,
+      });
+      this.queue = new Queue('agent-tasks', { connection: this.redis });
+    } catch (error) {
+      console.error('❌ INTEGRATION-TEST: Redis initialization failed:', error instanceof Error ? error.message : error);
+      console.log('⚠️  Integration tests will be skipped due to Redis connection failure');
+      this.redis = null as any;
+      this.queue = null as any;
+    }
   }
 
   /**

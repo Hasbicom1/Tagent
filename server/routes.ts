@@ -277,25 +277,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   let redis: Redis | null = null;
   try {
     const redisUrl = process.env.REDIS_URL;
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
     if (redisUrl) {
-      redis = new Redis(redisUrl);
-      console.log('✅ Redis connection established for rate limiting');
-      
-      // Initialize comprehensive rate limiting system
-      rateLimiter = new MultiLayerRateLimiter(redis, DEFAULT_RATE_LIMIT_CONFIG);
-      
-      // Initialize session security store
-      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-      
-      console.log('✅ Multi-layer rate limiting and session security initialized');
+      // Test Redis connection first
+      const testRedis = new Redis(redisUrl, {
+        lazyConnect: true,
+        connectTimeout: 5000,
+        commandTimeout: 3000,
+      });
+
+      try {
+        await testRedis.ping();
+        testRedis.disconnect();
+        console.log('✅ ROUTES: Redis connection test successful');
+
+        // Create actual connection if test passes
+        redis = new Redis(redisUrl, {
+          lazyConnect: true,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+        });
+        
+        await redis.ping();
+        console.log('✅ Redis connection established for rate limiting');
+        
+        // Initialize comprehensive rate limiting system
+        rateLimiter = new MultiLayerRateLimiter(redis, DEFAULT_RATE_LIMIT_CONFIG);
+        
+        // Initialize session security store
+        sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+        
+        console.log('✅ Multi-layer rate limiting and session security initialized');
+      } catch (connectionError) {
+        testRedis.disconnect();
+        throw connectionError;
+      }
     } else if (process.env.NODE_ENV === 'production') {
       throw new Error('PRODUCTION_SECURITY_ERROR: Redis configuration required for liberation protocol');
     } else {
       console.warn('⚠️  DEVELOPMENT: Redis not configured - rate limiting and session security disabled');
     }
   } catch (error) {
-    console.error('❌ Redis initialization failed:', error);
-    if (process.env.NODE_ENV === 'production') {
+    console.error('❌ Redis initialization failed:', error instanceof Error ? error.message : error);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 ROUTES: Falling back to no rate limiting in development');
+      redis = null;
+      rateLimiter = null as any;
+      sessionSecurityStore = null as any;
+    } else {
       throw error;
     }
   }

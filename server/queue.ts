@@ -19,7 +19,7 @@ const BATCH_SIZE = 5; // Process up to 5 tasks in a batch
 const BATCH_TIMEOUT = 500; // Flush batch after 500ms
 
 // Redis connection configuration with fallback for development
-const getRedisConnection = (): { connection: ConnectionOptions } | undefined => {
+const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } | undefined> => {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const redisUrl = process.env.REDIS_URL;
   
@@ -29,29 +29,78 @@ const getRedisConnection = (): { connection: ConnectionOptions } | undefined => 
   }
   
   if (!redisUrl) {
+    if (isDevelopment) {
+      console.log('⚡ QUEUE: No REDIS_URL in development - using in-memory fallback');
+      return undefined;
+    }
     throw new Error('REDIS_URL environment variable is required in production');
   }
   
-  // Parse Redis URL or use default configuration
-  if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
-    return { connection: new Redis(redisUrl) };
-  }
-  
-  return {
-    connection: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      db: parseInt(process.env.REDIS_DB || '0'),
-      // PRODUCTION OPTIMIZATION: Enhanced Redis settings for high performance
-      lazyConnect: true,
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
-      connectTimeout: 10000,
-      commandTimeout: 5000,
-      enableAutoPipelining: true, // Batch Redis commands automatically
+  // Test Redis connection before returning configuration
+  try {
+    let testRedis: Redis;
+    
+    if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
+      testRedis = new Redis(redisUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: null, // Required for BullMQ
+        connectTimeout: 5000,
+        commandTimeout: 3000,
+      });
+    } else {
+      testRedis = new Redis({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+        db: parseInt(process.env.REDIS_DB || '0'),
+        lazyConnect: true,
+        maxRetriesPerRequest: null, // Required for BullMQ
+        connectTimeout: 5000,
+        commandTimeout: 3000,
+      });
     }
-  };
+    
+    // Test the connection
+    await testRedis.ping();
+    console.log('✅ QUEUE: Redis connection test successful');
+    
+    // Close test connection
+    testRedis.disconnect();
+    
+    // Return proper configuration for BullMQ
+    if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
+      return { 
+        connection: new Redis(redisUrl, {
+          maxRetriesPerRequest: null, // Required for BullMQ
+          lazyConnect: true,
+          connectTimeout: 10000,
+          commandTimeout: 5000,
+          enableAutoPipelining: true,
+        })
+      };
+    }
+    
+    return {
+      connection: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+        db: parseInt(process.env.REDIS_DB || '0'),
+        maxRetriesPerRequest: null, // Required for BullMQ
+        lazyConnect: true,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
+        enableAutoPipelining: true,
+      }
+    };
+  } catch (error) {
+    console.error('❌ QUEUE: Redis connection test failed:', error instanceof Error ? error.message : error);
+    if (isDevelopment) {
+      console.log('🔄 QUEUE: Falling back to in-memory mode for development');
+      return undefined;
+    }
+    throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 };
 
 // Task types and payload interfaces
@@ -212,7 +261,7 @@ function scheduleBatchProcessing(): void {
 // Initialize queue system
 export async function initializeQueue(): Promise<void> {
   try {
-    const connection = getRedisConnection();
+    const connection = await getRedisConnection();
     
     if (!connection) {
       console.log('🔄 QUEUE: Initializing in-memory mode for development');
