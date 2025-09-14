@@ -1,0 +1,44 @@
+You are now in full Build mode and have complete access to the existing codebase of the Agent System Live Session web app on onedollaragent.ai. Your goal is to implement all remaining production-critical fixes autonomously using your own code, achieving 100% live production readiness. No mocks or placeholders are allowed.
+
+Follow this strict execution plan:
+
+1️⃣ Phase 1 – WebSocket Stability
+- Refresh all available logs to diagnose disconnect patterns.
+- Fix the authentication persistence bug in client/src/lib/websocket.ts:
+  - Preserve authenticatedAgentId, sessionToken, and tokenRefreshCallback on disconnect().
+  - Create a separate forceDisconnect() for logout that clears auth state.
+- Implement heartbeat PING/PONG every 30 seconds.
+- Implement exponential backoff reconnect logic.
+- Validate server-side origin allowlist and rate limiting.
+- Test persistent WebSocket connections over 10+ minutes.
+
+2️⃣ Phase 2 – Real noVNC Integration
+- Install @novnc/novnc in the frontend.
+- Replace all ProductionRFB instances in client/src/lib/vnc-loader.ts with real RFB from noVNC.
+- Implement createVNCConnection() to fully configure scaleViewport, resizeSession, and showDotCursor.
+- Implement a VNC WebSocket proxy in server/vnc-proxy.ts:
+  - Secure connections with validateJWTToken.
+  - Proxy all data between frontend WebSocket and VNCManager (TigerVNC/Xvfb).
+- Test live browser streaming with full mouse/keyboard input at 1280x720, 10fps, auto-reconnect, and logging.
+
+3️⃣ Phase 3 – Session Lifecycle Enforcement
+- Enhance Stripe webhook in server/routes.ts to create idempotent sessions.
+- Enforce 24-hour TTL for all sessions.
+- Automatically revoke WebSocket and VNC connections upon session expiry.
+- Validate session lifecycle end-to-end using Stripe $1 checkout.
+
+4️⃣ Phase 4 – End-to-End Production Verification
+- Verify $1 Stripe checkout → session creation → WebSocket stability → VNC live streaming.
+- Confirm session expiry and cascade revocation works.
+- Ensure browser console and server logs are free of errors.
+- Validate all security measures (CSRF, origin validation, rate limiting).
+- Confirm health checks and structured logging are functional.
+
+✅ Requirements:
+- Use **only the existing codebase**; do not create new mock classes.
+- Provide production-ready code, configuration updates, and testing steps.
+- Complete each phase fully before moving to the next.
+- After finishing each phase, summarize with “Phase complete” before proceeding.
+- Begin **Phase 1: WebSocket Stability** immediately, and continue until full production readiness is achieved.
+
+Your Build mode access is assumed; proceed to execute all fixes autonomously.

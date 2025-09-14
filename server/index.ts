@@ -5,6 +5,7 @@ import { Redis } from "ioredis";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { wsManager } from "./websocket";
+import { initializeVNCProxy } from "./vnc-proxy";
 import { initializeQueue, closeQueue } from "./queue";
 import { validateEnvironment } from "./env-validation";
 import { logger, addRequestId } from "./logger";
@@ -277,6 +278,15 @@ app.get('/api/health', (req: Request, res: Response) => {
     log('🔌 Initializing WebSocket server...');
     await wsManager.initialize(server);
     log('✅ WebSocket server initialized');
+
+    // Initialize VNC proxy server for real browser automation streaming with Redis integration
+    log('🔌 Initializing VNC WebSocket proxy...');
+    initializeVNCProxy(server, {
+      vncHost: process.env.VNC_HOST || '127.0.0.1',
+      vncPort: parseInt(process.env.VNC_PORT || '5901', 10),
+      maxConnections: parseInt(process.env.VNC_MAX_CONNECTIONS || '10', 10)
+    }, redis); // Pass Redis connection for session validation
+    log('✅ VNC proxy server initialized');
 
     // SECURITY FIX: Validate WebSocket configuration is working
     validateWebSocketConfiguration();

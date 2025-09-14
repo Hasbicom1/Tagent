@@ -346,7 +346,7 @@ export class WebSocketClient {
    * Graceful disconnect (preserves authentication state for reconnection)
    */
   public disconnect(): void {
-    this.log('🔌 [DISCONNECT] Graceful disconnect - preserving auth state');
+    this.log('🔄 [DISCONNECT] Preserving auth state for reconnection');
     this.stopReconnecting();
     this.stopHeartbeat();
     
@@ -358,7 +358,8 @@ export class WebSocketClient {
     this.setState(WSConnectionState.DISCONNECTED);
     this.subscriptions.clear();
     this.messageQueue = [];
-    // NOTE: Preserving authenticatedAgentId, sessionToken, tokenRefreshCallback for reconnection
+    // ✅ CRITICAL FIX: Preserving authenticatedAgentId, sessionToken, tokenRefreshCallback for reconnection
+    // This prevents AUTH_REQUIRED loops on reconnection
   }
 
   /**

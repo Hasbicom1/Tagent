@@ -1,0 +1,37 @@
+You are now in full Build mode. Your task is to take the existing Agent System Live Session codebase and implement all **missing production features** to achieve **100% live, production-ready functionality** on onedollaragent.ai. Use only the existing files, routes, and architecture, and do not generate mocks or placeholders—everything must be fully functional.
+
+Follow this **execution order** strictly:
+
+1. **Phase 1 – WebSocket Stability**
+   - Examine the latest WebSocket logs and diagnose disconnect patterns.
+   - Fix authentication persistence in the WebSocketClient class.
+   - Implement heartbeat PING/PONG and exponential backoff for reconnects.
+   - Ensure server-side origin validation and rate limiting are production-ready.
+   - Validate persistent WebSocket connections for 10+ minutes without AUTH_REQUIRED errors.
+
+2. **Phase 2 – Real noVNC Integration**
+   - Replace all instances of ProductionRFB in `client/src/lib/vnc-loader.ts` with the real `@novnc/novnc` library.
+   - Implement a secure backend WebSocket VNC proxy that connects to your existing VNCManager.
+   - Enable full live browser streaming with mouse and keyboard input.
+   - Test live streaming at 1280×720, 10fps, with auto-reconnect and logging.
+   - Remove all mock framebuffer/drawing logic.
+
+3. **Phase 3 – Session Lifecycle Enforcement**
+   - Update Stripe webhook in `server/routes.ts` to create idempotent sessions.
+   - Enforce 24-hour TTL for all sessions.
+   - Automatically revoke WebSocket and VNC connections when a session expires.
+   - Validate session lifecycle with real Stripe $1 checkout flow.
+
+4. **Phase 4 – End-to-End Production Verification**
+   - Test $1 Stripe checkout → session creation → WebSocket stability → VNC live streaming.
+   - Verify logs, security (CSRF, origin validation, rate limiting), and structured monitoring.
+   - Confirm session TTL enforcement and cascade revocation.
+   - Ensure zero errors in browser console and backend logs.
+
+**Requirements:**
+- Use your own existing codebase; do not introduce new mock classes.
+- Provide production-ready code, configuration updates, and testing steps.
+- Complete each phase fully before moving to the next.
+- After finishing a phase, summarize with “Phase complete” and then proceed.
+
+Begin **Phase 1: WebSocket Stability** immediately, and continue through all phases until the system is fully production-ready with **real VNC streaming, stable WebSocket, and session lifecycle enforcement**.

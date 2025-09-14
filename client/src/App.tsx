@@ -14,6 +14,7 @@ import { BrowserInterface } from "@/components/browser/BrowserInterface";
 import Landing from "@/pages/landing";
 import Success from "@/pages/success";
 import AgentChat from "@/pages/agent-chat";
+import VNCTestPage from "@/pages/vnc-test";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -196,6 +197,9 @@ function Router() {
       <Route path="/live" component={Landing} />
       <Route path="/live/success" component={Success} />
       <Route path="/live/agent/:agentId" component={AgentChat} />
+      
+      {/* VNC Security Test Route */}
+      <Route path="/vnc-test" component={VNCTestPage} />
       
       {/* Existing Routes */}
       <Route path="/success" component={CheckoutSuccess} />

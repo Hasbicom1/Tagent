@@ -1,0 +1,38 @@
+You have analyzed the Agent System Live Session web app and identified that the system is 88% complete, with 12% critical missing components preventing production readiness. 
+
+Your task now is to **fully implement the missing components and stabilize the system for live deployment** on onedollaragent.ai. Focus on removing all mock implementations and ensuring end-to-end production functionality. Follow this exact execution order:
+
+1. **WebSocket Stability (Phase 1 - Immediate)**
+   - Fix authentication disconnect loops.
+   - Ensure JWT token persistence across reconnections.
+   - Implement heartbeat/backoff mechanism for connection stability.
+   - Apply strict origin allowlist and secure rate limiting.
+   - Validate live testing of WebSocket connections with task updates.
+
+2. **Real VNC Streaming (Phase 2 - High Priority)**
+   - Replace ProductionRFB mock with real `@novnc/novnc` client.
+   - Set up secure backend WebSocket proxy for VNC with JWT validation.
+   - Integrate with VNCManager’s Xvfb + TigerVNC instance.
+   - Enable live browser streaming with full mouse/keyboard input.
+   - Test 10fps @ 1280x720, auto-reconnect, and proper logging.
+
+3. **Session Lifecycle Enforcement (Phase 3 - Critical)**
+   - Ensure Stripe webhook triggers idempotent session creation.
+   - Enforce 24-hour TTL with automatic expiration and revocation.
+   - Cascade revocation to WebSocket and VNC connections.
+   - Verify session lifecycle in end-to-end $1 checkout scenario.
+
+4. **End-to-End Production Verification**
+   - Stripe $1 checkout → session creation → AI task execution → live VNC control.
+   - Confirm zero disconnects, stable WebSocket, full streaming.
+   - Verify logs, error handling, and production security hardening.
+   - Ensure health checks, CSRF protection, and rate limiting are fully functional.
+
+**Requirements:**
+- Remove all mock components; no placeholders allowed.
+- All code must be production-ready, secure, and maintainable.
+- Provide step-by-step code/configuration changes and testing commands.
+- After completing each phase, summarize with “Phase complete” before moving to the next.
+- Only move to the next phase when the current one passes verification.
+
+Begin execution immediately
