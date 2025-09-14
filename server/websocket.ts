@@ -214,6 +214,11 @@ export class WebSocketManager {
         connectTimeout: 5000,
         commandTimeout: 3000,
       });
+      
+      // Add error listener to test client
+      testRedis.on('error', (err) => {
+        log(`⚠️  WS: Redis test error: ${err.message}`);
+      });
 
       try {
         await testRedis.ping();
@@ -227,10 +232,20 @@ export class WebSocketManager {
           commandTimeout: 5000,
         });
         
+        // Add error listener to prevent crashes
+        this.redis.on('error', (err) => {
+          log(`⚠️  WS: Redis client error: ${err.message}`);
+        });
+        
         this.redisSubscriber = new Redis(redisUrl, {
           lazyConnect: true,
           connectTimeout: 10000,
           commandTimeout: 5000,
+        });
+        
+        // Add error listener to subscriber
+        this.redisSubscriber.on('error', (err) => {
+          log(`⚠️  WS: Redis subscriber error: ${err.message}`);
         });
         
         // Subscribe to WebSocket broadcast channel

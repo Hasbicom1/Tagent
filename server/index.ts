@@ -161,6 +161,11 @@ async function testRedisConnection(redisUrl: string, timeoutMs: number = 3000): 
       maxRetriesPerRequest: 1,
     });
     
+    // Add error listener to prevent crashes
+    testRedis.on('error', (e) => {
+      console.warn('⚠️  SESSION test redis error:', e.message);
+    });
+    
     testRedis.ping()
       .then(() => {
         clearTimeout(timeout);
@@ -196,6 +201,11 @@ async function initializeRedisSession(): Promise<any> {
             maxRetriesPerRequest: 3,
           });
           
+          // Add error listener to prevent crashes
+          redis.on('error', (e) => {
+            console.warn('⚠️  SESSION redis error:', e.message);
+          });
+          
           // Test the actual connection
           await redis.ping();
           console.log('✅ SECURITY: Redis connection established for session storage');
@@ -206,6 +216,12 @@ async function initializeRedisSession(): Promise<any> {
           
           // Create Redis session store for production
           const redisStore = createRedisSessionStore(redis);
+          
+          // Add error listener to RedisStore to prevent crashes
+          redisStore.on('error', (e) => {
+            console.warn('⚠️  SESSION store error:', e.message);
+          });
+          
           console.log('✅ SECURITY: Redis session store created');
           
           return redisStore;
@@ -238,9 +254,20 @@ async function initializeRedisSession(): Promise<any> {
             maxRetriesPerRequest: 2,
           });
           
+          // Add error listener to prevent crashes
+          redis.on('error', (e) => {
+            console.warn('⚠️  SESSION redis error (Replit):', e.message);
+          });
+          
           await redis.ping();
           sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
           const redisStore = createRedisSessionStore(redis);
+          
+          // Add error listener to RedisStore to prevent crashes
+          redisStore.on('error', (e) => {
+            console.warn('⚠️  SESSION store error (Replit):', e.message);
+          });
+          
           console.log('✅ SECURITY: Redis session store created for Replit');
           return redisStore;
         } catch (connectionError) {

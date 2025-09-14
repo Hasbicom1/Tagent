@@ -35,6 +35,11 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
           connectTimeout: timeoutMs,
           commandTimeout: timeoutMs,
         });
+        
+        // Add error listener to prevent crashes
+        testRedis.on('error', (err) => {
+          console.warn('⚠️  QUEUE: Redis test error:', err.message);
+        });
       } else {
         testRedis = new Redis({
           host: process.env.REDIS_HOST || 'localhost',
@@ -45,6 +50,11 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
           maxRetriesPerRequest: 1,
           connectTimeout: timeoutMs,
           commandTimeout: timeoutMs,
+        });
+        
+        // Add error listener to prevent crashes
+        testRedis.on('error', (err) => {
+          console.warn('⚠️  QUEUE: Redis test error:', err.message);
         });
       }
       
@@ -103,14 +113,21 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
     
     // Return proper configuration for BullMQ with adjusted timeouts for Replit
     if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
+      const redisClient = new Redis(redisUrl, {
+        maxRetriesPerRequest: null, // Required for BullMQ
+        lazyConnect: true,
+        connectTimeout: isReplit ? 3000 : 10000,
+        commandTimeout: isReplit ? 2000 : 5000,
+        enableAutoPipelining: true,
+      });
+      
+      // Add error listener to prevent crashes
+      redisClient.on('error', (err) => {
+        console.warn('⚠️  QUEUE: Redis connection error:', err.message);
+      });
+      
       return { 
-        connection: new Redis(redisUrl, {
-          maxRetriesPerRequest: null, // Required for BullMQ
-          lazyConnect: true,
-          connectTimeout: isReplit ? 3000 : 10000,
-          commandTimeout: isReplit ? 2000 : 5000,
-          enableAutoPipelining: true,
-        })
+        connection: redisClient
       };
     }
     
