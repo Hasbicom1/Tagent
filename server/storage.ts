@@ -74,7 +74,9 @@ export class MemStorage implements IStorage {
       ...insertSession, 
       id,
       createdAt: new Date(),
-      isActive: true
+      isActive: true,
+      checkoutSessionId: insertSession.checkoutSessionId ?? null,
+      stripePaymentIntentId: insertSession.stripePaymentIntentId ?? null
     };
     this.sessions.set(id, session);
     return session;

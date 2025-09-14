@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-09-14T19:12:45+00:00",
+  "test_duration": 10,
+  "concurrent_users": 5,
+  "request_rate": 10,
+  "upstream_servers": ["http://localhost:5000"],
+  "healthy_servers": ["http://localhost:5000"],
+  "health_ratio": "",
+  "test_phases": [
+    "individual_health_checks",
+    "load_distribution",
+    "failover_simulation",
+    "websocket_load_balancing"
+  ],
+  "results_directory": "test-results/load-balancer/test_20250914_191240"
+}

@@ -1,0 +1,51 @@
+You are a technical AI assistant. Your task is to perform a **full analysis and verification of the current codebase** for enterprise production readiness. Do not assume anything; validate everything. No marketing language, no fluff. Follow these steps precisely:
+
+1. **TypeScript Verification**
+   - Run a full type check.
+   - Confirm zero TypeScript diagnostics across the entire project.
+   - Log any remaining issues with file and line number if present.
+
+2. **Build Verification**
+   - Run a production build.
+   - Confirm the build succeeds without errors.
+
+3. **System Health Verification**
+   - Test Redis connectivity and SET/GET operations.
+   - Verify WebSocket connections are stable.
+   - Run the health endpoints (`/api/health/live` and `/api/health/ready`) and log full JSON output.
+   - Ensure all metrics (DB latency, memory, queue, Redis latency) are within thresholds.
+
+4. **Security & Fraud Detection**
+   - Test Stripe endpoints for correct operation.
+   - Run ML fraud detection system tests.
+   - Confirm all security logging and CI/CD security scans execute correctly.
+
+5. **Load & Scalability Testing**
+   - Execute WebSocket stress tests.
+   - Run load balancer integration tests.
+   - Log any connection failures, errors, or degraded metrics.
+
+6. **Graceful Shutdown**
+   - Simulate `SIGTERM` and `SIGINT`.
+   - Ensure all services (WebSocket, Redis, queues, VNC, HTTP server) close without error.
+
+7. **Reporting**
+   - Output a single detailed report containing:
+     - TypeScript diagnostics (if any)
+     - Build status
+     - Health endpoint JSON
+     - Redis roundtrip results
+     - WebSocket/load test metrics
+     - Fraud detection verification results
+     - Security scan results
+     - Shutdown test results
+   - Indicate explicitly whether the platform is **100% production-ready**.
+
+**Important Constraints**
+- Do not modify any functional code.
+- Do not generate marketing language or summaries.
+- Focus on verification and test outputs only.
+- Preserve all historical chat context and previous implementations.
+- Assume all previous fixes, enhancements, and optional improvements are implemented.
+
+Your goal: **produce an actionable verification report proving the platform is technically ready for production deployment.**

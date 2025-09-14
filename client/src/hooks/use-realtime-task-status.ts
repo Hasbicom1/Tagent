@@ -324,7 +324,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     wsClient.on('error', handleError);
 
     // Only attempt connection if we have an agentId to authenticate with
-    let timeoutId: number | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
     if (agentId) {
       // Initial connection with delay to avoid race conditions
       timeoutId = setTimeout(() => {
@@ -337,7 +337,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
 
     // Cleanup
     return () => {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       wsClient.off('connected', handleConnected);
       wsClient.off('disconnected', handleDisconnected);
       wsClient.off('authenticated', handleAuthenticated);
