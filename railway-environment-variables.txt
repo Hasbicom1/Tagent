@@ -1,0 +1,43 @@
+# 🚀 COMPLETE RAILWAY ENVIRONMENT VARIABLES
+# Copy these EXACT values into your Railway Variables tab
+
+# ═══════════════════════════════════════
+# BASIC APPLICATION SETTINGS
+# ═══════════════════════════════════════
+
+NODE_ENV=production
+PORT=5000
+HOST=0.0.0.0
+FORCE_HTTPS=true
+
+# ═══════════════════════════════════════
+# SECURITY SECRETS (Generated for you)
+# ═══════════════════════════════════════
+
+SESSION_SECRET=a1e6d64dadc3e52cf7903e965bfc53cf2392cbcfae0c99d9d7bcaa83e4d9d3c8
+CSRF_SECRET=74f23ad8eeb4579c3375b1ba097605b30c614d7c6a442aa69223a413fb0065a2
+
+# ═══════════════════════════════════════
+# DATABASE CONNECTIONS (Railway Auto-Generated)
+# ═══════════════════════════════════════
+
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+
+# ═══════════════════════════════════════
+# YOUR DOMAIN CONFIGURATION
+# ⚠️ REPLACE "YOUR-DOMAIN.com" WITH YOUR ACTUAL DOMAIN
+# ═══════════════════════════════════════
+
+DOMAIN=YOUR-DOMAIN.com
+CORS_ORIGINS=https://YOUR-DOMAIN.com,https://www.YOUR-DOMAIN.com
+
+# ═══════════════════════════════════════
+# YOUR API KEYS FROM REPLIT
+# 📋 GET THESE VALUES FROM YOUR REPLIT SECRETS TAB
+# ═══════════════════════════════════════
+
+# Go to Replit → Secrets tab and copy these EXACT values:
+# STRIPE_SECRET_KEY=[Copy your sk_ value from Replit]
+# VITE_STRIPE_PUBLIC_KEY=[Copy your pk_ value from Replit] 
+# OPENAI_API_KEY=[Copy your sk- value from Replit]

@@ -1,0 +1,60 @@
+🚀 RAILWAY ENVIRONMENT VARIABLES - READY TO COPY
+=====================================================
+
+Copy each line below as a separate variable in Railway:
+Railway Dashboard → Your Project → Main Service → Variables Tab
+
+📋 BASIC APPLICATION SETTINGS:
+===============================
+NODE_ENV=production
+PORT=5000
+HOST=0.0.0.0
+FORCE_HTTPS=true
+
+🔐 SECURITY SECRETS:
+===================
+SESSION_SECRET=a1e6d64dadc3e52cf7903e965bfc53cf2392cbcfae0c99d9d7bcaa83e4d9d3c8
+CSRF_SECRET=74f23ad8eeb4579c3375b1ba097605b30c614d7c6a442aa69223a413fb0065a2
+
+💾 DATABASE CONNECTIONS:
+========================
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+
+🌐 DOMAIN CONFIGURATION:
+========================
+⚠️ REPLACE "YOUR-DOMAIN.com" WITH YOUR ACTUAL DOMAIN:
+DOMAIN=YOUR-DOMAIN.com
+CORS_ORIGINS=https://YOUR-DOMAIN.com,https://www.YOUR-DOMAIN.com
+
+🔑 YOUR API KEYS (Extracted from Replit):
+=========================================
+STRIPE_SECRET_KEY=sk_test_51S2a5H9efKzWWXvj79ObkaJabt5oetSaJSkv5SBGePz6GgwGBvqDJdxTNSJgnOPqwDSeCPEjk99t2DlwiEFcgyRQ00hPeUl7Yq
+VITE_STRIPE_PUBLIC_KEY=pk_test_51S2a5H9efKzWWXvjHTR31tOvaatZvP3c50EmA5NIFEW4D4GxC78RpVwJVGhXeaq27CrHXj60ZZwBkpFWWBbr3VSV00ozGMLxCu
+OPENAI_API_KEY=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
+
+=====================================================
+HOW TO ADD THESE TO RAILWAY:
+=====================================================
+
+1. Go to Railway Dashboard → Your Project
+2. Click your MAIN SERVICE (not the databases)
+3. Click "Variables" tab
+4. For each line above:
+   - Click "+ New Variable"
+   - Name: [variable name before =]
+   - Value: [everything after =]
+
+EXAMPLE:
+   Name: NODE_ENV
+   Value: production
+
+   Name: STRIPE_SECRET_KEY  
+   Value: sk_test_51S2a5H9efKzWWXvj79ObkaJabt5oetSaJSkv5SBGePz6GgwGBvqDJdxTNSJgnOPqwDSeCPEjk99t2DlwiEFcgyRQ00hPeUl7Yq
+
+⚠️ IMPORTANT: 
+- Replace YOUR-DOMAIN.com with your actual Namecheap domain
+- Copy the entire values exactly (don't add quotes)
+- DATABASE_URL and REDIS_URL use Railway's template variables
+
+✅ ALL SET! No copy-paste errors possible.
