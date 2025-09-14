@@ -1,0 +1,161 @@
+CONTEXT:
+You are now the autonomous Chief Production Engineer for the Agent System Live Session app (onedollaragent.ai). You have full Build-mode access to the repository and deployment environment. The last validation report identified configuration and production-hardening gaps. Your mission is to **fix all critical items now** (no more analysis), produce tested patches, and verify readiness for immediate production traffic.
+
+RULES:
+- Use only the existing codebase and deployment pipelines.
+- Produce real, working code — no pseudocode, no placeholders, no marketing language.
+- Make small, safe, atomic commits with clear messages and open a PR per logical fix group.
+- Each phase must end with exact verification commands and evidence (logs, curl responses, or test outputs).
+- Never break current UI or business logic. Preserve existing UX and white-mode styles.
+- If a risky change is required, implement a feature-flag or switch (default OFF) and provide rollback instructions.
+
+OBJECTIVES & TASKS (Execute in order):
+
+PHASE A — Redis Production Configuration (HIGH PRIORITY)
+1. Add and verify Redis env var:
+   - Ensure `REDIS_URL` is required in env validation.
+   - Add `REDIS_URL` to Railway project config and `.env.production` template.
+   - Update `server/index.ts` or config loader to fail fast if `REDIS_URL` missing (with clear message).
+2. Replace any in-memory fallback with real Redis client usage:
+   - Files to edit: `server/index.ts`, `server/redis.ts` (or wherever Redis client is), `rateLimitStore.ts`, `sessionStore.ts`.
+3. Integration test:
+   - Provide a small script `scripts/test-redis.sh` that:
+     - Connects to `REDIS_URL`
+     - Sets, gets, and pub/sub test message
+   - Show test output in PR description.
+
+Verification commands:
+- `curl -sS https://onedollaragent.ai/api/health` → `{"redis":"healthy", ...}`
+- `curl -sS https://onedollaragent.ai/api/csrf-token` → 200 OK and token body
+Deliverable: PR with code + `scripts/test-redis.sh` output.
+
+PHASE B — noVNC Production Build & ES2022 Issue Fix (HIGH PRIORITY)
+1. Resolve top-level await/ES2022 incompatibility safely:
+   - Preferred: Add a small vendor bundle `client/src/vendor/novnc-legacy.js` — a transpiled ES2020 build of `@novnc/novnc` (or include the recommended noVNC UMD build).
+   - Alternative if vendor build not available: implement dynamic-import shim:
+     - `client/src/lib/vnc-loader.ts`:
+       - `async function loadRFB() { try { const mod = await import(/* webpackIgnore: true */ '/vendor/novnc-legacy.js'); return mod.RFB || mod.default.RFB || mod; } catch(e){ throw new Error('noVNC load failed: '+e.message); } }`
+   - Update `vite.config.ts` to ensure vendor file is served as static asset and add rollup option to exclude `@novnc/novnc` from automatic compile if using external vendor.
+2. Ensure integrity pinning or self-hosting:
+   - If using CDN fallback, add integrity hash checks or move runtime file to your assets and serve from CDN with pinned hash.
+3. Replace any `ProductionRFB` simulation fallback with the real RFB loader.
+4. Add unit/integration test:
+   - `scripts/test-novnc-load.sh` that attempts to `fetch('/vendor/novnc-legacy.js')` and instantiate RFB in a headless test harness (jsdom or puppeteer).
+   - Example automated smoke test: headless browser connects to `/vnc-test`, expects canvas to receive at least 1 framebuffer frame within 5s.
+
+Verification commands:
+- Build and run: `npm run build && npm run start:prod`
+- Browser smoke: `node scripts/test-novnc-load.sh` → success
+Deliverable: PR with vendor file or dynamic-import patch + tests + updated `vite.config.ts`.
+
+PHASE C — Stripe Fraud Scoring & Webhook Hardening (HIGH → MEDIUM)
+1. Add risk scoring in webhook handler (`server/routes.ts` or `server/webhook.ts`):
+   - Implement `calculateRiskScore(paymentIntent)` (use heuristics: shipping/billing mismatch, IP anomalies, country high-risk lists, amount anomalies).
+   - If `riskScore > FRAUD_THRESHOLD` (configurable env var), mark transaction for manual review and DO NOT auto-activate session.
+   - Log security events `payment_fraud_attempt` with details to security log/alerting system.
+2. Ensure idempotency and strict verification:
+   - Verify Stripe signature, idempotency keys, and ensure `activateSession` is idempotent.
+3. Tests:
+   - Unit test simulating webhook with tampered signature → 400.
+   - Simulate high risk webhook → session not activated; security event created.
+
+Verification commands:
+- `curl -X POST https://onedollaragent.ai/server/webhook -H 'Stripe-Signature: bad'` → 400
+- Run unit tests: `npm run test:webhook` → pass
+Deliverable: PR with `calculateRiskScore` + unit tests.
+
+PHASE D — Session Revocation & Real-Time Kill (HIGH PRIORITY)
+1. Implement immediate session kill on expiry:
+   - Use Redis pub/sub channel `session:revoked`.
+   - When `revokeSession(sessionId)` runs, publish sessionId to channel.
+   - WebSocket server and VNC proxy subscribe to `session:revoked` and immediately close matching sockets.
+2. Ensure WebSocket/VNC connections check Redis TTL periodically (heartbeat) and enforce disconnect if expired.
+3. Implement graceful notification to client: send `{"type":"SESSION_REVOKED","reason":"expired"}` then close.
+4. Tests:
+   - Trigger `revokeSession` and assert connections closed within 2s.
+
+Verification commands:
+- `node scripts/test-revoke-session.js <sessionId>` → WebSocket logs show kick and client disconnect.
+Deliverable: PR with pub/sub implementation + tests.
+
+PHASE E — TypeScript Diagnostics & Code Quality (HIGH → MEDIUM)
+1. Fix 21 LSP diagnostics:
+   - Files: `vnc-proxy.ts`, `vnc-loader.ts`, `server/index.ts`, `routes.ts`.
+   - Enforce `tsc --noEmit` passing in CI and local pre-commit.
+2. Add ESLint rule set and run autofix where safe.
+3. Tests:
+   - `npm run build` and `npm run typecheck` must pass.
+
+Verification commands:
+- `npm run typecheck` → exit 0
+Deliverable: PRs fixing types + CI green.
+
+PHASE F — Stress Testing & Performance (MEDIUM)
+1. Create stress test scenarios (k6 or wrk):
+   - WebSocket connect/disconnect storms (simulate auth reconnect loops)
+   - Concurrent VNC sessions up to expected production scale (e.g., 100 concurrent)
+   - BullMQ worker queue pressure test
+2. Run tests and collect bottlenecks. Produce a short actionable report of any failures and fix steps (e.g., pool sizes, batch limits).
+3. Add automated nightly load test job in CI (optional feature-flagged).
+
+Verification commands:
+- `k6 run load/wss-stress.js` → attach report
+Deliverable: load test scripts + summary report + any performance patches.
+
+PHASE G — Monitoring, Alerts & Rollback Plan (MEDIUM)
+1. Ensure production-grade alerts for:
+   - Redis down
+   - High rate of `AUTH_REQUIRED` events
+   - High queue backlog
+   - Payment fraud alerts
+2. Add a safe rollback plan in README:
+   - How to flip feature flags
+   - How to revert PRs and redeploy previous tag
+Deliverable: PR with monitoring config & README rollback steps.
+
+FINAL PHASE — End-to-End Verification & Launch Report
+1. Run full e2e:
+   - Stripe $1 checkout (test keys or real keys in a sandbox) → session created
+   - WebSocket connected and stable for 10+ minutes
+   - Real noVNC streaming renders and accepts input
+   - Trigger session revoke and confirm immediate kill
+2. Produce final JSON readiness report in this schema:
+
+{
+ "overall_readiness_pct": number,
+ "subsystems": {
+   "redis": {"pct": number, "status":"ok|warn|fail", "notes":[...]},
+   "novnc": {...},
+   "stripe": {...},
+   "session_revocation": {...},
+   "websocket": {...},
+   "worker": {...},
+   "monitoring": {...}
+ },
+ "evidence": {
+   "health_check": "<curl output>",
+   "novnc_test": "<test output>",
+   "redis_test": "<script output>",
+   "stress_test_summary": "<file or link>"
+ }
+}
+
+Acceptance criteria (must ALL PASS):
+- `npm run typecheck` → exit 0
+- `curl https://onedollaragent.ai/api/health` → shows `redis: "healthy", websocket: "healthy", queue:"healthy"`
+- `node scripts/test-novnc-load.sh` → success
+- `node scripts/test-revoke-session.js <sessionId>` → client disconnected within 2s
+- Stress test throughput within acceptable thresholds (document thresholds)
+- All PRs merged and CI green
+
+SAFETY & ROLLBACK:
+- For any risky change (noVNC, Stripe logic), gate behind env var `FEATURE_PRODUCTION_FIX=true` default OFF.
+- Provide rollback commands in PR and tag previous release.
+
+OUTPUT REQUIRED FROM YOU (for each phase):
+- PR link(s)
+- Short summary of changes (bullet points)
+- Test output (paste logs or upload artifacts)
+- New readiness % after each phase
+
+BEGIN NOW: start with PHASE A (Redis config) and produce the PR, tests, and verification outputs. Proceed phase-by-phase until all acceptance criteria are met. No delays, no analysis-only responses — implement, test, and show evidence.

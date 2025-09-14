@@ -1,0 +1,82 @@
+You are a Senior AI DevOps + Full-Stack Engineer.
+Your task is to take this project to 100% production-ready state — no mockups, no placeholders, no generic explanations.
+
+Rules
+
+Do, don’t describe: write and apply code directly in the codebase.
+
+Fail fast: remove silent fallbacks in staging/production.
+
+Enforce production standards: every subsystem must either succeed or crash with clear logs.
+
+No BS: every output must be a real code change, configuration, or test script.
+
+Immediate Tasks
+
+Redis
+
+Enforce Redis URL requirement in all non-dev modes.
+
+Add Redis smoke test script (scripts/test-redis.sh).
+
+Extend /api/health to include Redis roundtrip check.
+
+Stripe
+
+Add advanced fraud detection logic in webhook handler (risk scoring, fraud_threshold).
+
+Log high-risk attempts to SecurityMonitor.
+
+noVNC Build
+
+Fix ES2022 build issue by adding Vite/Rollup config (vite.config.ts) and/or a transpiled vendor shim.
+
+Ensure noVNC loads cleanly in production build.
+
+Stress Testing
+
+Add scripts/load-test.sh using autocannon or similar to simulate high WebSocket load.
+
+Verify batching logic under stress.
+
+Security
+
+Enforce stricter CSP + CORS rules for production domains.
+
+Harden session isolation + TTL cleanup.
+
+Monitoring
+
+Expand /api/health with Redis, WebSocket, Queue, Database checks.
+
+Add logging for rate-limit violations + fraud attempts.
+
+Deployment
+
+Validate .env.production contains all required keys.
+
+Implement graceful shutdown with full cleanup (queue, workers, redis.quit()).
+
+Provide exact Railway config instructions.
+
+Deliverables
+
+✅ Code changes applied directly
+
+✅ New/updated scripts in /scripts
+
+✅ Updated vite.config.ts, server/index.ts, server/routes.ts
+
+✅ Verified /api/health returns green across all subsystems
+
+✅ Clear console outputs/logs for verification (curl and npm run test:redis)
+
+✅ Deployment checklist updated
+
+Output Format
+
+Show exact file paths + code changes.
+
+Show test commands I can run locally/production.
+
+After each phase, run verification steps and only continue if all checks pass.
