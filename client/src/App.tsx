@@ -11,6 +11,9 @@ import { AgentInterface } from "@/components/agent/AgentInterface";
 import { PaymentSuccess } from "@/components/payment/PaymentSuccess";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
 import { BrowserInterface } from "@/components/browser/BrowserInterface";
+import Landing from "@/pages/landing";
+import Success from "@/pages/success";
+import AgentChat from "@/pages/agent-chat";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -189,6 +192,12 @@ function Router() {
 
   return (
     <Switch>
+      {/* New Production-Ready Routes */}
+      <Route path="/live" component={Landing} />
+      <Route path="/live/success" component={Success} />
+      <Route path="/live/agent/:agentId" component={AgentChat} />
+      
+      {/* Existing Routes */}
       <Route path="/success" component={CheckoutSuccess} />
       <Route path="/agent" component={AgentAccess} />
       <Route path="/browser/:sessionId" component={({ params }) => (

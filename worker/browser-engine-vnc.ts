@@ -1,13 +1,13 @@
 /**
  * Enhanced Browser Engine with VNC Live View Integration
  * 
- * Extends the existing BrowserEngine to support live visual streaming
+ * Wraps the existing BrowserEngine to support live visual streaming
  * via VNC while maintaining all existing automation capabilities
  */
 
 import { BrowserEngine, BrowserTask, BrowserTaskResult, ExecutionStep } from './browser-engine';
 import { VNCManager, VNCSession } from './vnc-manager';
-import { chromium, firefox, webkit, Browser, BrowserContext, Page, LaunchOptions } from 'playwright';
+import { EventEmitter } from 'events';
 
 export interface LiveViewConfig {
   enableLiveView: boolean;
@@ -24,13 +24,16 @@ export interface LiveBrowserSession {
   isLiveViewActive: boolean;
 }
 
-export class BrowserEngineWithVNC extends BrowserEngine {
+export class BrowserEngineWithVNC extends EventEmitter {
+  private browserEngine: BrowserEngine;
   private vncManager: VNCManager;
   private liveViewConfig: LiveViewConfig;
   private liveSessions = new Map<string, LiveBrowserSession>();
 
   constructor(config: any, liveViewConfig: Partial<LiveViewConfig> = {}) {
-    super(config);
+    super();
+    
+    this.browserEngine = new BrowserEngine(config);
     
     this.liveViewConfig = {
       enableLiveView: true,
@@ -56,36 +59,11 @@ export class BrowserEngineWithVNC extends BrowserEngine {
   }
 
   /**
-   * Override browser launch to use VNC display when live view is enabled
+   * Initialize the enhanced browser engine with VNC capabilities
    */
-  protected async launchBrowser(sessionId: string): Promise<Browser> {
-    let browser: Browser;
-    
-    if (this.liveViewConfig.enableLiveView) {
-      // Start VNC session for live view
-      const vncSession = await this.startLiveView(sessionId);
-      
-      // Configure browser to use VNC display
-      const launchOptions = await this.getLiveViewLaunchOptions(vncSession);
-      
-      switch (this.config.browserType) {
-        case 'firefox':
-          browser = await firefox.launch(launchOptions);
-          break;
-        case 'webkit':
-          browser = await webkit.launch(launchOptions);
-          break;
-        default:
-          browser = await chromium.launch(launchOptions);
-      }
-      
-      this.log(`🎥 Browser launched with live view on display ${vncSession?.displayNumber}`);
-    } else {
-      // Fall back to standard headless mode
-      browser = await super.launchBrowser(sessionId);
-    }
-
-    return browser;
+  async initialize(): Promise<void> {
+    await this.browserEngine.initialize();
+    this.log('✅ Enhanced browser engine with VNC initialized');
   }
 
   /**
@@ -104,12 +82,18 @@ export class BrowserEngineWithVNC extends BrowserEngine {
       const webSocketURL = this.vncManager.getWebSocketURL(sessionId);
       const displayEnv = this.vncManager.getDisplayEnv(sessionId);
 
+      // Set display environment for browser processes
+      if (displayEnv) {
+        process.env.DISPLAY = displayEnv;
+        this.log(`🖥️  Set DISPLAY environment to ${displayEnv}`);
+      }
+
       // Store live session info
       const liveSession: LiveBrowserSession = {
         sessionId,
         vncSession,
-        displayEnv,
-        webSocketURL,
+        displayEnv: displayEnv || undefined,
+        webSocketURL: webSocketURL || undefined,
         isLiveViewActive: true
       };
 
@@ -157,56 +141,33 @@ export class BrowserEngineWithVNC extends BrowserEngine {
   }
 
   /**
-   * Get browser launch options configured for VNC display
-   */
-  private async getLiveViewLaunchOptions(vncSession: VNCSession | null): Promise<LaunchOptions> {
-    const baseOptions: LaunchOptions = {
-      headless: false, // Must be headed for VNC
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-default-apps',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    };
-
-    // Configure display environment for VNC
-    if (vncSession && vncSession.displayNumber) {
-      process.env.DISPLAY = `:${vncSession.displayNumber}`;
-      this.log(`🖥️  Set DISPLAY environment to :${vncSession.displayNumber}`);
-    } else if (process.env.REPL_ID) {
-      // In Replit, VNC is handled automatically
-      this.log(`🖥️  Using Replit's built-in VNC display`);
-    }
-
-    return baseOptions;
-  }
-
-  /**
-   * Override task execution to update VNC activity
+   * Delegate to browser engine while updating VNC activity
    */
   async executeTask(task: BrowserTask): Promise<BrowserTaskResult> {
+    // Start live view if enabled and not already active
+    if (this.liveViewConfig.enableLiveView && this.liveViewConfig.autoStartVNC) {
+      const liveSession = this.getLiveViewDetails(task.sessionId);
+      if (!liveSession || !liveSession.isLiveViewActive) {
+        await this.startLiveView(task.sessionId);
+      }
+    }
+
     // Update VNC session activity
     if (this.liveViewConfig.enableLiveView) {
       this.vncManager.updateActivity(task.sessionId);
     }
 
-    // Execute task with standard engine
-    const result = await super.executeTask(task);
+    // Execute task with browser engine
+    const result = await this.browserEngine.executeTask(task);
 
     // Add live view metadata to result
     const liveSession = this.getLiveViewDetails(task.sessionId);
-    if (liveSession) {
+    if (liveSession && liveSession.isLiveViewActive) {
       (result as any).liveView = {
         webSocketURL: liveSession.webSocketURL,
-        isActive: liveSession.isLiveViewActive
+        isActive: liveSession.isLiveViewActive,
+        vncPort: liveSession.vncSession?.vncPort,
+        displayNumber: liveSession.vncSession?.displayNumber
       };
     }
 
@@ -214,14 +175,19 @@ export class BrowserEngineWithVNC extends BrowserEngine {
   }
 
   /**
-   * Override session cleanup to stop VNC
+   * Close session with VNC cleanup
    */
   async closeSession(sessionId: string): Promise<void> {
-    // Stop live view first
+    // Stop live view (browser engine will handle its own cleanup)
     await this.stopLiveView(sessionId);
-    
-    // Then close browser session
-    await super.closeSession(sessionId);
+    this.log(`✅ VNC session closed: ${sessionId}`);
+  }
+
+  /**
+   * Get all active VNC live sessions
+   */
+  getActiveLiveSessions(): LiveBrowserSession[] {
+    return Array.from(this.liveSessions.values()).filter(session => session.isLiveViewActive);
   }
 
   /**
@@ -237,8 +203,8 @@ export class BrowserEngineWithVNC extends BrowserEngine {
     // Cleanup VNC manager
     await this.vncManager.cleanup();
     
-    // Cleanup browser engine
-    await super.cleanup();
+    // Cleanup browser engine (let it handle its own sessions)
+    await this.browserEngine.cleanup();
     
     this.log('✅ Browser engine with VNC cleanup completed');
   }
@@ -273,5 +239,19 @@ export class BrowserEngineWithVNC extends BrowserEngine {
     }
     
     return liveSession?.isLiveViewActive || false;
+  }
+
+  /**
+   * Logging helper
+   */
+  private log(message: string, data?: any): void {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      component: 'BrowserEngineWithVNC',
+      message,
+      ...(data && { data }),
+    };
+    console.log(JSON.stringify(logEntry));
   }
 }
