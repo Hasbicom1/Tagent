@@ -194,9 +194,30 @@ function Router() {
   return (
     <Switch>
       {/* New Production-Ready Routes */}
-      <Route path="/live" component={Landing} />
-      <Route path="/live/success" component={Success} />
-      <Route path="/live/agent/:agentId" component={AgentChat} />
+      <Route path="/live" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <Landing />
+        </div>
+      )} />
+      <Route path="/live/success" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <Success />
+        </div>
+      )} />
+      <Route path="/live/agent/:agentId" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AgentChat />
+        </div>
+      )} />
       
       {/* VNC Security Test Route */}
       <Route path="/vnc-test" component={VNCTestPage} />
