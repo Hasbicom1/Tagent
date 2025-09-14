@@ -1,0 +1,129 @@
+Objective
+
+Deliver a fully production-ready Live Browser View + Agent System, including:
+
+No JavaScript errors
+
+Stable WebSocket with persistent authentication
+
+Real-time noVNC streaming fully integrated
+
+Fully tested database connections, JWT authentication, and session persistence
+
+Proper error handling, logging, and reconnection strategies
+
+1. Code & Hot Reload Clean-Up
+
+Ensure hot reload / HMR does not serve stale code.
+
+Clear caches, rebuild client/server bundles.
+
+Confirm all previous ReferenceError and LSP errors are gone.
+
+Add CI/CD pre-deploy lint + test step to catch regressions.
+
+2. Database & API Verification
+
+Ensure all API endpoints return correct status (200) and error handling is consistent.
+
+Check DB connections under load & concurrency.
+
+Implement reconnection/backoff strategy for transient DB failures.
+
+Add logging for DB errors for production observability.
+
+3. WebSocket & Authentication (Critical)
+
+JWT or session token must persist across reconnects and tab reloads.
+
+Implement auto-reconnect logic with exponential backoff.
+
+Test with multiple agents: login, logout, reconnect cycles.
+
+Add server-side verification of JWT for every WebSocket connection.
+
+Ensure no race conditions or memory leaks in client reconnect handling.
+
+4. noVNC Integration
+
+Replace mock VNC with real noVNC streaming:
+
+Full input support (mouse, keyboard)
+
+Real-time DOM updates
+
+Responsive scaling in viewport
+
+Handle reconnections: if VNC disconnects, auto-reconnect with preserved session.
+
+Validate multiple concurrent streams do not break auth/session isolation.
+
+Ensure streaming latency is minimal and stable under load.
+
+5. Error Handling & Logging
+
+Add structured logging for:
+
+WebSocket connects/disconnects
+
+VNC session events
+
+DB/API errors
+
+Implement client-side error boundaries for React components.
+
+Ensure all logs include timestamps, session IDs, and user IDs for traceability.
+
+6. Testing & QA
+
+Unit tests for critical hooks (use-realtime-task-status), auth flow, and session persistence.
+
+Integration tests: WebSocket + noVNC + DB connectivity.
+
+Load/stress tests: multiple concurrent agents, reconnect loops, VNC streaming.
+
+Edge case testing: network drops, JWT expiration, DB reconnect, tab reloads.
+
+7. Deployment Prep
+
+Confirm staging environment fully mirrors production.
+
+Ensure environment variables are properly configured for production (JWT secret, VNC server URL, DB credentials).
+
+Add rollback plan if production fails.
+
+Enable monitoring & alerts: WebSocket health, VNC connection stats, DB errors.
+
+8. Deliverable Checklist for Senior-Level Production
+
+✅ JS errors resolved (no ReferenceError, clean console)
+
+✅ Database stable, API calls return correct responses
+
+✅ JWT auth working, persistent across reconnects
+
+✅ WebSocket stable, no “force disconnect” loops
+
+✅ noVNC fully integrated with live streaming
+
+✅ Proper logging and error handling implemented
+
+✅ Tests covering hooks, auth, WebSocket, VNC, DB
+
+✅ Production-ready deployment plan verified
+
+Execution Instructions for AI Dev
+
+Act as senior master programmer:
+
+Perform deep code review
+
+Run automated + manual tests
+
+Detect and fix subtle issues (race conditions, memory leaks, auth edge cases)
+
+Treat current state not as MVP, but full production deployment.
+
+Document every step, include logs, screenshots, and test results.
+
+Confirm all systems green before production push.
