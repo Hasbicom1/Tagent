@@ -19,6 +19,7 @@ import {
   ExecutionContext,
   RetryConfig
 } from './deterministic-automation-engine';
+import { BrowserEngineWithVNC } from './browser-engine-vnc';
 
 // Task execution interfaces
 export interface BrowserTask {
@@ -63,6 +64,12 @@ interface BrowserSession {
   createdAt: Date;
   lastUsed: Date;
   isActive: boolean;
+  // VNC integration metadata
+  vncDisplayEnv?: string;
+  vncWebSocketURL?: string;
+  vncPort?: number;
+  vncToken?: string;
+  isVNCActive?: boolean;
 }
 
 interface EngineConfig {
@@ -83,6 +90,10 @@ export class BrowserEngine extends EventEmitter {
   
   // DETERMINISTIC AUTOMATION: Enhanced execution engine
   private deterministicEngine!: DeterministicAutomationEngine;
+  
+  // VNC LIVE STREAMING: Enhanced browser with VNC streaming capabilities
+  private vncEngine!: BrowserEngineWithVNC;
+  
   private defaultRetryConfig: RetryConfig = {
     maxAttempts: 3,
     initialDelay: 1000,
@@ -130,6 +141,15 @@ export class BrowserEngine extends EventEmitter {
     // Initialize deterministic automation engine
     this.deterministicEngine = new DeterministicAutomationEngine();
     this.log('🎯 Deterministic automation engine initialized with multi-strategy targeting');
+    
+    // Initialize VNC engine for live streaming
+    this.vncEngine = new BrowserEngineWithVNC(this.config, {
+      enableLiveView: true,
+      autoStartVNC: true,
+      resolution: '1920x1080',
+      frameRate: 30
+    });
+    this.log('📺 VNC engine initialized for live browser streaming');
   }
 
   /**
@@ -884,13 +904,56 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
   }
 
   /**
-   * Get or create browser session
+   * Get or create browser session with VNC resilience
    */
   private async getOrCreateSession(sessionId: string): Promise<BrowserSession> {
     // Check for existing session
     let session = this.sessions.get(sessionId);
     
     if (session && session.isActive) {
+      // VNC RESILIENCE: Verify VNC is still running for existing sessions
+      if (session.isVNCActive) {
+        const liveViewDetails = this.vncEngine.getLiveViewDetails(sessionId);
+        
+        if (!liveViewDetails || !liveViewDetails.isLiveViewActive) {
+          this.log('🔄 VNC session lost for existing browser session, restarting VNC', { sessionId });
+          
+          try {
+            // Restart VNC for existing session
+            const vncSession = await this.vncEngine.startLiveView(sessionId);
+            if (vncSession) {
+              // Update session with new VNC details
+              const newLiveViewDetails = this.vncEngine.getLiveViewDetails(sessionId);
+              session.vncDisplayEnv = newLiveViewDetails?.displayEnv;
+              session.vncWebSocketURL = newLiveViewDetails?.webSocketURL;
+              session.vncPort = vncSession.vncPort;
+              session.isVNCActive = true;
+              
+              this.log('✅ VNC session restored for existing browser', { sessionId, vncPort: vncSession.vncPort });
+              
+              // Emit vncReady event for restored session
+              this.emit('vncReady', {
+                sessionId,
+                displayEnv: session.vncDisplayEnv,
+                webSocketURL: session.vncWebSocketURL,
+                vncPort: session.vncPort,
+                token: session.vncToken,
+                isActive: true,
+                restored: true
+              });
+            } else {
+              this.log('⚠️ Failed to restore VNC for existing session', { sessionId });
+              session.isVNCActive = false;
+            }
+          } catch (error) {
+            this.log('❌ Error restoring VNC for existing session:', error);
+            session.isVNCActive = false;
+          }
+        } else {
+          this.log('✅ VNC session verified active for existing browser', { sessionId });
+        }
+      }
+      
       session.lastUsed = new Date();
       return session;
     }
@@ -912,10 +975,55 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
   }
 
   /**
-   * Create new browser session
+   * Create new browser session with VNC live view
    */
   private async createSession(sessionId: string): Promise<BrowserSession> {
-    this.log('🚀 Creating new browser session', { sessionId, browserType: this.config.browserType });
+    this.log('🚀 Creating new browser session with VNC', { sessionId, browserType: this.config.browserType });
+    
+    // Start VNC live view for real-time streaming
+    let vncDisplayEnv: string | undefined;
+    let vncWebSocketURL: string | undefined;
+    let vncPort: number | undefined;
+    let vncToken: string | undefined;
+    let isVNCActive = false;
+    
+    try {
+      const vncSession = await this.vncEngine.startLiveView(sessionId);
+      if (vncSession) {
+        // Get VNC connection details
+        const liveViewDetails = this.vncEngine.getLiveViewDetails(sessionId);
+        vncDisplayEnv = liveViewDetails?.displayEnv;
+        vncWebSocketURL = liveViewDetails?.webSocketURL;
+        vncPort = vncSession.vncPort;
+        vncToken = `vnc_${sessionId}_${Date.now()}`;
+        isVNCActive = true;
+        
+        // CRITICAL: Set DISPLAY environment for Playwright browser process
+        if (vncDisplayEnv) {
+          process.env.DISPLAY = vncDisplayEnv;
+          this.log('🖥️ CRITICAL: Set DISPLAY environment for browser process', { display: vncDisplayEnv });
+        }
+        
+        this.log('📺 VNC live view started for session', { 
+          sessionId, 
+          vncPort: vncSession.vncPort,
+          displayEnv: vncDisplayEnv,
+          webSocketURL: vncWebSocketURL
+        });
+        
+        // Emit vncReady event with connection details
+        this.emit('vncReady', {
+          sessionId,
+          displayEnv: vncDisplayEnv,
+          webSocketURL: vncWebSocketURL,
+          vncPort,
+          token: vncToken,
+          isActive: true
+        });
+      }
+    } catch (error) {
+      this.log('⚠️ VNC setup failed, continuing with regular browser:', error);
+    }
     
     const browserLauncher = {
       chromium: chromium,
@@ -923,7 +1031,8 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
       webkit: webkit,
     }[this.config.browserType];
 
-    const browser = await browserLauncher.launch({
+    // Enhanced browser launch options with proper environment binding
+    const launchOptions: any = {
       headless: this.config.headless,
       args: [
         '--no-sandbox',
@@ -933,7 +1042,18 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
         '--disable-gpu',
         '--window-size=1920,1080',
       ],
-    });
+    };
+    
+    // If VNC is active, ensure browser uses the correct display
+    if (isVNCActive && vncDisplayEnv) {
+      launchOptions.env = {
+        ...process.env,
+        DISPLAY: vncDisplayEnv
+      };
+      this.log('🎯 CRITICAL: Browser launching with VNC DISPLAY', { display: vncDisplayEnv });
+    }
+
+    const browser = await browserLauncher.launch(launchOptions);
 
     const context = await browser.newContext({
       viewport: { width: 1920, height: 1080 },
@@ -953,7 +1073,7 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
       this.log('🔍 Page error:', error.message);
     });
 
-    return {
+    const session: BrowserSession = {
       id: sessionId,
       browser,
       context,
@@ -961,11 +1081,26 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
       createdAt: new Date(),
       lastUsed: new Date(),
       isActive: true,
+      // VNC metadata
+      vncDisplayEnv,
+      vncWebSocketURL,
+      vncPort,
+      vncToken,
+      isVNCActive,
     };
+    
+    this.log('✅ Browser session created with VNC integration', {
+      sessionId,
+      hasVNC: isVNCActive,
+      displayEnv: vncDisplayEnv,
+      vncPort
+    });
+    
+    return session;
   }
 
   /**
-   * Close browser session
+   * Close browser session and stop VNC
    */
   private async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
@@ -976,6 +1111,14 @@ Focus on real-world browser interactions that accomplish the user's goal efficie
       await session.context.close();
       await session.browser.close();
       this.sessions.delete(sessionId);
+      
+      // Stop VNC live view
+      try {
+        await this.vncEngine.stopLiveView(sessionId);
+        this.log('📺 VNC live view stopped for session', { sessionId });
+      } catch (error) {
+        this.log('⚠️ Error stopping VNC:', error);
+      }
       
       this.log('🔒 Browser session closed', { sessionId });
       this.emit('browserClosed', sessionId);
