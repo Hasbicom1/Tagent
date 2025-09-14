@@ -1276,7 +1276,9 @@ export { DEFAULT_SECURITY_CONFIG as securityConfig };
 export interface SecurityEvent {
   type: 'rate_limit_violation' | 'session_hijacking' | 'payment_fraud' | 'websocket_abuse' | 'ai_operation_abuse' |
         'session_regenerated' | 'session_ip_change_blocked' | 'session_ip_change_limit_exceeded' | 'session_ip_changed' |
-        'session_kicked_concurrent_limit' | 'session_destroyed' | 'redis_session_error' | 'ai_task_analysis_request' | 'ai_task_analysis_error';
+        'session_kicked_concurrent_limit' | 'session_destroyed' | 'redis_session_error' | 'ai_task_analysis_request' | 'ai_task_analysis_error' |
+        'vnc_security_violation' | 'vnc_rate_limit_violation' | 'vnc_connection_established' | 'vnc_connection_failed' |
+        'vnc_connection_closed' | 'vnc_access_attempt' | 'vnc_access_denied' | 'vnc_token_generated' | 'vnc_token_error';
   severity: 'low' | 'medium' | 'high' | 'critical';
   clientIP: string;
   userAgent?: string;

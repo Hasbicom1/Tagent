@@ -153,7 +153,7 @@ export class VNCProxy {
         }
 
         // Validate session with SessionSecurityStore
-        const sessionValidation = await this.validateSession(sessionId, clientIP, userAgent);
+        const sessionValidation = await this.validateSession(sessionId, clientIP, userAgent || 'unknown');
         if (!sessionValidation.valid) {
           logSecurityEvent('vnc_security_violation', {
             sessionId,

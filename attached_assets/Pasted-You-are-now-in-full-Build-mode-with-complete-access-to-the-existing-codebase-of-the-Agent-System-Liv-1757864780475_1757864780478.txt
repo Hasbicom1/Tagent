@@ -1,0 +1,73 @@
+You are now in full Build mode with complete access to the existing codebase of the Agent System Live Session web app (onedollaragent.ai). Your objective is to autonomously implement **all remaining production-critical fixes** and polish tasks to reach **100% production readiness**, without breaking any current functionality, UI pages, or business logic. 
+
+Use only the existing codebase. No mocks, placeholders, or workarounds are allowed. All updates must be fully production-grade and tested.
+
+---
+
+### **Critical Tasks to Complete**
+
+1️⃣ **Resolve TypeScript Diagnostics**
+- Fix all 21 LSP errors across these files:
+  - `vnc-proxy.ts` (security event type mismatches)
+  - `vnc-loader.ts` (CDN module import declarations)
+  - `server/index.ts` (Redis null type issue)
+  - `routes.ts` (Stripe API version type)
+- Ensure code compiles cleanly under ES2022/ESNext for frontend and backend.
+- Validate type correctness across all endpoints, WebSocket handlers, and VNC proxy logic.
+
+2️⃣ **Validate & Complete Real VNC Streaming**
+- Replace any remaining ProductionRFB or simulated VNC loaders with real `@novnc/novnc` RFB client.  
+- Ensure full browser streaming with:
+  - Real-time mouse & keyboard input  
+  - 10fps at 1280×720 resolution  
+  - Automatic reconnect logic  
+- Integrate seamlessly with existing VNC WebSocket proxy (`server/vnc-proxy.ts`) and `VNCManager` backend.  
+- Confirm security compliance: JWT authentication, cookie-based browser auth, origin validation, rate limiting.
+
+3️⃣ **Enhance Session Lifecycle Enforcement**
+- Verify 24-hour TTL is enforced across all API endpoints.
+- Ensure **automatic cascade revocation**:
+  - WebSocket connections  
+  - VNC sessions  
+- Confirm session regeneration and activity tracking remain intact.
+
+4️⃣ **Optional Production Polish & Performance**
+- Tune WebSocket connection pooling and heartbeat intervals for high throughput.
+- Optimize BullMQ task batching and worker resource monitoring.
+- Confirm all health check endpoints (`/health`, `/health/live`, `/health/ready`) report accurate status.
+
+5️⃣ **Maintain UI/UX Integrity**
+- All current pages and features must remain functional.
+- Frontend VNC client and test interfaces must preserve styling, theme support, and landing page design.
+- Ensure **white mode** is applied across all pages.
+- Any new UI components must follow **landing-page-inspired interaction patterns**.
+
+6️⃣ **Validation & Testing**
+- End-to-end testing with live TigerVNC backend:
+  - Stripe $1 checkout → session creation → WebSocket stable connection → real VNC streaming → session expiry.
+- Confirm browser console and server logs are error-free.
+- Validate CDN runtime integrity pinning for production security.
+- Document all changes with clear commit messages.
+
+---
+
+### **Execution Instructions**
+- Complete each task fully before moving to the next.
+- Summarize completion at the end of each phase with:  
+  `"Phase X complete – verified production readiness."`
+- After all tasks are complete, provide a **full Production Readiness Report** including:
+  - Overall % completion  
+  - Achievements and improvements  
+  - Any minor remaining optimization opportunities
+
+---
+
+### **Success Criteria**
+✅ Code compiles with zero TypeScript errors  
+✅ Real VNC streaming fully functional in-browser  
+✅ WebSocket connections stable and authenticated  
+✅ Stripe payments and session lifecycle fully enforced  
+✅ All UI/UX components maintain current design and theme  
+✅ End-to-end production tests pass without errors  
+
+Begin execution immediately and achieve **100% production readiness**.
