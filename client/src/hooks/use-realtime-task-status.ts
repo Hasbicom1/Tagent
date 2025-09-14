@@ -134,22 +134,26 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
 
     } catch (error: any) {
       console.error('Failed to connect to WebSocket:', error);
-      setConnectionStatus(prev => ({
-        ...prev,
-        isConnected: false,
-        isAuthenticated: false,
-        connectionState: WSConnectionState.ERROR,
-        reconnectAttempts: prev.reconnectAttempts + 1
-      }));
-
-      // Only show toast for first few attempts to avoid spam
-      if (prev.reconnectAttempts < 3) {
-        toast({
-          title: "Connection Error",
-          description: "Failed to establish real-time connection. Using fallback mode.",
-          variant: "destructive",
-        });
-      }
+      setConnectionStatus(prev => {
+        const newStatus = {
+          ...prev,
+          isConnected: false,
+          isAuthenticated: false,
+          connectionState: WSConnectionState.ERROR,
+          reconnectAttempts: prev.reconnectAttempts + 1
+        };
+        
+        // Only show toast for first few attempts to avoid spam
+        if (newStatus.reconnectAttempts <= 3) {
+          toast({
+            title: "Connection Error",
+            description: "Failed to establish real-time connection. Using fallback mode.",
+            variant: "destructive",
+          });
+        }
+        
+        return newStatus;
+      });
     }
   }, [agentId, refreshToken, toast]);
 
