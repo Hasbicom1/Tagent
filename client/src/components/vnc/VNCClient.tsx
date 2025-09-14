@@ -12,9 +12,12 @@ import {
   WifiOff 
 } from 'lucide-react';
 import { createVNCConnection, isVNCLibraryLoaded } from '@/lib/vnc-loader';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 interface VNCClientProps {
   sessionId: string;
+  agentId: string; // ✅ SECURITY: Required for authentication API calls
   webSocketURL?: string;
   vncToken?: string;
   className?: string;
@@ -25,13 +28,23 @@ interface VNCClientProps {
 interface VNCConnectionState {
   connected: boolean;
   connecting: boolean;
+  authenticating: boolean;
   error: string | null;
   lastConnectedAt?: Date;
   reconnectAttempts: number;
 }
 
+interface VNCAuthenticationResponse {
+  webSocketURL: string;
+  vncToken: string;
+  expiresAt: string;
+  sessionId: string;
+  displayNumber?: number;
+}
+
 export function VNCClient({ 
   sessionId, 
+  agentId,
   webSocketURL, 
   vncToken,
   className = '',
@@ -40,14 +53,17 @@ export function VNCClient({
 }: VNCClientProps) {
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
+  const { toast } = useToast();
   const [connectionState, setConnectionState] = useState<VNCConnectionState>({
     connected: false,
     connecting: false,
+    authenticating: false,
     error: null,
     reconnectAttempts: 0
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [authenticatedCredentials, setAuthenticatedCredentials] = useState<VNCAuthenticationResponse | null>(null);
 
   // Connection state handler
   const updateConnectionState = (updates: Partial<VNCConnectionState>) => {
@@ -58,11 +74,68 @@ export function VNCClient({
     });
   };
 
-  // Initialize VNC connection
+  // ✅ SECURITY: Fetch VNC authentication credentials from API
+  const fetchVNCAuthentication = async (): Promise<VNCAuthenticationResponse | null> => {
+    try {
+      updateConnectionState({ authenticating: true, error: null });
+
+      // First, get CSRF token
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include'
+      });
+      
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token');
+      }
+      
+      const { csrfToken } = await csrfResponse.json();
+
+      // Request VNC authentication token
+      const response = await apiRequest(
+        'POST',
+        `/api/session/${agentId}/live-view`,
+        { csrfToken }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to authenticate VNC access');
+      }
+
+      const authData: VNCAuthenticationResponse = await response.json();
+      setAuthenticatedCredentials(authData);
+      
+      toast({
+        title: "VNC Authentication",
+        description: "Live view access authenticated successfully",
+      });
+
+      return authData;
+    } catch (error: any) {
+      console.error('❌ VNC authentication failed:', error);
+      
+      updateConnectionState({
+        authenticating: false,
+        error: `Authentication failed: ${error.message}`
+      });
+
+      toast({
+        title: "VNC Authentication Failed",
+        description: error.message || "Failed to authenticate live view access",
+        variant: "destructive"
+      });
+
+      return null;
+    } finally {
+      updateConnectionState({ authenticating: false });
+    }
+  };
+
+  // ✅ SECURITY: Initialize authenticated VNC connection
   const connectVNC = async () => {
-    if (!webSocketURL || !vncContainerRef.current) {
+    if (!vncContainerRef.current) {
       updateConnectionState({ 
-        error: 'VNC connection details not available',
+        error: 'VNC container not available',
         connecting: false 
       });
       return;
@@ -84,6 +157,32 @@ export function VNCClient({
       const container = vncContainerRef.current;
       container.innerHTML = '';
 
+      // ✅ SECURITY: Fetch authentication if not using provided credentials
+      let authData = authenticatedCredentials;
+      if (!authData && !webSocketURL) {
+        console.log('🔐 Fetching VNC authentication...');
+        authData = await fetchVNCAuthentication();
+        if (!authData) {
+          updateConnectionState({
+            connecting: false,
+            error: 'Failed to authenticate VNC access'
+          });
+          return;
+        }
+      }
+
+      // Determine WebSocket URL and token
+      const finalWebSocketURL = authData?.webSocketURL || webSocketURL;
+      const finalVNCToken = authData?.vncToken || vncToken;
+
+      if (!finalWebSocketURL) {
+        updateConnectionState({ 
+          error: 'No VNC connection URL available',
+          connecting: false 
+        });
+        return;
+      }
+
       // Create VNC canvas container
       const vncCanvas = document.createElement('div');
       vncCanvas.style.width = '100%';
@@ -91,14 +190,14 @@ export function VNCClient({
       vncCanvas.style.overflow = 'hidden';
       container.appendChild(vncCanvas);
 
-      // Build WebSocket URL with authentication
-      const wsUrl = new URL(webSocketURL);
-      if (vncToken) {
-        wsUrl.searchParams.set('token', vncToken);
+      // ✅ SECURITY: Build authenticated WebSocket URL
+      const wsUrl = new URL(finalWebSocketURL);
+      if (finalVNCToken) {
+        wsUrl.searchParams.set('token', finalVNCToken);
       }
       wsUrl.searchParams.set('sessionId', sessionId);
 
-      console.log('🔌 Connecting to VNC:', wsUrl.toString());
+      console.log('🔌 Connecting to authenticated VNC:', wsUrl.toString().replace(/token=[^&]*/, 'token=***'));
 
       // Create RFB connection using the lazy loader
       const rfb = await createVNCConnection(

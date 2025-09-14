@@ -155,9 +155,31 @@ export const sessionIdSchema = z.string()
   .regex(/^[a-zA-Z0-9_-]+$/, "Invalid session ID format")
   .max(50, "Session ID too long");
 
+// VNC Live View Authentication Schema
+export const vncTokenRequestSchema = z.object({
+  csrfToken: z.string().min(16, "CSRF token required for security")
+});
+
+export const vncTokenResponseSchema = z.object({
+  webSocketURL: z.string().url("Invalid WebSocket URL"),
+  vncToken: z.string().min(20, "VNC token too short"),
+  expiresAt: z.string().datetime("Invalid expiration time"),
+  sessionId: z.string(),
+  displayNumber: z.number().int().positive().optional()
+});
+
+// VNC WebSocket Authentication Schema
+export const vncWebSocketAuthSchema = z.object({
+  token: z.string().min(20, "VNC authentication token required"),
+  sessionId: z.string().regex(/^[a-zA-Z0-9_-]+$/, "Invalid session ID format")
+});
+
 // API Request/Response Types
 export type CreateCheckoutSessionRequest = z.infer<typeof createCheckoutSessionSchema>;
 export type CheckoutSuccessRequest = z.infer<typeof checkoutSuccessSchema>;
 export type SessionMessageRequest = z.infer<typeof sessionMessageSchema>;
 export type SessionExecuteRequest = z.infer<typeof sessionExecuteSchema>;
 export type BrowserCommandRequest = z.infer<typeof browserCommandSchema>;
+export type VNCTokenRequest = z.infer<typeof vncTokenRequestSchema>;
+export type VNCTokenResponse = z.infer<typeof vncTokenResponseSchema>;
+export type VNCWebSocketAuth = z.infer<typeof vncWebSocketAuthSchema>;

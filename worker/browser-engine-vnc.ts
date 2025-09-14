@@ -45,7 +45,7 @@ export class BrowserEngineWithVNC extends EventEmitter {
 
     this.vncManager = new VNCManager({
       resolution: this.liveViewConfig.resolution,
-      enableAuth: false // Use WebSocket auth instead
+      enableAuth: true // ✅ SECURITY: Enable authentication for secure VNC access
     });
 
     // Forward VNC events

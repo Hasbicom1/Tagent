@@ -25,11 +25,14 @@ import {
   browserCommandSchema,
   agentIdSchema,
   sessionIdSchema,
+  vncTokenRequestSchema,
   type CreateCheckoutSessionRequest,
   type CheckoutSuccessRequest,
   type SessionMessageRequest,
   type SessionExecuteRequest,
-  type BrowserCommandRequest
+  type BrowserCommandRequest,
+  type VNCTokenRequest,
+  type VNCTokenResponse
 } from '@shared/schema';
 import { 
   validateAIInput,
@@ -41,8 +44,10 @@ import {
   verifyStripeWebhook,
   activateSessionIdempotent,
   MultiLayerRateLimiter,
-  DEFAULT_RATE_LIMIT_CONFIG
+  DEFAULT_RATE_LIMIT_CONFIG,
+  DEFAULT_SECURITY_CONFIG
 } from "./security";
+import jwt from 'jsonwebtoken';
 import { sql } from 'drizzle-orm';
 import { 
   SessionSecurityStore,
@@ -1132,6 +1137,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error getting session tasks:", error);
       res.status(500).json({ error: "Failed to get session tasks: " + error.message });
+    }
+  });
+
+  // Generate VNC authentication token for live view access
+  // SECURITY HARDENED: VNC token generation with session validation and rate limiting
+  app.post("/api/session/:agentId/live-view",
+    rateLimiter ? rateLimiter.createUserLimiter() : (req, res, next) => next(),
+    createParamValidation('agentId', agentIdSchema),
+    createValidationMiddleware(vncTokenRequestSchema, true),
+    async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const validatedData = req.validatedBody as VNCTokenRequest;
+      
+      // Log VNC access attempt for security monitoring
+      logSecurityEvent('vnc_access_attempt', {
+        agentId,
+        clientIP: req.ip,
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date().toISOString()
+      });
+
+      // Validate session exists and is active
+      const session = await storage.getSessionByAgentId(agentId);
+      
+      if (!session) {
+        logSecurityEvent('vnc_access_denied', {
+          agentId,
+          reason: 'session_not_found',
+          clientIP: req.ip
+        });
+        return res.status(404).json({ error: "NEURAL_SESSION_NOT_FOUND: Liberation session not detected" });
+      }
+
+      if (!session.isActive) {
+        logSecurityEvent('vnc_access_denied', {
+          agentId,
+          reason: 'session_inactive',
+          clientIP: req.ip
+        });
+        return res.status(403).json({ error: "NEURAL_SESSION_INACTIVE: Liberation session terminated" });
+      }
+
+      if (new Date() > session.expiresAt) {
+        logSecurityEvent('vnc_access_denied', {
+          agentId,
+          reason: 'session_expired',
+          clientIP: req.ip
+        });
+        return res.status(410).json({ error: "NEURAL_SESSION_EXPIRED: 24-hour freedom window closed" });
+      }
+
+      // Enhanced session security validation using SessionSecurityStore
+      if (sessionSecurityStore) {
+        const ipValidation = await sessionSecurityStore.validateSessionIP(session.id, req.ip);
+        if (!ipValidation.isValid) {
+          logSecurityEvent('vnc_access_denied', {
+            agentId,
+            sessionId: session.id,
+            reason: 'ip_validation_failed',
+            details: ipValidation.reason,
+            clientIP: req.ip
+          });
+          return res.status(403).json({ 
+            error: "NEURAL_SECURITY_BREACH: IP validation failed for VNC access" 
+          });
+        }
+      }
+
+      // Generate secure VNC authentication token
+      const tokenExpiration = 15 * 60; // 15 minutes
+      const vncTokenPayload = {
+        sessionId: session.id,
+        agentId: session.agentId,
+        type: 'vnc_access',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + tokenExpiration,
+        clientIP: req.ip
+      };
+
+      const vncToken = jwt.sign(vncTokenPayload, DEFAULT_SECURITY_CONFIG.jwtSecret);
+      
+      // Generate secure WebSocket URL for VNC connection
+      const baseURL = process.env.NODE_ENV === 'production' 
+        ? `wss://${req.get('host')}`
+        : `ws://localhost:${process.env.PORT || 5000}`;
+      
+      const webSocketURL = `${baseURL}/vnc/${session.id}`;
+      const expiresAt = new Date(Date.now() + tokenExpiration * 1000);
+
+      // Log successful VNC token generation
+      logSecurityEvent('vnc_token_generated', {
+        agentId,
+        sessionId: session.id,
+        clientIP: req.ip,
+        tokenExpiration: tokenExpiration,
+        webSocketURL
+      });
+
+      const response: VNCTokenResponse = {
+        webSocketURL,
+        vncToken,
+        expiresAt: expiresAt.toISOString(),
+        sessionId: session.id
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      logSecurityEvent('vnc_token_error', {
+        error: error.message,
+        agentId: req.params.agentId,
+        clientIP: req.ip
+      });
+      console.error("Error generating VNC token:", error);
+      res.status(500).json({ error: "NEURAL_VNC_TOKEN_FAILED: " + error.message });
     }
   });
 
