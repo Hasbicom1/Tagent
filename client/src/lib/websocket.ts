@@ -64,10 +64,10 @@ export interface WSClientConfig {
 }
 
 const DEFAULT_CONFIG: WSClientConfig = {
-  reconnectInterval: 5000,    // 5 seconds
-  maxReconnectAttempts: 10,
+  reconnectInterval: 3000,    // 3 seconds (faster reconnection)
+  maxReconnectAttempts: 15,   // More attempts for reliability
   heartbeatInterval: 30000,   // 30 seconds
-  timeout: 10000,             // 10 seconds
+  timeout: 30000,             // 30 seconds (more time for authentication)
   debug: import.meta.env.DEV
 };
 
@@ -117,7 +117,6 @@ export class WebSocketClient {
         this.ws.onopen = () => {
           this.setState(WSConnectionState.CONNECTED);
           this.reconnectAttempts = 0;
-          this.startHeartbeat();
           this.processMessageQueue();
           this.emit('connected', { connectionId: 'connected' });
           this.log('WebSocket connected');
@@ -207,6 +206,7 @@ export class WebSocketClient {
         this.off('authenticated', handleAuthenticated);
         this.off('error', handleError);
         this.setState(WSConnectionState.AUTHENTICATED);
+        this.startHeartbeat(); // Start heartbeat only after authentication
         resolve();
       };
 
@@ -502,6 +502,9 @@ export class WebSocketClient {
     this.setState(WSConnectionState.DISCONNECTED);
     this.emit('disconnected', { reason: reason || 'Connection closed' });
 
+    // Preserve authentication state across disconnections
+    // Don't clear authenticatedAgentId, sessionToken, or tokenRefreshCallback
+    
     // Attempt reconnection if not a normal closure
     if (code !== 1000 && this.reconnectAttempts < this.config.maxReconnectAttempts) {
       this.scheduleReconnect();
@@ -529,25 +532,39 @@ export class WebSocketClient {
         await this.connect();
         
         // Re-authenticate if we were previously authenticated
+        this.log('🔄 [RECONNECT] Checking authentication state:', {
+          hasAgentId: !!this.authenticatedAgentId,
+          agentId: this.authenticatedAgentId,
+          hasToken: !!this.sessionToken,
+          tokenLength: this.sessionToken?.length || 0,
+          hasRefreshCallback: !!this.tokenRefreshCallback
+        });
+
         if (this.authenticatedAgentId) {
           let token = this.sessionToken;
           
           // If no stored token or token was invalidated, try to refresh
           if (!token && this.tokenRefreshCallback) {
             try {
+              this.log('🔄 [RECONNECT] Refreshing token via callback...');
               token = await this.tokenRefreshCallback();
-              this.log('Token refreshed for reconnection');
+              this.log('✅ [RECONNECT] Token refreshed for reconnection, length:', token?.length || 0);
             } catch (refreshError) {
-              this.log('Token refresh failed:', refreshError);
+              this.log('❌ [RECONNECT] Token refresh failed:', refreshError);
               throw new Error('Failed to refresh authentication token');
             }
           }
           
           if (!token) {
+            this.log('❌ [RECONNECT] No valid authentication token available');
             throw new Error('No valid authentication token available for reconnection');
           }
           
+          this.log('🔐 [RECONNECT] Re-authenticating with stored credentials...');
           await this.authenticate(token, this.authenticatedAgentId);
+          this.log('✅ [RECONNECT] Re-authentication completed successfully');
+        } else {
+          this.log('⚠️ [RECONNECT] No stored agent ID - skipping automatic re-authentication');
         }
         
         // Re-establish subscriptions
