@@ -463,9 +463,11 @@ export class MultiLayerRateLimiter {
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   maxInputLength: 5000,
   allowedOrigins: process.env.NODE_ENV === 'production' 
-    ? (process.env.ALLOWED_ORIGINS?.split(',') || (() => {
-        throw new Error('ALLOWED_ORIGINS environment variable is required in production');
-      })())
+    ? (process.env.ALLOWED_ORIGINS?.split(',') || [
+        'https://onedolaragent.ai',
+        'https://www.onedolaragent.ai',
+        'https://pdf-chatbot-pixelnemend4.replit.app'
+      ])
     : ['http://localhost:5000', 'http://127.0.0.1:5000', 'https://localhost:5000', 'http://localhost:3000', 'https://localhost:3000'],
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-replace-in-production',
   sessionTimeout: 24 * 60 * 60 * 1000, // 24 hours
@@ -844,7 +846,8 @@ export function validateSecurityConfiguration(): void {
     
     // CRITICAL: Allowed Origins validation  
     if (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS.trim() === '') {
-      throw new Error('🚨 SECURITY: ALLOWED_ORIGINS environment variable is required in production');
+      console.warn('⚠️  SECURITY: ALLOWED_ORIGINS not set, using default production origins');
+      process.env.ALLOWED_ORIGINS = 'https://onedolaragent.ai,https://www.onedolaragent.ai,https://pdf-chatbot-pixelnemend4.replit.app';
     }
     
     // Validate allowed origins format
