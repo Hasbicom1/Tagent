@@ -18,63 +18,97 @@ let batchTimeout: NodeJS.Timeout | null = null;
 const BATCH_SIZE = 5; // Process up to 5 tasks in a batch
 const BATCH_TIMEOUT = 500; // Flush batch after 500ms
 
-// Redis connection configuration with fallback for development
+// Helper function to test Redis connectivity with aggressive timeout for Replit
+async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 2000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve(false);
+    }, timeoutMs);
+    
+    let testRedis: Redis;
+    
+    try {
+      if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
+        testRedis = new Redis(redisUrl, {
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+          connectTimeout: timeoutMs,
+          commandTimeout: timeoutMs,
+        });
+      } else {
+        testRedis = new Redis({
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD,
+          db: parseInt(process.env.REDIS_DB || '0'),
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+          connectTimeout: timeoutMs,
+          commandTimeout: timeoutMs,
+        });
+      }
+      
+      testRedis.ping()
+        .then(() => {
+          clearTimeout(timeout);
+          testRedis.disconnect();
+          resolve(true);
+        })
+        .catch(() => {
+          clearTimeout(timeout);
+          testRedis.disconnect();
+          resolve(false);
+        });
+    } catch (error) {
+      clearTimeout(timeout);
+      resolve(false);
+    }
+  });
+}
+
+// Redis connection configuration with enhanced fallback for Replit deployment
 const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } | undefined> => {
   const isDevelopment = process.env.NODE_ENV === 'development';
+  const isReplit = process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID;
   const redisUrl = process.env.REDIS_URL;
   
-  if (!redisUrl && isDevelopment) {
-    console.log('⚡ QUEUE: Running in development mode - using in-memory fallback');
+  if (!redisUrl && (isDevelopment || isReplit)) {
+    console.log('⚡ QUEUE: Running in development/Replit mode - using in-memory fallback');
     return undefined; // Use in-memory fallback for development
   }
   
   if (!redisUrl) {
-    if (isDevelopment) {
-      console.log('⚡ QUEUE: No REDIS_URL in development - using in-memory fallback');
+    if (isDevelopment || isReplit) {
+      console.log('⚡ QUEUE: No REDIS_URL in development/Replit - using in-memory fallback');
       return undefined;
     }
     throw new Error('REDIS_URL environment variable is required in production');
   }
   
-  // Test Redis connection before returning configuration
+  // REPLIT FIX: Test Redis connection with aggressive timeout
   try {
-    let testRedis: Redis;
+    const connectionTimeout = isReplit ? 2000 : 5000;
+    const isRedisWorking = await testQueueRedisConnection(redisUrl, connectionTimeout);
     
-    if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
-      testRedis = new Redis(redisUrl, {
-        lazyConnect: true,
-        maxRetriesPerRequest: null, // Required for BullMQ
-        connectTimeout: 5000,
-        commandTimeout: 3000,
-      });
-    } else {
-      testRedis = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '0'),
-        lazyConnect: true,
-        maxRetriesPerRequest: null, // Required for BullMQ
-        connectTimeout: 5000,
-        commandTimeout: 3000,
-      });
+    if (!isRedisWorking) {
+      console.warn('⚠️  QUEUE: Redis connection test failed - falling back to in-memory mode');
+      if (isDevelopment || isReplit) {
+        console.log('🔄 QUEUE: Using in-memory fallback for Replit/development');
+        return undefined;
+      }
+      throw new Error('Redis connection failed and no fallback available in production');
     }
     
-    // Test the connection
-    await testRedis.ping();
     console.log('✅ QUEUE: Redis connection test successful');
     
-    // Close test connection
-    testRedis.disconnect();
-    
-    // Return proper configuration for BullMQ
+    // Return proper configuration for BullMQ with adjusted timeouts for Replit
     if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
       return { 
         connection: new Redis(redisUrl, {
           maxRetriesPerRequest: null, // Required for BullMQ
           lazyConnect: true,
-          connectTimeout: 10000,
-          commandTimeout: 5000,
+          connectTimeout: isReplit ? 3000 : 10000,
+          commandTimeout: isReplit ? 2000 : 5000,
           enableAutoPipelining: true,
         })
       };
@@ -88,15 +122,15 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
         db: parseInt(process.env.REDIS_DB || '0'),
         maxRetriesPerRequest: null, // Required for BullMQ
         lazyConnect: true,
-        connectTimeout: 10000,
-        commandTimeout: 5000,
+        connectTimeout: isReplit ? 3000 : 10000,
+        commandTimeout: isReplit ? 2000 : 5000,
         enableAutoPipelining: true,
       }
     };
   } catch (error) {
     console.error('❌ QUEUE: Redis connection test failed:', error instanceof Error ? error.message : error);
-    if (isDevelopment) {
-      console.log('🔄 QUEUE: Falling back to in-memory mode for development');
+    if (isDevelopment || isReplit) {
+      console.log('🔄 QUEUE: Falling back to in-memory mode for development/Replit');
       return undefined;
     }
     throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
