@@ -83,7 +83,7 @@ if (!process.env.OPENAI_API_KEY) {
 
 // ✅ DEVELOPMENT MODE: Make Stripe optional
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2022-11-15",
+  // Use Stripe SDK default API version for compatibility
 }) : null;
 
 // SECURITY ENHANCEMENT: Comprehensive validation and CSRF protection middleware
@@ -1205,7 +1205,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Enhanced session security validation using SessionSecurityStore
       if (sessionSecurityStore) {
-        const ipValidation = await sessionSecurityStore.validateSessionIP(session.id, req.ip);
+        const clientIP = req.ip || req.connection?.remoteAddress || '127.0.0.1';
+        const ipValidation = await sessionSecurityStore.validateSessionIP(session.id, clientIP);
         if (!ipValidation.isValid) {
           logSecurityEvent('vnc_access_denied', {
             agentId,

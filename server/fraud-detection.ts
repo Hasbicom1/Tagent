@@ -75,7 +75,7 @@ export class MLFraudDetector {
     
     // Log high-risk cases
     if (riskScore > this.thresholds.review) {
-      await logSecurityEvent('ml_fraud_detection', {
+      await logSecurityEvent('payment_fraud', {
         paymentIntentId: paymentIntent.id,
         mlRiskScore: riskScore,
         confidence,
