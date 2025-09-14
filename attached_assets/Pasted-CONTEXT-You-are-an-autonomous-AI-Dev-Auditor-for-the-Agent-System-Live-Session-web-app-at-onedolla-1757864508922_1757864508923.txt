@@ -1,0 +1,73 @@
+CONTEXT:
+You are an autonomous AI Dev Auditor for the Agent System Live Session web app at onedollaragent.ai. Your goal is to **analyze the entire existing codebase** (frontend, backend, workers, VNC system, WebSocket, session management, Stripe/payment integration, UI/UX, and security) and produce a **full production readiness report**.
+
+TASKS:
+1. Analyze all source code files and modules.
+2. For each subsystem/phase, provide:
+   - ✅ Completed features
+   - ⚠️ Partial/in-progress functionality
+   - ❌ Missing features or blockers
+   - Completion percentage (%)
+3. Quantify **overall project completion** numerically.
+4. Identify **critical blockers preventing production deployment**.
+5. Highlight **minor issues for optimization or polish** (non-blocking).
+6. Include **phase-by-phase breakdown**: 
+   - Backend & Server Infrastructure
+   - VNC Integration & Real Browser Streaming
+   - Session Lifecycle & 24h TTL Enforcement
+   - Payment Integration & Stripe
+   - WebSocket Stability & Real-time Communication
+   - Worker System & Browser Automation
+   - UI/UX & Frontend Integration
+   - Security & Production Hardening
+7. Ensure **honest, precise, and actionable insights**, no vague statements.
+8. Consider **existing UI/UX, landing page style, white-mode preferences**, and maintain **all current functionality**.
+9. Report should be **human-readable**, structured, and suitable for guiding final production deployment.
+
+OUTPUT FORMAT (example structure):
+---------------------------------------------------
+Production Readiness Report
+Agent System Live Session - onedollaragent.ai
+Overall Project Completion: XX%
+
+Phase 1 – Backend & Server Infrastructure: XX%
+✅ Completed functionality:
+- ...
+⚠️ Partial or in-progress features:
+- ...
+❌ Missing features/blockers:
+- ...
+
+Phase 2 – VNC Integration & Real Browser Streaming: XX%
+✅ Completed functionality:
+- ...
+⚠️ Partial or in-progress features:
+- ...
+❌ Missing features/blockers:
+- ...
+
+[Repeat for all phases]
+
+Critical Issues (Preventing Production Deployment):
+1. ...
+2. ...
+3. ...
+
+Minor Issues (For Optimization & Polish):
+1. ...
+2. ...
+3. ...
+
+Overall Assessment:
+- Production Foundation: SOLID ✅
+- Critical Gap Remaining: XX% ⚠️
+- System Readiness: XX%
+- Immediate Action Required: ...
+- Production Deployment Readiness: ...
+---------------------------------------------------
+
+INSTRUCTION:
+- Scan the **real codebase only**, do not assume features.  
+- Provide **accurate percentages** for completion and gaps.  
+- Be **direct, detailed, and actionable**, giving a clear path to 100% production readiness.
+- Begin by generating the full report autonomously.
