@@ -19,23 +19,24 @@ interface EventRecord {
 /**
  * Idempotency service for preventing duplicate Stripe webhook processing
  * Uses atomic claim semantics to prevent race conditions
- * Uses in-memory storage with TTL as primary, Redis as fallback when available
+ * PRODUCTION REQUIREMENT: Redis-only operation for Railway deployment
  */
 export class IdempotencyService {
-  private memoryStore: Map<string, EventRecord>;
-  private redis: Redis | null;
+  private redis: Redis;
   private cleanupInterval: NodeJS.Timeout | null;
 
-  constructor(redis: Redis | null = null) {
-    this.memoryStore = new Map();
+  constructor(redis: Redis) {
+    if (!redis) {
+      throw new Error('Redis connection is required for idempotency service in production deployment');
+    }
+    
     this.redis = redis;
     this.cleanupInterval = null;
     
-    // Start cleanup process for memory store
+    // Start cleanup process for Redis keys
     this.startCleanup();
     
-    logger.info('✅ IDEMPOTENCY: Service initialized', {
-      hasRedis: !!redis,
+    logger.info('✅ IDEMPOTENCY: Service initialized (Redis-only)', {
       cleanupInterval: CLEANUP_INTERVAL / 1000 + 's',
       defaultTTL: DEFAULT_TTL / 3600 + 'h'
     });
@@ -49,75 +50,31 @@ export class IdempotencyService {
    */
   async claimEventForProcessing(eventId: string, processingTtl: number = PROCESSING_TTL): Promise<boolean> {
     try {
-      // Try Redis first if available - atomic SET with NX (not exists) and EX (expire)
-      if (this.redis) {
-        const key = `${REDIS_PREFIX}${eventId}`;
-        const value = JSON.stringify({ state: 'processing', timestamp: Date.now() });
-        
-        // SET key value NX EX - atomic claim operation
-        const result = await this.redis.set(key, value, 'NX', 'EX', processingTtl);
-        
-        if (result === 'OK') {
-          logger.info('🔒 IDEMPOTENCY: Event claimed for processing (Redis)', {
+      const key = `${REDIS_PREFIX}${eventId}`;
+      const value = JSON.stringify({ state: 'processing', timestamp: Date.now() });
+      
+      // SET key value NX EX - atomic claim operation (Redis-only)
+      const result = await this.redis.set(key, value, 'NX', 'EX', processingTtl);
+      
+      if (result === 'OK') {
+        logger.info('🔒 IDEMPOTENCY: Event claimed for processing (Redis)', {
+          eventId: eventId.substring(0, 20) + '***',
+          processingTtl: processingTtl + 's'
+        });
+        return true;
+      } else {
+        // Check if it's already completed vs still processing
+        const existingValue = await this.redis.get(key);
+        if (existingValue) {
+          const parsed = JSON.parse(existingValue);
+          logger.info('🔄 IDEMPOTENCY: Event already claimed/processed (Redis)', {
             eventId: eventId.substring(0, 20) + '***',
-            processingTtl: processingTtl + 's'
+            state: parsed.state,
+            age: Math.round((Date.now() - parsed.timestamp) / 1000) + 's'
           });
-          
-          // Also set in memory as backup
-          this.memoryStore.set(eventId, {
-            timestamp: Date.now(),
-            ttl: processingTtl,
-            state: 'processing'
-          });
-          
-          return true;
-        } else {
-          // Check if it's already completed vs still processing
-          const existingValue = await this.redis.get(key);
-          if (existingValue) {
-            const parsed = JSON.parse(existingValue);
-            logger.info('🔄 IDEMPOTENCY: Event already claimed/processed (Redis)', {
-              eventId: eventId.substring(0, 20) + '***',
-              state: parsed.state,
-              age: Math.round((Date.now() - parsed.timestamp) / 1000) + 's'
-            });
-          }
-          return false;
         }
+        return false;
       }
-
-      // Memory store atomic claim (for development or Redis fallback)
-      const now = Date.now();
-      const existingRecord = this.memoryStore.get(eventId);
-      
-      if (existingRecord) {
-        // Check if record is still valid (not expired)
-        if (now < existingRecord.timestamp + (existingRecord.ttl * 1000)) {
-          logger.info('🔄 IDEMPOTENCY: Event already claimed/processed (Memory)', {
-            eventId: eventId.substring(0, 20) + '***',
-            state: existingRecord.state,
-            age: Math.round((now - existingRecord.timestamp) / 1000) + 's'
-          });
-          return false;
-        } else {
-          // Clean up expired record and continue to claim
-          this.memoryStore.delete(eventId);
-        }
-      }
-      
-      // Atomically claim in memory
-      this.memoryStore.set(eventId, {
-        timestamp: now,
-        ttl: processingTtl,
-        state: 'processing'
-      });
-      
-      logger.info('🔒 IDEMPOTENCY: Event claimed for processing (Memory)', {
-        eventId: eventId.substring(0, 20) + '***',
-        processingTtl: processingTtl + 's'
-      });
-      
-      return true;
       
     } catch (error: any) {
       logger.error('❌ IDEMPOTENCY: Error claiming event for processing', {
@@ -153,18 +110,6 @@ export class IdempotencyService {
         });
       }
 
-      // Always update in memory as backup/fallback
-      this.memoryStore.set(eventId, {
-        timestamp,
-        ttl: ttlSeconds,
-        state: 'done'
-      });
-
-      logger.info('✅ IDEMPOTENCY: Event marked as completed (Memory)', {
-        eventId: eventId.substring(0, 20) + '***',
-        ttl: ttlSeconds + 's',
-        memorySize: this.memoryStore.size
-      });
 
     } catch (error: any) {
       logger.error('❌ IDEMPOTENCY: Error marking event as completed', {
@@ -182,32 +127,19 @@ export class IdempotencyService {
    */
   async releaseEventClaim(eventId: string): Promise<void> {
     try {
-      // Remove from Redis if available
-      if (this.redis) {
-        const key = `${REDIS_PREFIX}${eventId}`;
-        await this.redis.del(key);
-        
-        logger.warn('🔓 IDEMPOTENCY: Processing claim released (Redis)', {
-          eventId: eventId.substring(0, 20) + '***'
-        });
-      }
-
-      // Remove from memory store
-      const wasInMemory = this.memoryStore.delete(eventId);
+      const key = `${REDIS_PREFIX}${eventId}`;
+      await this.redis.del(key);
       
-      if (wasInMemory) {
-        logger.warn('🔓 IDEMPOTENCY: Processing claim released (Memory)', {
-          eventId: eventId.substring(0, 20) + '***',
-          memorySize: this.memoryStore.size
-        });
-      }
+      logger.warn('🔓 IDEMPOTENCY: Processing claim released (Redis)', {
+        eventId: eventId.substring(0, 20) + '***'
+      });
 
     } catch (error: any) {
       logger.error('❌ IDEMPOTENCY: Error releasing processing claim', {
         eventId: eventId.substring(0, 20) + '***',
         error: error.message
       });
-      // Don't throw - we tried our best to release the claim
+      // Don't throw - cleanup errors shouldn't affect webhook processing
     }
   }
 
@@ -220,27 +152,11 @@ export class IdempotencyService {
       eventId: eventId.substring(0, 20) + '***'
     });
     
-    // Check if event exists in either processing or done state
+    // Check if event exists in either processing or done state (Redis-only)
     try {
-      // Check Redis first if available
-      if (this.redis) {
-        const key = `${REDIS_PREFIX}${eventId}`;
-        const exists = await this.redis.exists(key);
-        if (exists) return true;
-      }
-
-      // Check memory store
-      const memoryRecord = this.memoryStore.get(eventId);
-      if (memoryRecord) {
-        const now = Date.now();
-        if (now < memoryRecord.timestamp + (memoryRecord.ttl * 1000)) {
-          return true;
-        } else {
-          this.memoryStore.delete(eventId);
-        }
-      }
-
-      return false;
+      const key = `${REDIS_PREFIX}${eventId}`;
+      const exists = await this.redis.exists(key);
+      return exists > 0;
     } catch (error: any) {
       logger.error('❌ IDEMPOTENCY: Error in legacy isEventProcessed', {
         eventId: eventId.substring(0, 20) + '***',
@@ -263,28 +179,15 @@ export class IdempotencyService {
   }
 
   /**
-   * Get statistics about the idempotency store
+   * Get statistics about the idempotency store (Redis-only)
    */
   getStats(): {
-    memoryStoreSize: number;
     hasRedis: boolean;
-    oldestEntry?: string;
-    newestEntry?: string;
+    redisConnected: boolean;
   } {
-    let oldestTimestamp = Infinity;
-    let newestTimestamp = 0;
-
-    for (const record of this.memoryStore.values()) {
-      if (record.timestamp < oldestTimestamp) {
-        oldestTimestamp = record.timestamp;
-      }
-      if (record.timestamp > newestTimestamp) {
-        newestTimestamp = record.timestamp;
-      }
-    }
-
     return {
-      memoryStoreSize: this.memoryStore.size,
+      hasRedis: true,
+      redisConnected: this.redis.status === 'ready'
       hasRedis: !!this.redis,
       oldestEntry: oldestTimestamp !== Infinity ? new Date(oldestTimestamp).toISOString() : undefined,
       newestEntry: newestTimestamp > 0 ? new Date(newestTimestamp).toISOString() : undefined
@@ -309,31 +212,19 @@ export class IdempotencyService {
   }
 
   /**
-   * Clean up expired entries from memory store
+   * Clean up expired entries from Redis store
    */
-  private cleanupExpiredEntries(): void {
-    const now = Date.now();
-    let cleanedCount = 0;
-    const initialSize = this.memoryStore.size;
-
-    for (const [eventId, record] of this.memoryStore.entries()) {
-      if (now >= record.timestamp + (record.ttl * 1000)) {
-        this.memoryStore.delete(eventId);
-        cleanedCount++;
-      }
-    }
-
-    if (cleanedCount > 0) {
-      logger.info('🧹 IDEMPOTENCY: Cleaned up expired entries', {
-        cleaned: cleanedCount,
-        before: initialSize,
-        after: this.memoryStore.size,
-        memoryFreed: `${cleanedCount} entries`
+  private async cleanupExpiredEntries(): Promise<void> {
+    try {
+      // Redis automatically handles TTL expiration, so this is mainly for logging
+      const keys = await this.redis.keys(`${REDIS_PREFIX}*`);
+      
+      logger.debug('🧹 IDEMPOTENCY: Cleanup cycle completed (Redis auto-expiry)', {
+        trackedKeys: keys.length
       });
-    } else {
-      logger.debug('🧹 IDEMPOTENCY: Cleanup cycle completed', {
-        checked: initialSize,
-        expired: 0
+    } catch (error: any) {
+      logger.error('❌ IDEMPOTENCY: Error during cleanup cycle', {
+        error: error.message
       });
     }
   }
@@ -347,22 +238,23 @@ export class IdempotencyService {
       this.cleanupInterval = null;
     }
 
-    // Clear memory store
-    const size = this.memoryStore.size;
-    this.memoryStore.clear();
-
-    logger.info('🛑 IDEMPOTENCY: Service shutdown completed', {
-      clearedEntries: size
-    });
+    logger.info('🛑 IDEMPOTENCY: Service shutdown completed (Redis-backed)');
   }
 
   /**
    * Force cleanup of all expired entries (for testing/debugging)
    */
-  forceCleanup(): number {
-    const initialSize = this.memoryStore.size;
-    this.cleanupExpiredEntries();
-    return initialSize - this.memoryStore.size;
+  async forceCleanup(): Promise<number> {
+    try {
+      const keys = await this.redis.keys(`${REDIS_PREFIX}*`);
+      await this.cleanupExpiredEntries();
+      return keys.length; // Return number of tracked keys
+    } catch (error: any) {
+      logger.error('❌ IDEMPOTENCY: Error in force cleanup', {
+        error: error.message
+      });
+      return 0;
+    }
   }
 }
 
@@ -370,10 +262,14 @@ export class IdempotencyService {
 let idempotencyService: IdempotencyService | null = null;
 
 /**
- * Initialize the global idempotency service
- * @param redis - Redis instance (optional, will use memory fallback)
+ * Initialize the global idempotency service (Redis required)
+ * @param redis - Redis instance (required for production deployment)
  */
-export function initializeIdempotencyService(redis: Redis | null = null): IdempotencyService {
+export function initializeIdempotencyService(redis: Redis): IdempotencyService {
+  if (!redis) {
+    throw new Error('Redis connection is required for idempotency service in production deployment');
+  }
+  
   if (idempotencyService) {
     // Shutdown existing service
     idempotencyService.shutdown();
@@ -389,9 +285,7 @@ export function initializeIdempotencyService(redis: Redis | null = null): Idempo
  */
 export function getIdempotencyService(): IdempotencyService {
   if (!idempotencyService) {
-    // Auto-initialize with memory-only store if not already initialized
-    logger.warn('⚠️ IDEMPOTENCY: Auto-initializing with memory-only store');
-    idempotencyService = new IdempotencyService(null);
+    throw new Error('Idempotency service not initialized - Redis connection required');
   }
   return idempotencyService;
 }

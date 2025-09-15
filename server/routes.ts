@@ -314,36 +314,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         testRedis.disconnect();
         throw connectionError;
       }
-    } else if (process.env.NODE_ENV === 'production') {
-      console.warn('⚠️  PRODUCTION: Redis not configured - using memory fallback for Replit deployment');
-      console.warn('   Note: Redis is recommended for multi-instance production deployments');
     } else {
-      console.warn('⚠️  DEVELOPMENT: Redis not configured - rate limiting and session security disabled');
+      const error = 'Redis connection is required for production deployment on Railway';
+      console.error('❌ ROUTES:', error);
+      throw new Error(error);
     }
   } catch (error) {
-    console.error('❌ Redis initialization failed:', error instanceof Error ? error.message : error);
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔄 ROUTES: Falling back to no rate limiting in development');
-      redis = null;
-      rateLimiter = null as any;
-      sessionSecurityStore = null as any;
-    } else {
-      console.warn('🔄 ROUTES: Falling back to memory store for Replit production deployment');
-      redis = null;
-      rateLimiter = null as any;
-      sessionSecurityStore = null as any;
-    }
+    const errorMessage = `Redis initialization failed - Railway deployment requires Redis connectivity: ${error instanceof Error ? error.message : error}`;
+    console.error('❌ ROUTES:', errorMessage);
+    throw new Error(errorMessage);
   }
   
   // Note: Enhanced Helmet security configuration is now applied in server/index.ts
   // This provides comprehensive security headers including HSTS, CSP, and custom policies
   
-  // CRITICAL FIX: Always apply rate limiting (Redis or memory fallback)
+  // PRODUCTION REQUIREMENT: Rate limiting requires Redis connection
   if (!rateLimiter) {
-    // Create memory-based rate limiter if Redis failed
-    console.log('🔄 ROUTES: Initializing memory-based rate limiting fallback');
-    rateLimiter = new MultiLayerRateLimiter(null, DEFAULT_RATE_LIMIT_CONFIG);
+    const error = 'Rate limiting system requires Redis connection for production deployment';
+    console.error('❌ ROUTES:', error);
+    throw new Error(error);
   }
   
   // Global rate limiting for all API endpoints
@@ -354,19 +343,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   console.log('✅ Comprehensive rate limiting middleware applied');
   
-  // Apply session security middleware (only when Redis available)
-  if (sessionSecurityStore && redis) {
-    const sessionSecurity = createSessionSecurityMiddleware(sessionSecurityStore);
-    
-    app.use((req, res, next) => {
-      if (req.path === "/api/csrf-token") return next();
-      return sessionSecurity(req, res, next);
-    });
-    
-    console.log('✅ Session security middleware applied');
-  } else {
-    console.log('🔄 SECURITY: Skipping Redis-based session validation (using memory store)');
+  // PRODUCTION REQUIREMENT: Session security requires Redis
+  if (!sessionSecurityStore || !redis) {
+    const error = 'Session security system requires Redis connection for production deployment';
+    console.error('❌ ROUTES:', error);
+    throw new Error(error);
   }
+  
+  const sessionSecurity = createSessionSecurityMiddleware(sessionSecurityStore);
+  
+  app.use((req, res, next) => {
+    if (req.path === "/api/csrf-token") return next();
+    return sessionSecurity(req, res, next);
+  });
+  
+  console.log('✅ Session security middleware applied (Redis-backed)');
   
   // Health check endpoints
   app.get("/api/health", async (req, res) => {
@@ -374,14 +365,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check database connectivity
       const dbHealthy = await checkDatabaseHealth();
       
-      // Check Redis connectivity (if available)
-      let redisHealthy = true;
-      if (redis) {
-        try {
-          await redis.ping();
-        } catch {
-          redisHealthy = false;
-        }
+      // Check Redis connectivity (required for production)
+      let redisHealthy = false;
+      try {
+        await redis.ping();
+        redisHealthy = true;
+      } catch {
+        redisHealthy = false;
+      }
       }
 
       // Check if queue system is healthy

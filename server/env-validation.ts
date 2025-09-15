@@ -8,6 +8,7 @@ interface RequiredEnvVars {
 const REQUIRED_ENV_VARS: RequiredEnvVars = {
   development: [
     'DATABASE_URL',
+    'REDIS_URL'
   ],
   production: [
     'DATABASE_URL',
@@ -16,7 +17,8 @@ const REQUIRED_ENV_VARS: RequiredEnvVars = {
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'VITE_STRIPE_PUBLIC_KEY',
-    'OPENAI_API_KEY'
+    'OPENAI_API_KEY',
+    'REDIS_URL'
   ]
 };
 
@@ -37,14 +39,14 @@ export function validateEnvironment(): void {
       console.error(`  - ${envVar}`);
     });
     
-    if (env === 'production') {
-      console.error('\n💡 For Replit deployment, these variables are optional but recommended:');
-      console.error('   REDIS_URL - for enhanced session management');
-      console.error('   FRONTEND_URL - for consistent URL generation');
-      console.warn('\n⚠️  Continuing with memory store fallback for missing optional services');
-    } else {
-      console.warn('\n⚠️  Some features may not work without these variables');
-    }
+    console.error('\n🚑 PRODUCTION REQUIREMENT: This application requires Redis for:');
+    console.error('   • Session management (no memory fallback)');
+    console.error('   • Rate limiting coordination');
+    console.error('   • Webhook idempotency protection');
+    console.error('   • Queue system operations');
+    console.error('   • WebSocket coordination');
+    console.error('\n❌ DEPLOYMENT BLOCKED: Application cannot start without required variables');
+    process.exit(1);
   }
   
   // Validate secret lengths in production

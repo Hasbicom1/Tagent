@@ -205,13 +205,14 @@ export function getRedis(): Redis | null {
   return redisInstance;
 }
 
-export async function initializeRedis(): Promise<Redis | null> {
+export async function initializeRedis(): Promise<Redis> {
   const redisUrl = process.env.REDIS_URL;
   
-  // Skip Redis entirely if no URL provided (common in Replit deployments)
+  // PRODUCTION REQUIREMENT: Redis is mandatory for Railway deployment
   if (!redisUrl) {
-    console.log('🔄 REDIS: No REDIS_URL provided - using memory store for Replit deployment');
-    return null;
+    const error = 'REDIS_URL environment variable is required for production deployment';
+    console.error('❌ REDIS:', error);
+    throw new Error(error);
   }
   
   try {
@@ -247,7 +248,7 @@ export async function initializeRedis(): Promise<Redis | null> {
     console.log('✅ REDIS: Connection established successfully');
     return redisInstance;
   } catch (error: any) {
-    console.warn(`⚠️  REDIS: Connection failed (${error.message.substring(0, 100)}) - using memory store fallback`);
+    console.error(`❌ REDIS: Connection failed - Railway deployment requires Redis connectivity: ${error.message}`);
     
     // Ensure complete cleanup
     if (redisInstance) {
@@ -259,25 +260,15 @@ export async function initializeRedis(): Promise<Redis | null> {
       }
       redisInstance = null;
     }
-    return null;
+    
+    // FAIL FAST: No memory fallback allowed in production
+    throw new Error(`Redis connection required for production deployment: ${error.message}`);
   }
 }
 
 async function initializeRedisSession(): Promise<any> {
   try {
-    const isProduction = process.env.NODE_ENV === 'production';
-    
-    // Skip Redis initialization if no URL provided (Replit deployment)
-    if (!process.env.REDIS_URL) {
-      if (isProduction) {
-        console.log('🔄 SECURITY: Replit deployment detected - using secure memory store for sessions');
-      } else {
-        console.log('🔄 SECURITY: Using memory store for session storage in development');
-      }
-      return null;
-    }
-    
-    // Try to initialize Redis with robust error handling
+    // PRODUCTION REQUIREMENT: Redis is mandatory for all environments on Railway
     const redis = await initializeRedis();
     
     if (redis) {
@@ -300,21 +291,12 @@ async function initializeRedisSession(): Promise<any> {
         console.log('✅ SECURITY: Redis session store created');
         return redisStore;
       } catch (storeError) {
-        console.warn('⚠️  SECURITY: Failed to create session security store - using memory fallback');
-        return null;
+        console.error('❌ SECURITY: Failed to create session security store - Redis required');
+        throw new Error(`Session store creation failed: ${storeError instanceof Error ? storeError.message : 'unknown error'}`);
       }
-    } else {
-      // Graceful fallback to memory store
-      if (isProduction) {
-        console.warn('⚠️  SECURITY: Redis not available, using secure memory store for Replit deployment');
-      } else {
-        console.log('🔄 SECURITY: Using memory store for session storage in development');
-      }
-      return null;
-    }
   } catch (error) {
-    console.warn('⚠️  SECURITY: Session initialization failed - using memory store fallback:', error instanceof Error ? error.message.substring(0, 100) : 'unknown error');
-    return null;
+    console.error('❌ SECURITY: Session initialization failed - Redis connectivity required:', error instanceof Error ? error.message : 'unknown error');
+    throw error; // Propagate error instead of fallback
   }
 }
 
@@ -342,8 +324,8 @@ const getSessionConfig = (store: any) => {
     saveUninitialized: true, // CRITICAL FIX: Save sessions immediately for CSRF token persistence
     rolling: true, // Reset expiration on activity
     cookie: cookieOptions,
-    // Use Redis store in production, memory store in development
-    store: store || undefined
+    // PRODUCTION REQUIREMENT: Redis store is mandatory
+    store: store
   };
 };
 
@@ -352,13 +334,13 @@ async function initializeSession() {
   try {
     redisStore = await initializeRedisSession();
     
-    // Log session store configuration
-    if (redisStore) {
-      console.log('✅ SECURITY: Using Redis session store for production-grade session management');
-      console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
-    } else {
-      console.log('🔄 SECURITY: Using memory store for sessions in development');
+    // Validate Redis session store is available
+    if (!redisStore) {
+      throw new Error('Redis session store is required but not available');
     }
+    
+    console.log('✅ SECURITY: Using Redis session store for production-grade session management');
+    console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
     
     const sessionConfig = getSessionConfig(redisStore);
     

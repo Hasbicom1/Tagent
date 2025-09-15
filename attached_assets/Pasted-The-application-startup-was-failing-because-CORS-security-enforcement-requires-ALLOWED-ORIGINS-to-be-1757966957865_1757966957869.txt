@@ -1,0 +1,65 @@
+The application startup was failing because CORS security enforcement requires ALLOWED_ORIGINS to be explicitly configured. Without it, the server rejects API requests since it doesn’t know which frontends are trusted.
+
+Additionally, Stripe redirect URLs require a stable FRONTEND_URL so that success/cancel flows point to the correct domain (not localhost, not internal Replit preview).
+
+✅ Required Environment Variables
+1. ALLOWED_ORIGINS
+
+Defines which domains are allowed to call your API (CORS).
+This prevents unauthorized websites from accessing your backend.
+
+Value to set in Replit Secrets:
+
+https://onedollaragent.ai,https://www.onedollaragent.ai,https://a4820947-d189-4a31-81d0-3e0624a713bd-00-37l83xb173uim.kirk.replit.dev,https://onedollara.replit.app
+
+
+https://onedollaragent.ai → bare custom domain
+
+https://www.onedollaragent.ai → www custom domain (primary)
+
+https://a4820947-d189-...kirk.replit.dev → Replit preview build (for dev/testing)
+
+https://onedollara.replit.app → current deployed Replit public app (transition period)
+
+(Later, once the custom domain is fully live, you can safely remove the Replit URLs if you want to tighten security.)
+
+2. FRONTEND_URL
+
+Defines the primary domain used for Stripe Checkout success_url and cancel_url redirects.
+
+Value to set in Replit Secrets:
+
+https://www.onedollaragent.ai
+
+
+Always use www version as the canonical domain.
+
+This ensures Stripe sends users back to the right production site after payment.
+
+🔐 Security Benefits
+
+Requests from only these domains will be accepted by your API.
+
+Stripe redirects always go to your official domain.
+
+Prevents localhost or spoofed host headers in production.
+
+🔄 Future Updates
+
+Whenever you add new environments, staging sites, or features that require API calls from another domain:
+
+Add the new domain to ALLOWED_ORIGINS.
+
+If that domain should be the main redirect target for payments, update FRONTEND_URL.
+
+This way, the security stays tight but flexible as the app evolves.
+
+👉 Action Now:
+
+Go to Replit → Secrets
+
+Add these two keys with the values above
+
+Redeploy
+
+This will fix the startup failure, secure CORS, and finalize Stripe’s domain handling for production.

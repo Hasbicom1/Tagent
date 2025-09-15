@@ -6,6 +6,9 @@ import { browserAgent } from './browserAutomation';
 import { mcpOrchestrator } from './mcpOrchestrator';
 import { wsManager } from './websocket';
 
+// REPLIT ENVIRONMENT DETECTION: Check if running on Replit platform
+const isReplit = !!(process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPLIT_CLUSTER);
+
 // PRODUCTION OPTIMIZATION: Task batching for high-throughput scenarios
 interface TaskBatch {
   tasks: Array<{ type: TaskType; payload: TaskPayload; priority: TaskPriority; delay?: number }>;
@@ -76,23 +79,12 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
   });
 }
 
-// Redis connection configuration with enhanced fallback for Replit deployment
-const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } | undefined> => {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const isReplit = process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID;
+// Redis connection configuration (Redis required for production deployment)
+const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> => {
   const redisUrl = process.env.REDIS_URL;
   
-  if (!redisUrl && (isDevelopment || isReplit)) {
-    console.log('⚡ QUEUE: Running in development/Replit mode - using in-memory fallback');
-    return undefined; // Use in-memory fallback for development
-  }
-  
   if (!redisUrl) {
-    if (isDevelopment || isReplit) {
-      console.log('⚡ QUEUE: No REDIS_URL in development/Replit - using in-memory fallback');
-      return undefined;
-    }
-    throw new Error('REDIS_URL environment variable is required in production');
+    throw new Error('REDIS_URL environment variable is required for queue system in production deployment');
   }
   
   // REPLIT FIX: Test Redis connection with aggressive timeout
@@ -101,12 +93,7 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
     const isRedisWorking = await testQueueRedisConnection(redisUrl, connectionTimeout);
     
     if (!isRedisWorking) {
-      console.warn('⚠️  QUEUE: Redis connection test failed - falling back to in-memory mode');
-      if (isDevelopment || isReplit) {
-        console.log('🔄 QUEUE: Using in-memory fallback for Replit/development');
-        return undefined;
-      }
-      throw new Error('Redis connection failed and no fallback available in production');
+      throw new Error('Redis connection test failed - queue system requires Redis for production deployment');
     }
     
     console.log('✅ QUEUE: Redis connection test successful');
@@ -146,10 +133,6 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
     };
   } catch (error) {
     console.error('❌ QUEUE: Redis connection test failed:', error instanceof Error ? error.message : error);
-    if (isDevelopment || isReplit) {
-      console.log('🔄 QUEUE: Falling back to in-memory mode for development/Replit');
-      return undefined;
-    }
     throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
@@ -215,23 +198,6 @@ const queueConfig = {
 let agentQueue: Queue | null = null;
 let agentWorker: Worker | null = null;
 let queueEvents: QueueEvents | null = null;
-let isInMemoryMode = false;
-
-// In-memory task storage for development
-interface InMemoryTask {
-  id: string;
-  data: TaskPayload;
-  opts: any;
-  status: TaskStatus;
-  createdAt: Date;
-  processedAt?: Date;
-  completedAt?: Date;
-  failedAt?: Date;
-  result?: any;
-  error?: string;
-}
-
-const inMemoryTasks = new Map<string, InMemoryTask>();
 
 // PRODUCTION OPTIMIZATION: Batched task processing for high throughput
 async function processBatchedTasks(): Promise<void> {
@@ -241,13 +207,7 @@ async function processBatchedTasks(): Promise<void> {
   
   for (const [batchId, batch] of Array.from(taskBatches.entries())) {
     try {
-      if (isInMemoryMode) {
-        // Process batch in memory for development (avoid recursion)
-        for (const task of batch.tasks) {
-          const taskId = addInMemoryTask(task.type, task.payload, task.priority, task.delay);
-          console.log(`📋 QUEUE: Processed batch task ${taskId} in memory`);
-        }
-      } else if (agentQueue) {
+      if (agentQueue) {
         // Add batch to Redis queue for production
         const jobs = batch.tasks.map(task => ({
           name: task.type,
@@ -309,16 +269,10 @@ function scheduleBatchProcessing(): void {
   }, BATCH_TIMEOUT);
 }
 
-// Initialize queue system
+// Initialize queue system (Redis required)
 export async function initializeQueue(): Promise<void> {
   try {
     const connection = await getRedisConnection();
-    
-    if (!connection) {
-      console.log('🔄 QUEUE: Initializing in-memory mode for development');
-      isInMemoryMode = true;
-      return;
-    }
 
     console.log('🚀 QUEUE: Initializing Redis BullMQ');
     
@@ -345,9 +299,8 @@ export async function initializeQueue(): Promise<void> {
     
     console.log('✅ QUEUE: Redis BullMQ with Worker initialized successfully');
   } catch (error) {
-    console.error('❌ QUEUE: Failed to initialize Redis BullMQ:', error);
-    console.log('🔄 QUEUE: Falling back to in-memory mode');
-    isInMemoryMode = true;
+    console.error('❌ QUEUE: Failed to initialize Redis BullMQ - queue system requires Redis:', error);
+    throw new Error(`Queue system initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -627,12 +580,8 @@ export async function addTask(
   delay?: number
 ): Promise<string> {
   try {
-    if (isInMemoryMode) {
-      return addInMemoryTask(type, payload, priority, delay);
-    }
-
     if (!agentQueue) {
-      throw new Error('Queue not initialized');
+      throw new Error('Queue not initialized - Redis connection required');
     }
 
     // PRODUCTION OPTIMIZATION: Use batching system for all tasks except urgent ones
@@ -708,130 +657,6 @@ export async function addTask(
   }
 }
 
-// In-memory task processing for development
-function addInMemoryTask(
-  type: TaskType,
-  payload: TaskPayload,
-  priority: TaskPriority,
-  delay?: number
-): string {
-  const taskId = `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const task: InMemoryTask = {
-    id: taskId,
-    data: payload,
-    opts: { priority: getPriorityValue(priority), delay },
-    status: TaskStatus.PENDING,
-    createdAt: new Date(),
-    processedAt: undefined,
-    completedAt: undefined,
-    failedAt: undefined,
-    result: undefined,
-    error: undefined,
-  };
-
-  inMemoryTasks.set(taskId, task);
-
-  // Create storage record with in-memory task ID
-  storage.createTaskWithId(taskId, {
-    sessionId: payload.sessionId,
-    agentId: payload.agentId,
-    type: type,
-    status: TaskStatus.PENDING,
-    payload: payload as any,
-    priority: priority,
-    attempts: "0",
-    maxRetries: "3",
-    scheduledAt: delay ? new Date(Date.now() + delay) : new Date(),
-  }).catch(error => {
-    console.error(`❌ MEMORY TASK ${taskId}: Failed to create storage record:`, error);
-  });
-
-  // Simulate async processing in development
-  setTimeout(async () => {
-    try {
-      task.status = TaskStatus.PROCESSING;
-      task.processedAt = new Date();
-      
-      // Update storage when processing starts
-      await storage.updateTaskStatus(taskId, TaskStatus.PROCESSING);
-      
-      // Broadcast WebSocket status update
-      await broadcastTaskStatusUpdate(taskId, TaskStatus.PROCESSING);
-      await broadcastTaskProgress(taskId, 10, 'Starting task simulation', [
-        `Task type: ${type}`,
-        'Development mode simulation active'
-      ]);
-      
-      // Simulate task processing (would be done by worker in production)
-      console.log(`⚡ MEMORY TASK ${taskId}: Simulating processing of ${type}`);
-      
-      // Simulate progress updates during processing
-      const steps = [
-        { progress: 25, stage: 'Initializing task execution', logs: ['Setting up simulation environment'] },
-        { progress: 50, stage: 'Processing task logic', logs: ['Executing main task simulation'] },
-        { progress: 75, stage: 'Finalizing results', logs: ['Preparing task completion'] }
-      ];
-      
-      for (const step of steps) {
-        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-        await broadcastTaskProgress(taskId, step.progress, step.stage, step.logs);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-      
-      // Mark as completed
-      task.status = TaskStatus.COMPLETED;
-      task.completedAt = new Date();
-      task.result = { 
-        success: true, 
-        message: `${type} completed successfully in development mode`,
-        simulatedResult: true 
-      };
-      
-      console.log(`✅ MEMORY TASK ${taskId}: Completed successfully`);
-      
-      // Update storage and create result
-      await storage.updateTaskStatus(taskId, TaskStatus.COMPLETED, new Date());
-      await storage.createTaskResult({
-        taskId: taskId,
-        result: task.result,
-        logs: [`Task ${type} completed in development mode`],
-        duration: "2-3 seconds",
-        workerInfo: { mode: "development", simulated: true }
-      });
-      
-      // Broadcast WebSocket completion update
-      await broadcastTaskStatusUpdate(taskId, TaskStatus.COMPLETED, 100, task.result);
-      await broadcastTaskProgress(taskId, 100, 'Task completed successfully', [
-        'Simulation finished',
-        'Task execution completed',
-        'Ready for next task'
-      ]);
-    } catch (error) {
-      task.status = TaskStatus.FAILED;
-      task.failedAt = new Date();
-      task.error = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ MEMORY TASK ${taskId}: Failed - ${task.error}`);
-      
-      await storage.updateTaskStatus(taskId, TaskStatus.FAILED, new Date());
-      await storage.createTaskResult({
-        taskId: taskId,
-        error: task.error,
-        logs: [`Task ${type} failed in development mode: ${task.error}`],
-        workerInfo: { mode: "development", simulated: true }
-      });
-      
-      // Broadcast WebSocket failure update
-      await broadcastTaskStatusUpdate(taskId, TaskStatus.FAILED, undefined, undefined, task.error);
-      await broadcastTaskProgress(taskId, 0, 'Task execution failed', [
-        `Error: ${task.error}`,
-        'Simulation terminated'
-      ]);
-    }
-  }, delay || 500);
-
-  return taskId;
-}
 
 // Get task status
 export async function getTaskStatus(taskId: string): Promise<{
@@ -842,22 +667,8 @@ export async function getTaskStatus(taskId: string): Promise<{
   progress?: number;
 } | null> {
   try {
-    if (isInMemoryMode) {
-      const task = inMemoryTasks.get(taskId);
-      if (!task) return null;
-      
-      return {
-        id: task.id,
-        status: task.status,
-        result: task.result,
-        error: task.error,
-        progress: task.status === TaskStatus.COMPLETED ? 100 : 
-                 task.status === TaskStatus.PROCESSING ? 50 : 0,
-      };
-    }
-
     if (!agentQueue) {
-      throw new Error('Queue not initialized');
+      throw new Error('Queue not initialized - Redis connection required');
     }
 
     const job = await agentQueue.getJob(taskId);
@@ -888,19 +699,8 @@ export async function getQueueStats(): Promise<{
   total: number;
 }> {
   try {
-    if (isInMemoryMode) {
-      const tasks = Array.from(inMemoryTasks.values());
-      return {
-        waiting: tasks.filter(t => t.status === TaskStatus.PENDING).length,
-        active: tasks.filter(t => t.status === TaskStatus.PROCESSING).length,
-        completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
-        failed: tasks.filter(t => t.status === TaskStatus.FAILED).length,
-        total: tasks.length,
-      };
-    }
-
     if (!agentQueue) {
-      throw new Error('Queue not initialized');
+      throw new Error('Queue not initialized - Redis connection required');
     }
 
     const counts = await agentQueue.getJobCounts();
@@ -936,11 +736,8 @@ export async function closeQueue(): Promise<void> {
       agentQueue = null;
     }
     
-    if (isInMemoryMode) {
-      inMemoryTasks.clear();
-    }
     
-    console.log('🔄 QUEUE: Closed successfully');
+    console.log('🔄 QUEUE: Redis-backed queue closed successfully');
   } catch (error) {
     console.error('❌ QUEUE: Failed to close:', error);
   }

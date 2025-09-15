@@ -193,19 +193,9 @@ export class WebSocketManager {
   private async initializeRedis(): Promise<void> {
     try {
       const redisUrl = process.env.REDIS_URL;
-      const isDevelopment = process.env.NODE_ENV === 'development';
       
-      if (!redisUrl && isDevelopment) {
-        log('🔄 WS: Skipping Redis in development mode');
-        return;
-      }
-
       if (!redisUrl) {
-        if (isDevelopment) {
-          log('🔄 WS: No REDIS_URL in development - skipping Redis');
-          return;
-        }
-        throw new Error('REDIS_URL required for WebSocket Redis coordination');
+        throw new Error('REDIS_URL required for WebSocket coordination in production deployment');
       }
 
       // Test Redis connection first
@@ -260,18 +250,8 @@ export class WebSocketManager {
     } catch (error) {
       log(`❌ WS: Redis initialization failed: ${error instanceof Error ? error.message : error}`);
       
-      // Always fall back gracefully in development
-      if (process.env.NODE_ENV === 'development') {
-        log('🔄 WS: Falling back to local-only mode in development');
-        this.redis = null;
-        this.redisSubscriber = null;
-        return;
-      }
-      
-      // In production, this might be acceptable for single-instance deployments
-      log('⚠️  WS: Continuing without Redis - WebSocket coordination will be local-only');
-      this.redis = null;
-      this.redisSubscriber = null;
+      // PRODUCTION REQUIREMENT: Redis mandatory for WebSocket coordination
+      throw new Error(`WebSocket Redis coordination failed: ${error instanceof Error ? error.message : error}`);
     }
   }
 
