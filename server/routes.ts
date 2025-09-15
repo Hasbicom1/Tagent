@@ -276,9 +276,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Initialize Redis for rate limiting and session security (if available)
   let redis: Redis | null = null;
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
   try {
     const redisUrl = process.env.REDIS_URL;
-    const isDevelopment = process.env.NODE_ENV === 'development';
     
     if (redisUrl) {
       // Test Redis connection first
@@ -314,50 +315,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         testRedis.disconnect();
         throw connectionError;
       }
-    } else {
+    } else if (!isDevelopment) {
       const error = 'Redis connection is required for production deployment on Railway';
       console.error('❌ ROUTES:', error);
       throw new Error(error);
     }
   } catch (error) {
-    const errorMessage = `Redis initialization failed - Railway deployment requires Redis connectivity: ${error instanceof Error ? error.message : error}`;
-    console.error('❌ ROUTES:', errorMessage);
-    throw new Error(errorMessage);
+    if (isDevelopment) {
+      // Development mode: Allow fallback without Redis-dependent services
+      console.log('⚠️  DEV MODE: Redis services disabled for routes (Redis not available)');
+      console.log('   This is NOT suitable for production - Redis is required for rate limiting and session security');
+      console.log('   Rate limiting and advanced session security will be disabled');
+    } else {
+      // Production mode: Redis is mandatory
+      const errorMessage = `Redis initialization failed - Railway deployment requires Redis connectivity: ${error instanceof Error ? error.message : error}`;
+      console.error('❌ ROUTES:', errorMessage);
+      throw new Error(errorMessage);
+    }
   }
   
   // Note: Enhanced Helmet security configuration is now applied in server/index.ts
   // This provides comprehensive security headers including HSTS, CSP, and custom policies
   
-  // PRODUCTION REQUIREMENT: Rate limiting requires Redis connection
-  if (!rateLimiter) {
+  // Apply rate limiting if available, otherwise skip in development
+  if (rateLimiter) {
+    // Global rate limiting for all API endpoints
+    app.use('/api', rateLimiter.createGlobalLimiter());
+    
+    // User-specific rate limiting for authenticated endpoints
+    app.use('/api', rateLimiter.createUserLimiter());
+    
+    console.log('✅ Comprehensive rate limiting middleware applied');
+  } else if (isDevelopment) {
+    console.log('⚠️  DEV MODE: Rate limiting disabled (Redis not available)');
+  } else {
     const error = 'Rate limiting system requires Redis connection for production deployment';
     console.error('❌ ROUTES:', error);
     throw new Error(error);
   }
   
-  // Global rate limiting for all API endpoints
-  app.use('/api', rateLimiter.createGlobalLimiter());
-  
-  // User-specific rate limiting for authenticated endpoints
-  app.use('/api', rateLimiter.createUserLimiter());
-  
-  console.log('✅ Comprehensive rate limiting middleware applied');
-  
-  // PRODUCTION REQUIREMENT: Session security requires Redis
-  if (!sessionSecurityStore || !redis) {
+  // Apply session security if available
+  if (sessionSecurityStore && redis) {
+    const sessionSecurity = createSessionSecurityMiddleware(sessionSecurityStore);
+    
+    app.use((req, res, next) => {
+      if (req.path === "/api/csrf-token") return next();
+      return sessionSecurity(req, res, next);
+    });
+    
+    console.log('✅ Session security middleware applied (Redis-backed)');
+  } else if (isDevelopment) {
+    console.log('⚠️  DEV MODE: Session security disabled (Redis not available)');
+  } else {
     const error = 'Session security system requires Redis connection for production deployment';
     console.error('❌ ROUTES:', error);
     throw new Error(error);
   }
-  
-  const sessionSecurity = createSessionSecurityMiddleware(sessionSecurityStore);
-  
-  app.use((req, res, next) => {
-    if (req.path === "/api/csrf-token") return next();
-    return sessionSecurity(req, res, next);
-  });
-  
-  console.log('✅ Session security middleware applied (Redis-backed)');
   
   // Health check endpoints
   app.get("/api/health", async (req, res) => {

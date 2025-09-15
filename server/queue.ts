@@ -269,7 +269,7 @@ function scheduleBatchProcessing(): void {
   }, BATCH_TIMEOUT);
 }
 
-// Initialize queue system (Redis required)
+// Initialize queue system (Redis required for production, optional for development)
 export async function initializeQueue(): Promise<void> {
   try {
     const connection = await getRedisConnection();
@@ -299,15 +299,21 @@ export async function initializeQueue(): Promise<void> {
     
     console.log('✅ QUEUE: Redis BullMQ with Worker initialized successfully');
   } catch (error) {
-    console.error('❌ QUEUE: Failed to initialize Redis BullMQ - queue system requires Redis:', error);
-    
-    // 🚨 PRODUCTION ENFORCEMENT: No development fallbacks allowed - Redis mandatory for ALL environments
-    console.error('🚨 CRITICAL ERROR: Redis queue system is mandatory for production deployment');
-    console.error('   NO FALLBACKS: Development fallbacks are disabled for production security');
-    console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
-    
-    // FAIL FAST: No memory queue fallback allowed in any environment
-    throw new Error(`Queue system initialization failed - Redis connectivity required: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (process.env.NODE_ENV === 'development') {
+      // Development mode: Allow fallback without queue system
+      console.log('⚠️  DEV MODE: Queue system disabled (Redis not available)');
+      console.log('   This is NOT suitable for production - Redis is required for task queuing');
+      console.log('   Background tasks will not be processed');
+    } else {
+      // Production mode: Redis is mandatory
+      console.error('❌ QUEUE: Failed to initialize Redis BullMQ - queue system requires Redis:', error);
+      console.error('🚨 CRITICAL ERROR: Redis queue system is mandatory for production deployment');
+      console.error('   NO FALLBACKS: Development fallbacks are disabled for production security');
+      console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
+      
+      // FAIL FAST: No memory queue fallback allowed in production
+      throw new Error(`Queue system initialization failed - Redis connectivity required: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
 

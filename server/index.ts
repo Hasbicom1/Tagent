@@ -823,28 +823,42 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     // CRITICAL: Initialize idempotency service for webhook duplicate prevention
     log('🔄 Initializing webhook idempotency service...');
     try {
-      // Get Redis instance - MUST be available for production
+      // Get Redis instance
       const redis = redisInstance;
-      if (!redis) {
-        throw new Error('Redis connection is required but not available - idempotency service cannot initialize');
-      }
-      const idempotencyService = initializeIdempotencyService(redis);
-      const stats = idempotencyService.getStats();
       
-      logger.info('✅ IDEMPOTENCY: Service initialized successfully (Redis-only)', {
-        hasRedis: stats.hasRedis,
-        redisConnected: stats.redisConnected
-      });
+      if (!redis && process.env.NODE_ENV === 'development') {
+        // Development mode: Allow fallback without idempotency service
+        console.log('⚠️  DEV MODE: Idempotency service disabled (Redis not available)');
+        console.log('   This is NOT suitable for production - Redis is required for webhook idempotency');
+        console.log('   Webhook duplicate detection will not be available');
+      } else if (!redis) {
+        // Production mode: Redis is mandatory
+        throw new Error('Redis connection is required but not available - idempotency service cannot initialize');
+      } else {
+        // Redis available: Initialize idempotency service
+        const idempotencyService = initializeIdempotencyService(redis);
+        const stats = idempotencyService.getStats();
+        
+        logger.info('✅ IDEMPOTENCY: Service initialized successfully (Redis-only)', {
+          hasRedis: stats.hasRedis,
+          redisConnected: stats.redisConnected
+        });
+      }
     } catch (error) {
-      logger.error('❌ PRODUCTION STARTUP FAILED: Redis idempotency service required', {
-        error: error instanceof Error ? error.message : String(error),
-        context: 'Idempotency service initialization failed - production deployment requires Redis connectivity',
-        action: 'Application startup aborted'
-      });
-      console.error('🚨 CRITICAL ERROR: Redis idempotency service is mandatory for production deployment');
-      console.error('   NO FALLBACKS: Memory store fallbacks are disabled for production security');
-      console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
-      process.exit(1); // FAIL FAST: No memory store fallback allowed
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️  DEV MODE: Idempotency service failed but continuing in development mode');
+        console.log('   This is NOT suitable for production - Redis is required for webhook idempotency');
+      } else {
+        logger.error('❌ PRODUCTION STARTUP FAILED: Redis idempotency service required', {
+          error: error instanceof Error ? error.message : String(error),
+          context: 'Idempotency service initialization failed - production deployment requires Redis connectivity',
+          action: 'Application startup aborted'
+        });
+        console.error('🚨 CRITICAL ERROR: Redis idempotency service is mandatory for production deployment');
+        console.error('   NO FALLBACKS: Memory store fallbacks are disabled for production security');
+        console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
+        process.exit(1); // FAIL FAST: No memory store fallback allowed
+      }
     }
 
     // STARTUP FIX: Start server AFTER session is ready
