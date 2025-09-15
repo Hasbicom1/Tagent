@@ -31,6 +31,10 @@ import {
   SessionSecurityStore,
   DEFAULT_SESSION_SECURITY_CONFIG
 } from "./session";
+import { 
+  initializeIdempotencyService,
+  getIdempotencyService
+} from "./idempotency";
 
 // Validate environment variables before starting anything
 validateEnvironment();
@@ -338,7 +342,7 @@ async function initializeSession() {
 
 // CRITICAL FIX: Stripe webhook MUST be registered before JSON body parser
 // This prevents express.json() from interfering with webhook signature verification
-app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req, res) => {
+app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.get('stripe-signature');
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
@@ -371,7 +375,7 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
 
   try {
     // Import Stripe dynamically to handle missing config
-    const Stripe = require('stripe');
+    const { default: Stripe } = await import('stripe');
     const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
     
     // Handle missing Stripe in development
@@ -395,8 +399,39 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
       livemode: event.livemode
     });
 
+    // ATOMIC CLAIM: Prevent race conditions with atomic event claiming
+    const idempotencyService = getIdempotencyService();
+    const claimSuccessful = await idempotencyService.claimEventForProcessing(event.id, 60); // 60 second processing timeout
+    
+    if (!claimSuccessful) {
+      logger.info('🔄 WEBHOOK: Event already claimed/processed - returning idempotent response', {
+        requestId,
+        eventId: event.id,
+        eventType: event.type,
+        skipReason: 'already_claimed_or_processed'
+      });
+      
+      return res.status(200).json({ 
+        received: true,
+        eventId: event.id,
+        eventType: event.type,
+        processed: true,
+        duplicate: true,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Event successfully claimed for processing
+    logger.info('🔒 WEBHOOK: Event successfully claimed for processing', {
+      requestId,
+      eventId: event.id,
+      eventType: event.type,
+      claimTimeout: '60s'
+    });
+
     // Comprehensive event handling with detailed logging
     let eventProcessed = false;
+    let processingError = null;
     
     switch (event.type) {
       case 'payment_intent.succeeded': {
@@ -518,13 +553,17 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
       }
     }
 
+    // Mark event as completed with full TTL to prevent future duplicates
+    await idempotencyService.markEventCompleted(event.id);
+    
     // Final success logging
-    logger.info('✅ WEBHOOK: Event processing completed', {
+    logger.info('✅ WEBHOOK: Event processing completed successfully', {
       requestId,
       eventId: event.id,
       eventType: event.type,
       processed: eventProcessed,
-      responseTime: Date.now()
+      responseTime: Date.now(),
+      atomicProcessing: 'completed'
     });
 
     res.status(200).json({ 
@@ -532,6 +571,7 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
       eventId: event.id,
       eventType: event.type,
       processed: eventProcessed,
+      duplicate: false,
       timestamp: new Date().toISOString()
     });
 
@@ -546,9 +586,40 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
       bodySize: req.body?.length || 0
     });
 
+    // CRITICAL: Release processing claim if we had one
+    try {
+      // Import Stripe to get event ID if possible
+      const { default: Stripe } = await import('stripe');
+      const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+      
+      if (stripe && sig && process.env.STRIPE_WEBHOOK_SECRET) {
+        try {
+          const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+          const idempotencyService = getIdempotencyService();
+          await idempotencyService.releaseEventClaim(event.id);
+          
+          logger.warn('🔓 WEBHOOK: Processing claim released due to error', {
+            requestId,
+            eventId: event.id,
+            error: error.message
+          });
+        } catch (releaseError) {
+          logger.warn('⚠️ WEBHOOK: Could not release processing claim after error', {
+            requestId,
+            releaseError: releaseError instanceof Error ? releaseError.message : 'unknown'
+          });
+        }
+      }
+    } catch (claimReleaseError) {
+      logger.warn('⚠️ WEBHOOK: Error during claim release attempt', {
+        requestId,
+        claimReleaseError: claimReleaseError instanceof Error ? claimReleaseError.message : 'unknown'
+      });
+    }
+
     // Log potential security event for repeated webhook failures
     if (error.message.includes('signature') || error.message.includes('verification')) {
-      const { logSecurityEvent } = require('./security');
+      const { logSecurityEvent } = await import('./security');
       logSecurityEvent('webhook_abuse', {
         endpoint: '/api/stripe/webhook',
         error: 'signature_verification_failed',
@@ -623,6 +694,24 @@ app.get('/api/health', (req: Request, res: Response) => {
       log('✅ Session management initialized');
     } catch (error) {
       log('⚠️  Session management initialization failed, continuing with memory store:', error instanceof Error ? error.message : String(error));
+    }
+
+    // CRITICAL: Initialize idempotency service for webhook duplicate prevention
+    log('🔄 Initializing webhook idempotency service...');
+    try {
+      // Get Redis instance - may be null if Redis not available (Replit deployment)
+      const redis = redisInstance; // Use the module-level redisInstance variable
+      const idempotencyService = initializeIdempotencyService(redis);
+      const stats = idempotencyService.getStats();
+      
+      log('✅ Idempotency service initialized successfully', {
+        hasRedis: stats.hasRedis,
+        memoryStoreSize: stats.memoryStoreSize,
+        oldestEntry: stats.oldestEntry,
+        newestEntry: stats.newestEntry
+      });
+    } catch (error) {
+      log('⚠️  Idempotency service initialization failed, will auto-initialize with memory store:', error instanceof Error ? error.message : String(error));
     }
 
     // STARTUP FIX: Start server AFTER session is ready
