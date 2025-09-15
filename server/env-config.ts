@@ -103,6 +103,37 @@ export const ENV_CONFIG = {
   },
   
   // Security-safe configuration logging
+  getValidatedAllowedOrigins(): string[] {
+    const frontendUrl = this.getValidatedFrontendUrl();
+    if (!frontendUrl) {
+      return [];
+    }
+    
+    // Extract base domain from FRONTEND_URL
+    try {
+      const url = new URL(frontendUrl);
+      const hostname = url.hostname;
+      
+      // For www subdomain, return both apex and www
+      if (hostname.startsWith('www.')) {
+        const apexDomain = hostname.substring(4);
+        return [
+          `https://${apexDomain}`,
+          `https://${hostname}`
+        ];
+      }
+      
+      // For apex domain, return both apex and www
+      return [
+        `https://${hostname}`,
+        `https://www.${hostname}`
+      ];
+    } catch (error) {
+      console.warn('⚠️  SECURITY: Failed to parse FRONTEND_URL for CORS origins:', error);
+      return [];
+    }
+  },
+
   logConfiguration(): void {
     const isProduction = detectedEnv === 'production';
     

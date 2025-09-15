@@ -301,16 +301,13 @@ export async function initializeQueue(): Promise<void> {
   } catch (error) {
     console.error('❌ QUEUE: Failed to initialize Redis BullMQ - queue system requires Redis:', error);
     
-    // EMERGENCY FALLBACK: Allow development testing without Redis while preserving production requirements
-    if (process.env.NODE_ENV === 'development' && !process.env.FORCE_REDIS_REQUIRED) {
-      console.log('⚠️  DEV MODE: Queue system disabled - Redis connection failed but allowing development testing');
-      console.log('   This is NOT suitable for production - Redis is required for production deployment');
-      console.log('   Tasks will be processed synchronously without queue system');
-      return; // Allow development to continue without queue system
-    }
+    // 🚨 PRODUCTION ENFORCEMENT: No development fallbacks allowed - Redis mandatory for ALL environments
+    console.error('🚨 CRITICAL ERROR: Redis queue system is mandatory for production deployment');
+    console.error('   NO FALLBACKS: Development fallbacks are disabled for production security');
+    console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
     
-    // Production: Redis is still mandatory
-    throw new Error(`Queue system initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // FAIL FAST: No memory queue fallback allowed in any environment
+    throw new Error(`Queue system initialization failed - Redis connectivity required: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

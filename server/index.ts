@@ -24,7 +24,10 @@ import {
   getSecureCookieConfig,
   generateCSPHeader,
   generatePermissionsPolicyHeader,
-  generateSecureSessionToken
+  generateSecureSessionToken,
+  validateStripeKeysForProduction,
+  createCSRFProtectionMiddleware,
+  generateCSRFToken
 } from "./security";
 import { 
   createRedisSessionStore,
@@ -205,7 +208,7 @@ export function getRedis(): Redis | null {
   return redisInstance;
 }
 
-export async function initializeRedis(): Promise<Redis> {
+export async function initializeRedis(): Promise<Redis | null> {
   const redisUrl = process.env.REDIS_URL;
   
   // PRODUCTION REQUIREMENT: Redis is mandatory for Railway deployment
@@ -701,6 +704,49 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
+// CSRF token endpoint for authenticated forms
+app.get('/api/csrf-token', (req: Request, res: Response) => {
+  try {
+    // Generate new CSRF token for this session
+    const csrfToken = generateCSRFToken();
+    
+    // Store token in session for validation
+    if (req.session) {
+      req.session.csrfToken = csrfToken;
+    } else {
+      logger.warn('⚠️ CSRF: Session not available for CSRF token storage', {
+        path: req.path,
+        sessionId: req.sessionID
+      });
+      return res.status(503).json({
+        error: 'Session required for CSRF protection',
+        code: 'SESSION_REQUIRED'
+      });
+    }
+    
+    logger.debug('🔐 CSRF: Token generated and stored in session', {
+      sessionId: req.sessionID,
+      tokenPrefix: csrfToken.substring(0, 8) + '***'
+    });
+    
+    res.json({
+      csrfToken,
+      timestamp: new Date().toISOString(),
+      sessionId: req.sessionID
+    });
+  } catch (error) {
+    logger.error('❌ CSRF: Token generation failed', {
+      error: error instanceof Error ? error.message : 'unknown',
+      sessionId: req.sessionID
+    });
+    
+    res.status(500).json({
+      error: 'Failed to generate CSRF token',
+      code: 'CSRF_GENERATION_ERROR'
+    });
+  }
+});
+
 (async () => {
   try {
     // SECURITY FIX: Validate critical security configuration at startup
@@ -713,6 +759,37 @@ app.get('/api/health', (req: Request, res: Response) => {
     validateSecurityHeaders();
     validateProductionSecurity();
     log('✅ Enhanced security configuration validated');
+    
+    // STRIPE LIVE KEY VALIDATION: Enforce production-only live keys
+    log('🔐 Validating Stripe keys for production deployment...');
+    const stripeValidation = validateStripeKeysForProduction();
+    if (!stripeValidation.success) {
+      logger.error('❌ STRIPE: Production key validation failed', {
+        errors: stripeValidation.errors,
+        action: 'Application startup aborted'
+      });
+      console.error('🚨 CRITICAL ERROR: Stripe production key validation failed');
+      stripeValidation.errors.forEach(error => console.error(`   ${error}`));
+      console.error('   REQUIRED: Configure live Stripe keys (sk_live_/pk_live_) for production deployment');
+      process.exit(1); // FAIL FAST: Invalid Stripe keys not allowed in production
+    }
+    logger.info('✅ STRIPE: Production key validation successful - live keys confirmed');
+    
+    // CORS RUNTIME CONFIRMATION: Log exact allowed origins for production verification
+    const allowedOrigins = ENV_CONFIG.getValidatedAllowedOrigins();
+    logger.info('🔒 CORS: Production domains explicitly confirmed', {
+      allowedOrigins: allowedOrigins,
+      count: allowedOrigins.length,
+      policy: 'strict_origin_enforcement'
+    });
+    console.log('🔒 SECURITY: CORS locked to production domains:', allowedOrigins.join(', '));
+    
+    // CSRF PROTECTION: Enable CSRF middleware for authenticated routes
+    log('🔐 Enabling CSRF protection for authenticated routes...');
+    const csrfMiddleware = createCSRFProtectionMiddleware();
+    app.use(csrfMiddleware);
+    logger.info('✅ CSRF: Protection enabled for authenticated routes (excludes Stripe webhooks)');
+    console.log('🛡️ SECURITY: CSRF protection active - Stripe webhooks exempted');
 
     // CRITICAL FIX: Initialize session management SYNCHRONOUSLY before routes
     log('🔐 Initializing session management (synchronous)...');
@@ -720,25 +797,42 @@ app.get('/api/health', (req: Request, res: Response) => {
       await initializeSession();
       log('✅ Session management initialized');
     } catch (error) {
-      log('⚠️  Session management initialization failed, continuing with memory store:', error instanceof Error ? error.message : String(error));
+      logger.error('❌ PRODUCTION STARTUP FAILED: Redis session store required', {
+        error: error instanceof Error ? error.message : String(error),
+        context: 'Session initialization failed - production deployment requires Redis connectivity',
+        action: 'Application startup aborted'
+      });
+      console.error('🚨 CRITICAL ERROR: Redis session store is mandatory for production deployment');
+      console.error('   NO FALLBACKS: Memory store fallbacks are disabled for production security');
+      console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
+      process.exit(1); // FAIL FAST: No memory store fallback allowed
     }
 
     // CRITICAL: Initialize idempotency service for webhook duplicate prevention
     log('🔄 Initializing webhook idempotency service...');
     try {
-      // Get Redis instance - may be null if Redis not available (Replit deployment)
-      const redis = redisInstance; // Use the module-level redisInstance variable
+      // Get Redis instance - MUST be available for production
+      const redis = redisInstance;
+      if (!redis) {
+        throw new Error('Redis connection is required but not available - idempotency service cannot initialize');
+      }
       const idempotencyService = initializeIdempotencyService(redis);
       const stats = idempotencyService.getStats();
       
-      log('✅ Idempotency service initialized successfully', {
+      logger.info('✅ IDEMPOTENCY: Service initialized successfully (Redis-only)', {
         hasRedis: stats.hasRedis,
-        memoryStoreSize: stats.memoryStoreSize,
-        oldestEntry: stats.oldestEntry,
-        newestEntry: stats.newestEntry
+        redisConnected: stats.redisConnected
       });
     } catch (error) {
-      log('⚠️  Idempotency service initialization failed, will auto-initialize with memory store:', error instanceof Error ? error.message : String(error));
+      logger.error('❌ PRODUCTION STARTUP FAILED: Redis idempotency service required', {
+        error: error instanceof Error ? error.message : String(error),
+        context: 'Idempotency service initialization failed - production deployment requires Redis connectivity',
+        action: 'Application startup aborted'
+      });
+      console.error('🚨 CRITICAL ERROR: Redis idempotency service is mandatory for production deployment');
+      console.error('   NO FALLBACKS: Memory store fallbacks are disabled for production security');
+      console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
+      process.exit(1); // FAIL FAST: No memory store fallback allowed
     }
 
     // STARTUP FIX: Start server AFTER session is ready
@@ -758,9 +852,17 @@ app.get('/api/health', (req: Request, res: Response) => {
     // Now initialize Redis components asynchronously without blocking startup
     log('🚀 Initializing task queue system (non-blocking)...');
     initializeQueue().then(() => {
-      log('✅ Task queue system initialized');
+      logger.info('✅ QUEUE: Task queue system initialized (Redis-only)');
     }).catch((error) => {
-      log('⚠️  Task queue initialization failed, continuing with in-memory fallback:', error.message);
+      logger.error('❌ PRODUCTION STARTUP FAILED: Redis queue system required', {
+        error: error.message,
+        context: 'Queue system initialization failed - production deployment requires Redis connectivity',
+        action: 'Application startup aborted'
+      });
+      console.error('🚨 CRITICAL ERROR: Redis queue system is mandatory for production deployment');
+      console.error('   NO FALLBACKS: Memory queue fallbacks are disabled for production security');
+      console.error('   REQUIRED: Ensure Redis is configured and accessible via REDIS_URL');
+      process.exit(1); // FAIL FAST: No memory queue fallback allowed
     });
 
 

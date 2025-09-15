@@ -1,0 +1,111 @@
+Context:
+We are moving fully to production on our primary domain: www.onedollaragent.ai.
+Replit is preview/testing only — no production traffic should rely on it.
+
+The application must be production-grade, cash-ready, and persistent.
+All memory-only fallbacks must be removed; Redis will be the only persistence layer.
+Stripe live payments must work flawlessly and all CORS/security must be locked to production domains.
+
+Production Goals:
+
+Primary domain: www.onedollaragent.ai
+
+Cash-ready: Stripe live $1 payments operational
+
+Persistence: Redis-backed sessions, rate limiting, webhook idempotency
+
+Security: strict CORS, HTTPS enforced, no memory fallbacks
+
+Preview/testing: Replit only — do not use in production
+
+Build Mode Tasks:
+
+Redis Enforcement (Critical)
+
+Remove all MemoryStore fallbacks for sessions, rate limiting, and Stripe idempotency.
+
+Fail startup if Redis is unavailable.
+
+Confirm Redis addon works: redis.railway.internal for Railway deployment.
+
+CORS Production Hardening (High)
+
+Lock CORS strictly to:
+
+https://onedollaragent.ai
+
+https://www.onedollaragent.ai
+
+Remove all Replit/preview URLs from allowed origins.
+
+Stripe Production Setup (Critical)
+
+Configure live Stripe keys: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PUBLISHABLE_KEY.
+
+Ensure checkout flow works end-to-end: success/cancel redirects to www.onedollaragent.ai.
+
+Verify webhook endpoint: /api/stripe/webhook.
+
+Live payments must be fully functional and tested.
+
+Railway Production Deployment (Infrastructure)
+
+Connect Railway project to www.onedollaragent.ai.
+
+Integrate Redis addon and remove all memory fallbacks.
+
+Set environment variables:
+
+NODE_ENV=production
+FRONTEND_URL=https://www.onedollaragent.ai
+ALLOWED_ORIGINS=https://onedollaragent.ai,https://www.onedollaragent.ai
+STRIPE_SECRET_KEY=sk_live_XXXXXXXXXXXXX
+STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXXXXXXX
+SESSION_SECRET=superlongrandomsecuresecret
+REDIS_URL=redis://redis.railway.internal:6379
+
+
+Prepare Railway deployment for production traffic with monitoring/logging.
+
+Final Environment Lockdown (Security)
+
+Enforce HTTPS.
+
+Lock CORS to production domains only.
+
+Redis-only persistence.
+
+Ensure startup fails if Redis or critical configs are missing — intentional for production safety.
+
+Verification & Launch:
+
+Test multiple live payments → success/cancel redirects to www.onedollaragent.ai.
+
+Test session persistence across restarts.
+
+Confirm Redis integration and stability.
+
+Confirm Stripe webhook validation.
+
+Ensure logs are clean and application is stable.
+
+Business Alignment Notes:
+
+Focus entirely on www.onedollaragent.ai
+.
+
+Replit = testing only, no production reliance.
+
+Cash-ready, persistent, and secure is the top priority.
+
+Production system must enforce startup failures if Redis or critical configs are missing.
+
+Expected Outcome:
+
+Production-ready, live Stripe payments.
+
+Redis-backed persistent sessions.
+
+Strict CORS and HTTPS security.
+
+Fully cash-ready, scalable, and reliable on Railway.

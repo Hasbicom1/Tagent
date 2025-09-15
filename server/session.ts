@@ -657,7 +657,7 @@ export class SessionSecurityStore {
 }
 
 /**
- * Session security middleware factory
+ * Session security middleware factory (Redis-only production enforcement)
  */
 export function createSessionSecurityMiddleware(sessionStore: any) {
   const isMemoryStore = sessionStore?.constructor?.name === "MemoryStore";
@@ -669,13 +669,22 @@ export function createSessionSecurityMiddleware(sessionStore: any) {
       return next();
     }
 
-    // 🛠 In dev/staging: skip validation if MemoryStore
-    if (!isProduction && isMemoryStore) {
-      console.log("🔄 SECURITY: Skipping session validation (MemoryStore in dev/staging)");
-      return next();
+    // 🚨 PRODUCTION ENFORCEMENT: No memory store allowed in any environment for production deployment
+    if (isMemoryStore) {
+      const errorMessage = 'PRODUCTION SECURITY VIOLATION: Memory store detected - Redis session store required';
+      console.error(`❌ ${errorMessage}`);
+      logSecurityEvent('memory_store_violation', { 
+        environment: process.env.NODE_ENV,
+        sessionStore: sessionStore?.constructor?.name,
+        action: 'session_middleware_rejected'
+      });
+      return res.status(503).json({ 
+        error: 'Service temporarily unavailable - session store configuration required',
+        code: 'REDIS_SESSION_REQUIRED'
+      });
     }
 
-    // 🔒 Production: enforce strict session validation
+    // 🔒 Strict session validation for Redis-backed sessions
     try {
       if (sessionStore && typeof sessionStore.validateSessionIP === 'function') {
         sessionStore.validateSessionIP(req);
@@ -683,7 +692,8 @@ export function createSessionSecurityMiddleware(sessionStore: any) {
       next();
     } catch (err: any) {
       console.error("❌ Session security validation failed:", err.message);
-      return res.status(401).json({ error: "session_not_found" });
+      logSecurityEvent('session_validation_failed', { error: err.message, path: req.path });
+      return res.status(401).json({ error: "session_security_validation_failed" });
     }
   };
 }

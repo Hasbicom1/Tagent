@@ -4,6 +4,14 @@ import validator from 'validator';
 import { Request, Response, NextFunction } from 'express';
 import { Redis } from 'ioredis';
 
+// Express session module augmentation for CSRF support
+declare module 'express-session' {
+  interface SessionData {
+    csrfToken?: string;
+    csrfTokenExpiresAt?: number;
+  }
+}
+
 // Global type declaration for memory-based activation store
 declare global {
   var _sessionActivations: Set<string> | undefined;
@@ -1210,6 +1218,145 @@ export function validateCSRFToken(token: string, expectedToken: string): boolean
 }
 
 /**
+ * CSRF Protection Middleware for authenticated routes
+ * Excludes Stripe webhooks and public endpoints
+ */
+export function createCSRFProtectionMiddleware() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    // Skip CSRF validation for specific endpoints
+    const exemptPaths = [
+      '/api/stripe/webhook',  // Stripe webhooks use their own signature validation
+      '/api/csrf-token',      // CSRF token endpoint itself
+      '/health',              // Health check endpoints
+      '/api/health'           // API health endpoint
+    ];
+    
+    // Skip for GET requests (CSRF is for state-changing operations)
+    if (req.method === 'GET' || exemptPaths.includes(req.path)) {
+      return next();
+    }
+    
+    // Extract CSRF token from request
+    const csrfToken = req.body?.csrfToken || req.headers['x-csrf-token'];
+    const sessionToken = req.session?.csrfToken;
+    
+    if (!csrfToken) {
+      logSecurityEvent('csrf_token_missing', {
+        path: req.path,
+        method: req.method,
+        clientIP: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      return res.status(403).json({
+        error: 'CSRF_TOKEN_REQUIRED',
+        message: 'CSRF token is required for this operation',
+        code: 'MISSING_CSRF_TOKEN'
+      });
+    }
+    
+    if (!sessionToken) {
+      logSecurityEvent('csrf_session_invalid', {
+        path: req.path,
+        method: req.method,
+        clientIP: req.ip
+      });
+      return res.status(403).json({
+        error: 'CSRF_SESSION_INVALID',
+        message: 'Invalid session - CSRF token cannot be validated',
+        code: 'INVALID_CSRF_SESSION'
+      });
+    }
+    
+    if (!validateCSRFToken(csrfToken, sessionToken)) {
+      logSecurityEvent('csrf_token_invalid', {
+        path: req.path,
+        method: req.method,
+        clientIP: req.ip,
+        providedToken: csrfToken.substring(0, 8) + '***',
+        expectedToken: sessionToken.substring(0, 8) + '***'
+      });
+      return res.status(403).json({
+        error: 'CSRF_TOKEN_INVALID',
+        message: 'Invalid CSRF token',
+        code: 'INVALID_CSRF_TOKEN'
+      });
+    }
+    
+    // CSRF validation passed
+    next();
+  };
+}
+
+/**
+ * Validate Stripe keys for production deployment
+ * Ensures only live keys are used in production environment
+ */
+export function validateStripeKeysForProduction(): { success: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (!secretKey || !publishableKey) {
+    errors.push('Missing required Stripe keys (STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY)');
+    return { success: false, errors };
+  }
+  
+  if (isProduction) {
+    // PRODUCTION ENFORCEMENT: Only live keys allowed
+    if (secretKey.startsWith('sk_test_')) {
+      errors.push('PRODUCTION VIOLATION: Test secret key detected - live key required (sk_live_)');
+    } else if (secretKey.startsWith('sk_live_')) {
+      console.log('✅ STRIPE: Live secret key confirmed for production deployment');
+      console.log('🔐 STRIPE: Production payment processing enabled with live key');
+    } else {
+      errors.push('INVALID Stripe secret key format - must start with sk_live_ for production');
+    }
+    
+    if (publishableKey.startsWith('pk_test_')) {
+      errors.push('PRODUCTION VIOLATION: Test publishable key detected - live key required (pk_live_)');
+    } else if (publishableKey.startsWith('pk_live_')) {
+      console.log('✅ STRIPE: Live publishable key confirmed for production deployment');
+      console.log('🌐 STRIPE: Frontend payment forms will use live payment processing');
+    } else {
+      errors.push('INVALID Stripe publishable key format - must start with pk_live_ for production');
+    }
+    
+    if (!webhookSecret) {
+      errors.push('PRODUCTION REQUIREMENT: Stripe webhook secret required for live payments');
+    } else {
+      console.log('✅ STRIPE: Production webhook secret configured');
+      console.log('🔗 STRIPE: Webhook endpoint validation enabled');
+    }
+  } else {
+    // Development mode - allow test keys but log warnings for production prep
+    if (secretKey.startsWith('sk_test_')) {
+      warnings.push('DEV MODE: Using test secret key - switch to live key for production');
+    }
+    if (publishableKey.startsWith('pk_test_')) {
+      warnings.push('DEV MODE: Using test publishable key - switch to live key for production');
+    }
+  }
+  
+  // Log the validation results
+  if (errors.length > 0) {
+    console.error('❌ STRIPE: Production key validation failed:');
+    errors.forEach(error => console.error(`   ${error}`));
+    return { success: false, errors };
+  }
+  
+  if (warnings.length > 0) {
+    console.warn('⚠️ STRIPE: Development mode warnings:');
+    warnings.forEach(warning => console.warn(`   ${warning}`));
+  }
+  
+  return { success: true, errors: [] };
+}
+
+/**
  * Verify Stripe webhook signature for payment security
  */
 export function verifyStripeWebhook(payload: string, sigHeader: string, webhookSecret: string): boolean {
@@ -1332,7 +1479,8 @@ export interface SecurityEvent {
         'session_regenerated' | 'session_ip_change_blocked' | 'session_ip_change_limit_exceeded' | 'session_ip_changed' |
         'session_kicked_concurrent_limit' | 'session_destroyed' | 'redis_session_error' | 'ai_task_analysis_request' | 'ai_task_analysis_error' |
         'vnc_security_violation' | 'vnc_rate_limit_violation' | 'vnc_connection_established' | 'vnc_connection_failed' |
-        'vnc_connection_closed' | 'vnc_access_attempt' | 'vnc_access_denied' | 'vnc_token_generated' | 'vnc_token_error';
+        'vnc_connection_closed' | 'vnc_access_attempt' | 'vnc_access_denied' | 'vnc_token_generated' | 'vnc_token_error' |
+        'webhook_abuse' | 'memory_store_violation' | 'session_validation_failed' | 'csrf_token_missing' | 'csrf_session_invalid' | 'csrf_token_invalid';
   severity: 'low' | 'medium' | 'high' | 'critical';
   clientIP: string;
   userAgent?: string;
