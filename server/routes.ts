@@ -64,11 +64,64 @@ import {
   type BrowserAutomationPayload
 } from "./queue";
 
-// Dynamic base URL detection
+// Enhanced environment-aware base URL detection
 function getBaseUrl(req: Request): string {
-  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  // Environment override with production validation
+  if (process.env.FRONTEND_URL) {
+    try {
+      const configuredUrl = new URL(process.env.FRONTEND_URL);
+      
+      // Production security checks
+      if (process.env.NODE_ENV === 'production') {
+        // Require HTTPS in production
+        if (configuredUrl.protocol !== 'https:') {
+          throw new Error(`Production requires HTTPS. Got: ${configuredUrl.protocol}`);
+        }
+        
+        // Disallow localhost/127.0.0.1 in production
+        if (configuredUrl.hostname === 'localhost' || 
+            configuredUrl.hostname === '127.0.0.1' || 
+            configuredUrl.hostname.startsWith('192.168.') ||
+            configuredUrl.hostname.startsWith('10.')) {
+          throw new Error(`Production cannot use local/private IPs. Got: ${configuredUrl.hostname}`);
+        }
+      }
+      
+      return configuredUrl.origin;
+    } catch (error: any) {
+      throw new Error(`Invalid FRONTEND_URL configuration: ${error.message}`);
+    }
+  }
+
+  // Normalize protocol handling
+  let protocol = req.headers["x-forwarded-proto"];
+  if (Array.isArray(protocol)) {
+    protocol = protocol[0];
+  } else if (typeof protocol === 'string' && protocol.includes(',')) {
+    protocol = protocol.split(',')[0].trim();
+  }
+  if (!protocol) {
+    protocol = req.protocol;
+  }
+
+  // Ensure protocol is lowercase and enforce HTTPS in production
+  protocol = String(protocol).toLowerCase();
+  if (process.env.NODE_ENV === 'production' && protocol === 'http') {
+    protocol = 'https';
+  }
+
   const host = req.headers.host;
-  return `${protocol}://${host}`;
+  
+  if (!host) {
+    throw new Error('Host header is required for URL generation');
+  }
+
+  const baseUrl = `${protocol}://${host}`;
+  
+  // Log the generated URL for debugging
+  console.log(`🔗 Generated base URL: ${baseUrl} (protocol: ${protocol}, host: ${host})`);
+  
+  return baseUrl;
 }
 
 // ✅ STRIPE CONFIGURATION: Always require Stripe keys when available

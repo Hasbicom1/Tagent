@@ -1,0 +1,96 @@
+Context / Problem:
+We have a Stripe Checkout integration on Replit. The dynamic URL solution for success_url and cancel_url has been implemented. However:
+
+In the Replit preview, Stripe UI works, but the redirects fail.
+
+On the deployed public URL (https://onedollara.replit.app/payment), we see PAYMENT_GATEWAY_ERROR.
+
+We want to understand why and fix it so that Stripe live payments work correctly on both Replit public URL and custom domain.
+
+Key Observations / Explanations
+
+Preview vs Public URL
+
+Replit “Preview” opens an internal URL (iframe) for dev testing. Stripe Checkout cannot redirect properly to these internal URLs.
+
+Rule: Stripe live payments must be tested on the public deployed URL, not preview.
+
+Common Causes of PAYMENT_GATEWAY_ERROR
+
+App is not awake (Replit apps can sleep). Stripe cannot reach the server for redirects/webhooks.
+
+CORS / HTTP vs HTTPS mismatch. All URLs must be HTTPS.
+
+Stripe webhook endpoint not reachable. Ensure webhook in Stripe dashboard points to your public URL.
+
+Using wrong Stripe keys (mixing live and test keys).
+
+Step-by-Step Fix / Recommendations
+
+Always test using deployed public URL
+
+https://onedollara.replit.app/payment
+
+
+Do not test live payments in Replit preview.
+
+Confirm Stripe keys
+
+Server: sk_live_...
+
+Frontend: pk_live_...
+
+Set Stripe webhook
+
+https://onedollara.replit.app/webhook
+
+
+Ensure app is running / awake when Stripe calls webhook.
+
+Keep Replit app awake
+
+Open in a tab or use “Always On” feature (Hacker plan).
+
+Test full flow
+
+Pay → Stripe Checkout → Redirects to success_url
+
+Cancel → Redirects to cancel_url
+
+Extra Recommendation
+
+Implement an “environment-aware” getBaseUrl() function that:
+
+Detects if running on localhost, Replit, or custom domain.
+
+Automatically builds success_url and cancel_url with HTTPS.
+
+Prevents any localhost or preview iframe issues.
+
+Example Logic for AI Dev:
+
+function getBaseUrl(req) {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.headers.host;
+  return `${protocol}://${host}`;
+}
+
+
+Use this for Stripe Checkout session creation:
+
+success_url: `${getBaseUrl(req)}/success?session_id={CHECKOUT_SESSION_ID}`,
+cancel_url: `${getBaseUrl(req)}/cancel`
+
+Goal
+
+Make Stripe live payments fully functional on:
+
+Local development (localhost)
+
+Replit deployed URL (https://onedollara.replit.app)
+
+Custom domain (https://www.onedollaragent.ai)
+
+Ensure users are redirected to the correct success or cancel page.
+
+Avoid PAYMENT_GATEWAY_ERROR and localhost redirects.
