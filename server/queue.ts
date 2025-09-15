@@ -300,6 +300,16 @@ export async function initializeQueue(): Promise<void> {
     console.log('✅ QUEUE: Redis BullMQ with Worker initialized successfully');
   } catch (error) {
     console.error('❌ QUEUE: Failed to initialize Redis BullMQ - queue system requires Redis:', error);
+    
+    // EMERGENCY FALLBACK: Allow development testing without Redis while preserving production requirements
+    if (process.env.NODE_ENV === 'development' && !process.env.FORCE_REDIS_REQUIRED) {
+      console.log('⚠️  DEV MODE: Queue system disabled - Redis connection failed but allowing development testing');
+      console.log('   This is NOT suitable for production - Redis is required for production deployment');
+      console.log('   Tasks will be processed synchronously without queue system');
+      return; // Allow development to continue without queue system
+    }
+    
+    // Production: Redis is still mandatory
     throw new Error(`Queue system initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

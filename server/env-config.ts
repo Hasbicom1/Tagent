@@ -22,6 +22,12 @@ function detectProductionEnvironment(): string {
     frontendUrl.includes(domain)
   );
 
+  // TEMPORARY OVERRIDE: Allow development mode for Stripe configuration testing
+  if (process.env.FORCE_DEVELOPMENT_MODE === 'true') {
+    console.log('🔧 FORCE DEV MODE: Overriding environment detection for Stripe testing');
+    return 'development';
+  }
+
   // Auto-detect production for Replit deployments
   if (isReplitDeployment) {
     console.log('🚀 AUTO-DETECTED: Production environment for Replit deployment');

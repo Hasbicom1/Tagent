@@ -261,6 +261,14 @@ export async function initializeRedis(): Promise<Redis> {
       redisInstance = null;
     }
     
+    // EMERGENCY FALLBACK: Allow development testing without Redis while preserving production requirements  
+    if (process.env.NODE_ENV === 'development' && !process.env.FORCE_REDIS_REQUIRED) {
+      console.log('⚠️  DEV MODE: Redis disabled - Redis connection failed but allowing development testing');
+      console.log('   This is NOT suitable for production - Redis is required for production deployment');
+      console.log('   Session management will use memory store (data will be lost on restart)');
+      return null; // Allow development to continue without Redis
+    }
+    
     // FAIL FAST: No memory fallback allowed in production
     throw new Error(`Redis connection required for production deployment: ${error.message}`);
   }
