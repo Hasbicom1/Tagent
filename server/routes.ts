@@ -64,13 +64,15 @@ import {
   type BrowserAutomationPayload
 } from "./queue";
 
-// ✅ DEVELOPMENT MODE: Make API keys optional for real browser automation testing
+// ✅ STRIPE CONFIGURATION: Always require Stripe keys when available
 if (!process.env.STRIPE_SECRET_KEY) {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('LIBERATION_GATEWAY_CONFIG_ERROR: Missing Stripe secret key');
   } else {
     console.log('⚠️ DEV MODE: STRIPE_SECRET_KEY not set - payment features disabled');
   }
+} else {
+  console.log('✅ STRIPE: Payment gateway initialized successfully');
 }
 
 if (!process.env.OPENAI_API_KEY) {
