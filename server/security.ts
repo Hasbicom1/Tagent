@@ -468,11 +468,43 @@ export class MultiLayerRateLimiter {
   }
 }
 
+// PRODUCTION SECURITY: Locked-down CORS for Railway deployment
+const getProductionAllowedOrigins = (): string[] => {
+  // SECURITY: Production CORS locked to custom domain only - NO Replit URLs
+  const productionOrigins = [
+    'https://onedollaragent.ai',
+    'https://www.onedollaragent.ai'
+  ];
+  
+  console.log('🔒 SECURITY: Production CORS locked to domains:', productionOrigins.join(', '));
+  return productionOrigins;
+};
+
+const getDevelopmentAllowedOrigins = (): string[] => {
+  // Development: Allow localhost and Replit URLs for testing
+  const devOrigins = [
+    'http://localhost:5000', 
+    'http://127.0.0.1:5000', 
+    'https://localhost:5000', 
+    'http://localhost:3000', 
+    'https://localhost:3000'
+  ];
+  
+  // Include environment-specific origins for development
+  if (process.env.ALLOWED_ORIGINS) {
+    const envOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+    devOrigins.push(...envOrigins);
+  }
+  
+  console.log('🔧 DEVELOPMENT: CORS origins:', devOrigins.join(', '));
+  return devOrigins;
+};
+
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   maxInputLength: 5000,
   allowedOrigins: process.env.NODE_ENV === 'production' 
-    ? (process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [])
-    : ['http://localhost:5000', 'http://127.0.0.1:5000', 'https://localhost:5000', 'http://localhost:3000', 'https://localhost:3000'],
+    ? getProductionAllowedOrigins()
+    : getDevelopmentAllowedOrigins(),
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-replace-in-production',
   sessionTimeout: 24 * 60 * 60 * 1000, // 24 hours
   rateLimitWindow: 15 * 60 * 1000, // 15 minutes
@@ -702,28 +734,39 @@ export function validateWebSocketOrigin(origin: string | undefined): boolean {
     return true;
   }
   
-  // For development, allow localhost variants and Replit preview domains
+  // SECURITY CHANGE: Only allow localhost in development mode - NO Replit patterns in production
   if (process.env.NODE_ENV === 'development') {
     const localhostPattern = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/;
     if (localhostPattern.test(origin)) {
+      console.log('🔧 DEVELOPMENT: Allowing localhost origin:', origin);
       return true;
     }
     
-    // Enhanced Replit domain pattern - more flexible for various UUID formats
+    // Enhanced Replit domain pattern - ONLY allowed in development
     const replitPattern = /^https?:\/\/[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-[a-f0-9]+-.+\.replit\.(?:dev|app)$/;
     if (replitPattern.test(origin)) {
+      console.log('🔧 DEVELOPMENT: Allowing Replit UUID origin:', origin);
       return true;
     }
     
     // Allow any subdomain of replit.dev for development flexibility
     const replitWildcardPattern = /^https?:\/\/.+\.replit\.dev$/;
     if (replitWildcardPattern.test(origin)) {
+      console.log('🔧 DEVELOPMENT: Allowing Replit dev origin:', origin);
+      return true;
+    }
+    
+    // Allow standard replit.app domains for development
+    const replitAppPattern = /^https?:\/\/[\w-]+\.replit\.app$/;
+    if (replitAppPattern.test(origin)) {
+      console.log('🔧 DEVELOPMENT: Allowing Replit app origin:', origin);
       return true;
     }
     
     // Allow Replit workspace URLs (for legacy domains)
     const replitLegacyPattern = /^https?:\/\/[\w-]+\.[\w-]+\.repl\.(?:co|run)$/;
     if (replitLegacyPattern.test(origin)) {
+      console.log('🔧 DEVELOPMENT: Allowing Replit legacy origin:', origin);
       return true;
     }
   }
@@ -848,16 +891,21 @@ export function validateSecurityConfiguration(): void {
       throw new Error('🚨 SECURITY: JWT_SECRET environment variable must be set to a secure value in production');
     }
     
-    // CRITICAL: Allowed Origins validation - MUST be explicitly set in production
-    if (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS.trim() === '') {
-      throw new Error('🚨 SECURITY: ALLOWED_ORIGINS environment variable must be explicitly set in production. No default origins are allowed for security reasons.');
+    // PRODUCTION SECURITY: Use hardcoded production origins - NO environment variable dependency
+    const productionOrigins = getProductionAllowedOrigins();
+    
+    // Validate production origins are properly set
+    if (productionOrigins.length === 0) {
+      throw new Error('🚨 SECURITY: No production origins configured - this should never happen');
     }
     
-    // Validate allowed origins format
-    const origins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
-    for (const origin of origins) {
-      if (!origin.match(/^https?:\/\/[a-zA-Z0-9.-]+(?::\d+)?$/)) {
-        throw new Error(`🚨 SECURITY: Invalid origin format in ALLOWED_ORIGINS: ${origin}`);
+    // Validate all production origins are HTTPS
+    for (const origin of productionOrigins) {
+      if (!origin.startsWith('https://')) {
+        throw new Error(`🚨 SECURITY: Production origin must use HTTPS: ${origin}`);
+      }
+      if (origin.includes('replit.')) {
+        throw new Error(`🚨 SECURITY: Production origins cannot include Replit domains: ${origin}`);
       }
     }
     
@@ -867,7 +915,7 @@ export function validateSecurityConfiguration(): void {
     }
     
     console.log(`✅ SECURITY: Production configuration validated successfully`);
-    console.log(`✅ SECURITY: Allowed origins: ${origins.join(', ')}`);
+    console.log(`✅ SECURITY: Allowed origins: ${productionOrigins.join(', ')}`);
     console.log(`✅ SECURITY: JWT secret configured: YES`);
     console.log(`✅ SECURITY: OpenAI API key configured: YES`);
   } else {

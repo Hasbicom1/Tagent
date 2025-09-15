@@ -188,9 +188,6 @@ export class IdempotencyService {
     return {
       hasRedis: true,
       redisConnected: this.redis.status === 'ready'
-      hasRedis: !!this.redis,
-      oldestEntry: oldestTimestamp !== Infinity ? new Date(oldestTimestamp).toISOString() : undefined,
-      newestEntry: newestTimestamp > 0 ? new Date(newestTimestamp).toISOString() : undefined
     };
   }
 

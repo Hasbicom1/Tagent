@@ -294,6 +294,7 @@ async function initializeRedisSession(): Promise<any> {
         console.error('❌ SECURITY: Failed to create session security store - Redis required');
         throw new Error(`Session store creation failed: ${storeError instanceof Error ? storeError.message : 'unknown error'}`);
       }
+    }
   } catch (error) {
     console.error('❌ SECURITY: Session initialization failed - Redis connectivity required:', error instanceof Error ? error.message : 'unknown error');
     throw error; // Propagate error instead of fallback

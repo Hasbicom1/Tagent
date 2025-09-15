@@ -373,7 +373,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch {
         redisHealthy = false;
       }
-      }
 
       // Check if queue system is healthy
       const queueHealthy = true; // Assuming queue is healthy if no errors
