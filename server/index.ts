@@ -141,8 +141,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Security headers for development vs production
   if (process.env.NODE_ENV === 'production') {
-    // Force HTTPS in production
-    if (req.header('x-forwarded-proto') !== 'https' && process.env.FORCE_HTTPS !== 'false') {
+    // CRITICAL FIX: Exempt Stripe webhook from HTTPS redirect
+    // Webhooks must accept HTTP requests and return 2xx responses, not redirects
+    const isWebhookEndpoint = req.path === '/api/stripe/webhook';
+    
+    // Force HTTPS in production (except for Stripe webhooks)
+    if (!isWebhookEndpoint && req.header('x-forwarded-proto') !== 'https' && process.env.FORCE_HTTPS !== 'false') {
       return res.redirect(301, `https://${req.header('host')}${req.url}`);
     }
     
@@ -337,10 +341,32 @@ async function initializeSession() {
 app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.get('stripe-signature');
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const requestId = (req as any).requestId || 'unknown';
+
+  // Enhanced logging for webhook requests
+  logger.info('🔔 WEBHOOK: Stripe webhook request received', {
+    requestId,
+    clientIP,
+    hasSignature: !!sig,
+    hasSecret: !!webhookSecret,
+    bodySize: req.body?.length || 0
+  });
 
   if (!webhookSecret) {
-    console.error('Missing STRIPE_WEBHOOK_SECRET');
-    return res.status(500).json({ error: 'Webhook secret not configured' });
+    logger.error('❌ WEBHOOK: Missing STRIPE_WEBHOOK_SECRET configuration', { requestId });
+    return res.status(500).json({ 
+      error: 'Webhook secret not configured',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  if (!sig) {
+    logger.error('❌ WEBHOOK: Missing Stripe signature header', { requestId, clientIP });
+    return res.status(400).json({ 
+      error: 'Missing stripe-signature header',
+      timestamp: new Date().toISOString()
+    });
   }
 
   try {
@@ -350,31 +376,194 @@ app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req,
     
     // Handle missing Stripe in development
     if (!stripe) {
-      console.log('⚠️ DEV MODE: Stripe webhook received but Stripe not initialized');
-      return res.status(501).json({ error: 'Payments disabled in development mode' });
+      logger.warn('⚠️ WEBHOOK: Stripe not initialized - development mode', { requestId });
+      return res.status(501).json({ 
+        error: 'Payments disabled in development mode',
+        timestamp: new Date().toISOString()
+      });
     }
     
     // Use Stripe's constructEvent for proper signature verification
-    const event = stripe.webhooks.constructEvent(req.body, sig!, webhookSecret);
+    const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
 
-    // Handle the event
+    // Enhanced logging for verified webhook events
+    logger.info('✅ WEBHOOK: Signature verified successfully', {
+      requestId,
+      eventId: event.id,
+      eventType: event.type,
+      created: new Date(event.created * 1000).toISOString(),
+      livemode: event.livemode
+    });
+
+    // Comprehensive event handling with detailed logging
+    let eventProcessed = false;
+    
     switch (event.type) {
-      case 'payment_intent.succeeded':
-        console.log(`💰 Payment succeeded: ${event.data.object.id}`);
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as any;
+        logger.info('💰 WEBHOOK: Payment succeeded', {
+          requestId,
+          eventId: event.id,
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          customerId: paymentIntent.customer,
+          metadata: paymentIntent.metadata
+        });
+        eventProcessed = true;
         break;
+      }
       
-      case 'payment_intent.payment_failed':
-        console.log(`💸 Payment failed: ${event.data.object.id}`);
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as any;
+        logger.error('💸 WEBHOOK: Payment failed', {
+          requestId,
+          eventId: event.id,
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          customerId: paymentIntent.customer,
+          lastPaymentError: paymentIntent.last_payment_error?.message,
+          metadata: paymentIntent.metadata
+        });
+        eventProcessed = true;
         break;
+      }
       
-      default:
-        console.log(`🔔 Unhandled event type: ${event.type}`);
+      case 'customer.subscription.created': {
+        const subscription = event.data.object as any;
+        logger.info('📋 WEBHOOK: Subscription created', {
+          requestId,
+          eventId: event.id,
+          subscriptionId: subscription.id,
+          customerId: subscription.customer,
+          status: subscription.status,
+          priceId: subscription.items?.data[0]?.price?.id,
+          metadata: subscription.metadata
+        });
+        eventProcessed = true;
+        break;
+      }
+      
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as any;
+        logger.info('📋 WEBHOOK: Subscription updated', {
+          requestId,
+          eventId: event.id,
+          subscriptionId: subscription.id,
+          customerId: subscription.customer,
+          status: subscription.status,
+          previousAttributes: event.data.previous_attributes
+        });
+        eventProcessed = true;
+        break;
+      }
+      
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as any;
+        logger.info('🧾 WEBHOOK: Invoice payment succeeded', {
+          requestId,
+          eventId: event.id,
+          invoiceId: invoice.id,
+          customerId: invoice.customer,
+          amount: invoice.amount_paid,
+          currency: invoice.currency,
+          subscriptionId: invoice.subscription
+        });
+        eventProcessed = true;
+        break;
+      }
+      
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as any;
+        logger.error('🧾 WEBHOOK: Invoice payment failed', {
+          requestId,
+          eventId: event.id,
+          invoiceId: invoice.id,
+          customerId: invoice.customer,
+          amount: invoice.amount_due,
+          currency: invoice.currency,
+          subscriptionId: invoice.subscription,
+          attemptCount: invoice.attempt_count
+        });
+        eventProcessed = true;
+        break;
+      }
+      
+      case 'checkout.session.completed': {
+        const session = event.data.object as any;
+        logger.info('🛒 WEBHOOK: Checkout session completed', {
+          requestId,
+          eventId: event.id,
+          sessionId: session.id,
+          customerId: session.customer,
+          paymentIntentId: session.payment_intent,
+          amount: session.amount_total,
+          currency: session.currency,
+          metadata: session.metadata
+        });
+        eventProcessed = true;
+        break;
+      }
+      
+      default: {
+        logger.warn('🔔 WEBHOOK: Unhandled event type received', {
+          requestId,
+          eventId: event.id,
+          eventType: event.type,
+          created: new Date(event.created * 1000).toISOString(),
+          livemode: event.livemode
+        });
+        eventProcessed = false;
+      }
     }
 
-    res.json({ received: true });
+    // Final success logging
+    logger.info('✅ WEBHOOK: Event processing completed', {
+      requestId,
+      eventId: event.id,
+      eventType: event.type,
+      processed: eventProcessed,
+      responseTime: Date.now()
+    });
+
+    res.status(200).json({ 
+      received: true,
+      eventId: event.id,
+      eventType: event.type,
+      processed: eventProcessed,
+      timestamp: new Date().toISOString()
+    });
+
   } catch (error: any) {
-    console.error('Webhook signature verification failed:', error.message);
-    res.status(400).json({ error: 'Webhook error' });
+    // Enhanced error logging with security event tracking
+    logger.error('❌ WEBHOOK: Signature verification or processing failed', {
+      requestId,
+      clientIP,
+      error: error.message,
+      errorType: error.constructor.name,
+      hasSignature: !!sig,
+      bodySize: req.body?.length || 0
+    });
+
+    // Log potential security event for repeated webhook failures
+    if (error.message.includes('signature') || error.message.includes('verification')) {
+      const { logSecurityEvent } = require('./security');
+      logSecurityEvent('webhook_abuse', {
+        endpoint: '/api/stripe/webhook',
+        error: 'signature_verification_failed',
+        details: error.message,
+        clientIP,
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.status(400).json({ 
+      error: 'Webhook processing failed',
+      requestId,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
