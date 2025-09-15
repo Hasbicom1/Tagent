@@ -1,0 +1,84 @@
+2025-09-15 04:31:59.84
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
+2025-09-15 04:31:59.84
+340afc94
+User
+at Timeout._onTimeout (/home/runner/workspace/node_modules/ioredis/built/Command.js:192:33)
+2025-09-15 04:31:59.84
+340afc94
+User
+at listOnTimeout (node:internal/timers:581:17)
+2025-09-15 04:31:59.84
+340afc94
+User
+at process.processTimers (node:internal/timers:519:7)
+2025-09-15 04:31:59.84
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
+2025-09-15 04:31:59.84
+340afc94
+User
+at Timeout._onTimeout (/home/runner/workspace/node_modules/ioredis/built/Command.js:192:33)
+2025-09-15 04:31:59.84
+340afc94
+User
+at listOnTimeout (node:internal/timers:581:17)
+2025-09-15 04:31:59.84
+340afc94
+User
+at process.processTimers (node:internal/timers:519:7)
+2025-09-15 04:32:01.94
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
+2025-09-15 04:32:01.94
+340afc94
+User
+at Timeout._onTimeout (/home/runner/workspace/node_modules/ioredis/built/Command.js:192:33)
+2025-09-15 04:32:01.94
+340afc94
+User
+at listOnTimeout (node:internal/timers:581:17)
+2025-09-15 04:32:01.94
+340afc94
+User
+at process.processTimers (node:internal/timers:519:7)
+2025-09-15 04:32:01.94
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
+2025-09-15 04:32:01.94
+340afc94
+User
+at Timeout._onTimeout (/home/runner/workspace/node_modules/ioredis/built/Command.js:192:33)
+2025-09-15 04:32:01.94
+340afc94
+User
+at listOnTimeout (node:internal/timers:581:17)
+2025-09-15 04:32:01.94
+340afc94
+User
+at process.processTimers (node:internal/timers:519:7)
+2025-09-15 04:32:04.04
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
+2025-09-15 04:32:04.04
+340afc94
+User
+at Timeout._onTimeout (/home/runner/workspace/node_modules/ioredis/built/Command.js:192:33)
+2025-09-15 04:32:04.04
+340afc94
+User
+at listOnTimeout (node:internal/timers:581:17)
+2025-09-15 04:32:04.04
+340afc94
+User
+at process.processTimers (node:internal/timers:519:7)
+2025-09-15 04:32:04.04
+340afc94
+User
+❌ WORKER: Worker error: Error: Command timed out
