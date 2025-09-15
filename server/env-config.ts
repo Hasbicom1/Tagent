@@ -15,17 +15,27 @@ function detectProductionEnvironment(): string {
     'onedollaragent.ai',
     'www.onedollaragent.ai', // Primary custom domain
     'onedollara.replit.app',
-    'replit.app' // Any .replit.app domain should be production
+    'replit.app', // Any .replit.app domain should be production
+    'railway.app', // Railway domains
+    'up.railway.app' // Railway deployment URLs
   ];
   
   const isProductionDomain = productionDomains.some(domain => 
     frontendUrl.includes(domain)
   );
 
-  // TEMPORARY OVERRIDE: Allow development mode for Stripe configuration testing
-  if (process.env.FORCE_DEVELOPMENT_MODE === 'true') {
-    console.log('🔧 FORCE DEV MODE: Overriding environment detection for Stripe testing');
-    return 'development';
+  // Check for Railway environment variables
+  const isRailwayDeployment = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN);
+  
+  // PRODUCTION READY: Removed FORCE_DEVELOPMENT_MODE override for Railway deployment
+
+  // Auto-detect production for Railway deployments
+  if (isRailwayDeployment) {
+    console.log('🚀 AUTO-DETECTED: Production environment for Railway deployment');
+    console.log(`   RAILWAY_ENVIRONMENT: ${process.env.RAILWAY_ENVIRONMENT || 'NOT_SET'}`);
+    console.log(`   RAILWAY_PUBLIC_DOMAIN: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'NOT_SET'}`);
+    console.log(`   FRONTEND_URL: ${frontendUrl || 'NOT_SET'}`);
+    return 'production';
   }
 
   // Auto-detect production for Replit deployments
