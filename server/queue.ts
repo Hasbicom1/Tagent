@@ -26,51 +26,64 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
     }, timeoutMs);
     
     let testRedis: Redis;
+    let isResolved = false;
+    
+    const cleanup = () => {
+      if (!isResolved) {
+        isResolved = true;
+        clearTimeout(timeout);
+        if (testRedis) {
+          // Remove all listeners to prevent memory leaks
+          testRedis.removeAllListeners();
+          testRedis.disconnect();
+        }
+      }
+    };
     
     try {
+      const redisConfig = {
+        lazyConnect: true,
+        maxRetriesPerRequest: 0, // Disable retries to fail fast
+        retryDelayOnFailover: 0, // Fail immediately on connection issues
+        connectTimeout: timeoutMs,
+        commandTimeout: timeoutMs,
+        enableOfflineQueue: false, // Don't queue commands when disconnected
+      };
+
       if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
-        testRedis = new Redis(redisUrl, {
-          lazyConnect: true,
-          maxRetriesPerRequest: 1,
-          connectTimeout: timeoutMs,
-          commandTimeout: timeoutMs,
-        });
-        
-        // Add error listener to prevent crashes
-        testRedis.on('error', (err) => {
-          console.warn('⚠️  QUEUE: Redis test error:', err.message);
-        });
+        testRedis = new Redis(redisUrl, redisConfig);
       } else {
         testRedis = new Redis({
           host: process.env.REDIS_HOST || 'localhost',
           port: parseInt(process.env.REDIS_PORT || '6379'),
           password: process.env.REDIS_PASSWORD,
           db: parseInt(process.env.REDIS_DB || '0'),
-          lazyConnect: true,
-          maxRetriesPerRequest: 1,
-          connectTimeout: timeoutMs,
-          commandTimeout: timeoutMs,
-        });
-        
-        // Add error listener to prevent crashes
-        testRedis.on('error', (err) => {
-          console.warn('⚠️  QUEUE: Redis test error:', err.message);
+          ...redisConfig,
         });
       }
       
+      // Add comprehensive error handling to prevent unhandled errors
+      testRedis.on('error', () => {
+        cleanup();
+        resolve(false);
+      });
+      
+      testRedis.on('close', () => {
+        cleanup();
+        resolve(false);
+      });
+      
       testRedis.ping()
         .then(() => {
-          clearTimeout(timeout);
-          testRedis.disconnect();
+          cleanup();
           resolve(true);
         })
         .catch(() => {
-          clearTimeout(timeout);
-          testRedis.disconnect();
+          cleanup();
           resolve(false);
         });
     } catch (error) {
-      clearTimeout(timeout);
+      cleanup();
       resolve(false);
     }
   });
@@ -82,43 +95,37 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
   const isReplit = process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID;
   const redisUrl = process.env.REDIS_URL;
   
-  if (!redisUrl && (isDevelopment || isReplit)) {
-    console.log('⚡ QUEUE: Running in development/Replit mode - using in-memory fallback');
-    return undefined; // Use in-memory fallback for development
+  // Skip Redis entirely in development/Replit environments to prevent connection errors
+  if (isDevelopment || isReplit) {
+    console.log('🔄 QUEUE: Using in-memory fallback for Replit/development');
+    return undefined;
   }
   
   if (!redisUrl) {
-    if (isDevelopment || isReplit) {
-      console.log('⚡ QUEUE: No REDIS_URL in development/Replit - using in-memory fallback');
-      return undefined;
-    }
     throw new Error('REDIS_URL environment variable is required in production');
   }
   
-  // REPLIT FIX: Test Redis connection with aggressive timeout
+  // PRODUCTION ONLY: Test Redis connection with aggressive timeout
   try {
-    const connectionTimeout = isReplit ? 2000 : 5000;
+    const connectionTimeout = 5000; // Production timeout
     const isRedisWorking = await testQueueRedisConnection(redisUrl, connectionTimeout);
     
     if (!isRedisWorking) {
-      console.warn('⚠️  QUEUE: Redis connection test failed - falling back to in-memory mode');
-      if (isDevelopment || isReplit) {
-        console.log('🔄 QUEUE: Using in-memory fallback for Replit/development');
-        return undefined;
-      }
+      console.warn('⚠️  QUEUE: Redis connection test failed in production');
       throw new Error('Redis connection failed and no fallback available in production');
     }
     
     console.log('✅ QUEUE: Redis connection test successful');
     
-    // Return proper configuration for BullMQ with adjusted timeouts for Replit
+    // Return proper configuration for BullMQ with production settings
     if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
       const redisClient = new Redis(redisUrl, {
         maxRetriesPerRequest: null, // Required for BullMQ
         lazyConnect: true,
-        connectTimeout: isReplit ? 3000 : 10000,
-        commandTimeout: isReplit ? 2000 : 5000,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
         enableAutoPipelining: true,
+        enableOfflineQueue: false,
       });
       
       // Add error listener to prevent crashes
@@ -139,17 +146,14 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions } |
         db: parseInt(process.env.REDIS_DB || '0'),
         maxRetriesPerRequest: null, // Required for BullMQ
         lazyConnect: true,
-        connectTimeout: isReplit ? 3000 : 10000,
-        commandTimeout: isReplit ? 2000 : 5000,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
         enableAutoPipelining: true,
+        enableOfflineQueue: false,
       }
     };
   } catch (error) {
-    console.error('❌ QUEUE: Redis connection test failed:', error instanceof Error ? error.message : error);
-    if (isDevelopment || isReplit) {
-      console.log('🔄 QUEUE: Falling back to in-memory mode for development/Replit');
-      return undefined;
-    }
+    console.error('❌ QUEUE: Redis connection failed in production:', error instanceof Error ? error.message : error);
     throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
