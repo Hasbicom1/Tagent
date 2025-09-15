@@ -6,8 +6,8 @@
  * Usage: node verify-deployment.js https://yourdomain.com
  */
 
-const https = require('https');
-const http = require('http');
+import https from 'https';
+import http from 'http';
 
 const DOMAIN = process.argv[2] || 'https://yourdomain.com';
 const TIMEOUT = 10000; // 10 seconds
