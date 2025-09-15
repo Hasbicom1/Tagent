@@ -1,0 +1,180 @@
+Context / Problem:
+We are building a Stripe Checkout integration hosted on Replit. Currently:
+
+Locally, Stripe works fine, but after payment, it redirects to http://localhost:5000/success?session_id=... → not accessible in production.
+
+On the deployed Replit link (https://onedollara.replit.app/payment), it shows PAYMENT_GATEWAY_ERROR and Liberation payment gateway initialization failed.
+
+We need a solution that works seamlessly for:
+
+Local development (http://localhost:5000)
+
+Replit deployment (https://onedollara.replit.app)
+
+Custom domain (https://www.onedollaragent.ai)
+
+Requirements / Goals:
+
+Fully live Stripe integration using live keys.
+
+Dynamic detection of base URL → no hardcoded localhost.
+
+Correct success_url and cancel_url for each environment.
+
+Webhook endpoint configured for Stripe.
+
+Fully working live mode payments.
+
+Single codebase for local dev → Replit → custom domain.
+
+Avoid PAYMENT_GATEWAY_ERROR or invalid redirects.
+
+Solution – Node.js + Frontend
+
+1️⃣ Server – index.js
+
+import express from "express";
+import Stripe from "stripe";
+import bodyParser from "body-parser";
+
+const app = express();
+const port = process.env.PORT || 5000;
+
+// ⚡ Replace with your live Stripe secret key
+const stripe = new Stripe("sk_live_YOUR_LIVE_SECRET_KEY");
+
+app.use(bodyParser.json());
+
+// Dynamic base URL detection
+function getBaseUrl(req) {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.headers.host;
+  return `${protocol}://${host}`;
+}
+
+// Create Checkout Session
+app.post("/create-checkout-session", async (req, res) => {
+  try {
+    const baseUrl = getBaseUrl(req);
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: "One Dollar Product" },
+            unit_amount: 100, // $1 in cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/cancel`,
+    });
+
+    res.json({ id: session.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Stripe session creation failed" });
+  }
+});
+
+// Webhook endpoint
+app.post("/webhook", bodyParser.raw({ type: "application/json" }), (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = "whsec_YOUR_WEBHOOK_SECRET";
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("Webhook signature verification failed.", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    console.log("Payment received for session:", session.id);
+    // ✅ Add fulfillment logic here (e.g., database update, email confirmation)
+  }
+
+  res.json({ received: true });
+});
+
+app.get("/", (req, res) => {
+  res.send("Replit Stripe Live Mode Server is running");
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
+
+
+2️⃣ Frontend – index.html
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stripe Checkout Replit</title>
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  <h1>Buy $1 Product</h1>
+  <button id="checkout-button">Pay $1</button>
+
+  <script>
+    const stripe = Stripe("pk_live_YOUR_LIVE_PUBLISHABLE_KEY");
+
+    document.getElementById("checkout-button").addEventListener("click", async () => {
+      const response = await fetch("/create-checkout-session", { method: "POST" });
+      const session = await response.json();
+
+      const result = await stripe.redirectToCheckout({ sessionId: session.id });
+      if (result.error) {
+        alert(result.error.message);
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+3️⃣ Optional Success / Cancel Pages – success.html / cancel.html
+
+<!-- success.html -->
+<h1>Payment Successful!</h1>
+<p>Thank you for your purchase. Your payment has been received.</p>
+
+<!-- cancel.html -->
+<h1>Payment Cancelled</h1>
+<p>Your payment was cancelled. You can try again.</p>
+
+4️⃣ Deployment / Testing Instructions
+
+Replace Stripe keys:
+
+sk_live_... → Secret key
+
+pk_live_... → Publishable key
+
+whsec_... → Webhook secret
+
+Update Stripe Dashboard webhook URL → https://onedollara.replit.app/webhook (or custom domain for prod).
+
+Keep app running when testing live payments (Replit may sleep inactive apps).
+
+Test with $1 in live mode → confirm redirect to /success works on all environments.
+
+✅ Key Features
+
+Dynamic URLs → works for localhost, Replit, and custom domain without code changes.
+
+Live Stripe payments → real transactions work.
+
+Webhook ready → handles checkout.session.completed.
+
+Single codebase → dev → staging → production seamless.
+
+Fixes errors → no more localhost redirects or PAYMENT_GATEWAY_ERROR.

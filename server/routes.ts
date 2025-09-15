@@ -64,6 +64,13 @@ import {
   type BrowserAutomationPayload
 } from "./queue";
 
+// Dynamic base URL detection
+function getBaseUrl(req: Request): string {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.headers.host;
+  return `${protocol}://${host}`;
+}
+
 // ✅ STRIPE CONFIGURATION: Always require Stripe keys when available
 if (!process.env.STRIPE_SECRET_KEY) {
   if (process.env.NODE_ENV === 'production') {
@@ -484,8 +491,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             quantity: 1,
           },
         ],
-        success_url: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/`,
+        success_url: `${getBaseUrl(req)}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${getBaseUrl(req)}/`,
         metadata: {
           product: "agent-hq-24h-session"
         }
