@@ -221,11 +221,11 @@ export async function initializeRedis(): Promise<Redis | null> {
   try {
     redisInstance = new Redis(redisUrl, {
       lazyConnect: true,
-      maxRetriesPerRequest: 1, // Reduced for faster fallback
-      connectTimeout: 3000,     // Quick timeout for fast fallback
-      commandTimeout: 2000,     // Quick timeout
+      maxRetriesPerRequest: 3, // Allow more retries for resilience
+      connectTimeout: 5000,     // More generous timeout 
+      commandTimeout: 3000,     // Longer command timeout
       enableAutoPipelining: true,
-      enableOfflineQueue: false // Don't queue commands when offline
+      enableOfflineQueue: true  // Allow queuing commands when temporarily offline
     });
     
     // Comprehensive error handling to prevent crashes
@@ -346,7 +346,19 @@ async function initializeSession() {
   try {
     redisStore = await initializeRedisSession();
     
-    // Validate Redis session store is available
+    // In development mode, allow fallback to memory store if Redis is not available
+    if (!redisStore && process.env.NODE_ENV === 'development') {
+      console.log('⚠️  DEV MODE: Using memory session store (Redis not available)');
+      console.log('   This is NOT suitable for production - Redis is required for production deployment');
+      console.log('   Session data will be lost on server restart');
+      
+      const sessionConfig = getSessionConfig(undefined); // Memory store
+      app.use(session(sessionConfig));
+      console.log('✅ SECURITY: Session middleware mounted with memory store (development only)');
+      return true;
+    }
+    
+    // Production mode requires Redis
     if (!redisStore) {
       throw new Error('Redis session store is required but not available');
     }

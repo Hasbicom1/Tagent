@@ -1296,12 +1296,12 @@ export function validateStripeKeysForProduction(): { success: boolean; errors: s
   const warnings: string[] = [];
   
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const publishableKey = process.env.VITE_STRIPE_PUBLIC_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const isProduction = process.env.NODE_ENV === 'production';
   
   if (!secretKey || !publishableKey) {
-    errors.push('Missing required Stripe keys (STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY)');
+    errors.push('Missing required Stripe keys (STRIPE_SECRET_KEY, VITE_STRIPE_PUBLIC_KEY)');
     return { success: false, errors };
   }
   
