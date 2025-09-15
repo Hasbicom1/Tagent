@@ -492,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         ],
         success_url: `${getBaseUrl(req)}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${getBaseUrl(req)}/`,
+        cancel_url: `${getBaseUrl(req)}/cancel`,
         metadata: {
           product: "agent-hq-24h-session"
         }

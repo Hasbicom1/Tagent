@@ -13,6 +13,7 @@ import { PaymentFlow } from "@/components/payment/PaymentFlow";
 import { BrowserInterface } from "@/components/browser/BrowserInterface";
 import Landing from "@/pages/landing";
 import Success from "@/pages/success";
+import Cancel from "@/pages/cancel";
 import AgentChat from "@/pages/agent-chat";
 import VNCTestPage from "@/pages/vnc-test";
 import NotFound from "@/pages/not-found";
@@ -224,6 +225,14 @@ function Router() {
       
       {/* Existing Routes */}
       <Route path="/success" component={CheckoutSuccess} />
+      <Route path="/cancel" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <Cancel />
+        </div>
+      )} />
       <Route path="/agent" component={AgentAccess} />
       <Route path="/browser/:sessionId" component={({ params }) => (
         <BrowserInterface sessionId={params.sessionId} />
