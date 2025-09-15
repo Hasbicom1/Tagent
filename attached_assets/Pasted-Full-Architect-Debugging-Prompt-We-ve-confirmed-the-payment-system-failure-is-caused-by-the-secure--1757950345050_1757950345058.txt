@@ -1,0 +1,111 @@
+Full Architect Debugging Prompt
+
+We’ve confirmed the payment system failure is caused by the secure-session middleware blocking the /api/csrf-token request.
+Redis-based validation was already disabled, but the middleware still enforces session validation before CSRF can be fetched. This breaks the payment flow.
+
+🔎 Diagnosis Path
+
+Redis validation was bypassed, but secure-session guard still runs.
+
+/api/csrf-token → blocked by middleware → CSRF token never issued.
+
+Memory store detection failed, because SessionSecurityStore always exposes a redis property.
+
+Frontend fetch calls don’t succeed because cookies + CSRF token aren’t flowing.
+
+✅ Fix Plan
+1. Update server/session.ts
+
+Drop-in replacement for createSessionSecurityMiddleware:
+
+export function createSessionSecurityMiddleware(sessionStore) {
+  const isMemoryStore = sessionStore?.constructor?.name === "MemoryStore";
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return (req, res, next) => {
+    // 🚨 Always bypass CSRF token endpoint
+    if (req.path === "/api/csrf-token") {
+      return next();
+    }
+
+    // 🛠 In dev/staging: skip validation if MemoryStore
+    if (!isProduction && isMemoryStore) {
+      console.log("🔄 SECURITY: Skipping session validation (MemoryStore in dev/staging)");
+      return next();
+    }
+
+    // 🔒 Production: enforce strict session validation
+    try {
+      sessionStore.validateSessionIP(req);
+      next();
+    } catch (err) {
+      console.error("❌ Session security validation failed:", err.message);
+      return res.status(401).json({ error: "session_not_found" });
+    }
+  };
+}
+
+2. Mount Middleware in server/index.ts
+
+Wrap the middleware so CSRF always bypasses:
+
+import { createSessionSecurityMiddleware } from "./session";
+
+const sessionSecurity = createSessionSecurityMiddleware(sessionStore);
+
+app.use((req, res, next) => {
+  if (req.path === "/api/csrf-token") return next();
+  return sessionSecurity(req, res, next);
+});
+
+3. Frontend Fetch Calls
+
+Frontend must send cookies with every secured request:
+
+// Step 1: Fetch CSRF token
+const csrfRes = await fetch("https://onedollaragent.ai/api/csrf-token", {
+  credentials: "include",
+});
+const { csrfToken } = await csrfRes.json();
+
+// Step 2: Use token in payment request
+const paymentRes = await fetch("https://onedollaragent.ai/api/create-checkout-session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",
+  body: JSON.stringify({ csrfToken }),
+});
+const paymentData = await paymentRes.json();
+
+
+👉 For staging, replace onedollaragent.ai with onedollara.replit.app.
+
+4. Verification Before Deploy
+
+Run these tests:
+
+# 1. Retrieve CSRF token and cookie
+curl -c cookies.txt https://onedollara.replit.app/api/csrf-token
+
+# 2. Use cookie + token to create checkout session
+curl -b cookies.txt -X POST https://onedollara.replit.app/api/create-checkout-session \
+  -H "Content-Type: application/json" \
+  -d '{"csrfToken":"<paste-token-here>"}'
+
+
+✅ Should return checkoutUrl or sessionId.
+❌ If failure, logs will say whether middleware skipped or enforced.
+
+🛡️ Architect Conclusion
+
+CSRF endpoint must bypass session middleware.
+
+Memory store detection must be explicit (constructor.name === "MemoryStore").
+
+Production (onedollaragent.ai) → strict session validation.
+
+Dev/Staging (onedollara.replit.app) → skip validation when using MemoryStore.
+
+Frontend → always send cookies (credentials: "include").
+
+Once these are in place, the payment system will be fully restored in production.

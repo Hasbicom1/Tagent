@@ -351,7 +351,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Apply session security middleware (only when Redis available)
   if (sessionSecurityStore && redis) {
-    app.use(createSessionSecurityMiddleware(sessionSecurityStore, DEFAULT_SESSION_SECURITY_CONFIG));
+    const sessionSecurity = createSessionSecurityMiddleware(sessionSecurityStore);
+    
+    app.use((req, res, next) => {
+      if (req.path === "/api/csrf-token") return next();
+      return sessionSecurity(req, res, next);
+    });
+    
     console.log('✅ Session security middleware applied');
   } else {
     console.log('🔄 SECURITY: Skipping Redis-based session validation (using memory store)');
