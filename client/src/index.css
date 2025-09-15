@@ -393,19 +393,14 @@
     z-index: 2;
   }
 
-  /* Phosphor glow text */
+  /* Phosphor glow text - Stable version */
   .phosphor-text {
     color: #00ff41;
     text-shadow: 
       0 0 5px #00ff41,
       0 0 10px #00ff41,
       0 0 15px #00ff41;
-    animation: phosphor-flicker 0.15s infinite linear alternate;
-  }
-
-  @keyframes phosphor-flicker {
-    0% { opacity: 1; }
-    100% { opacity: 0.98; }
+    /* Removed aggressive flicker animation to fix page instability */
   }
 
   /* Terminal cursor */
