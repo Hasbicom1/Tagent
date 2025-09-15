@@ -69,9 +69,14 @@ if (process.env.NODE_ENV === 'production') {
   logger.info('Production mode: compression middleware would be enabled');
 }
 
+// CRITICAL REORDER: Set trust proxy FIRST for proper session handling
+app.set('trust proxy', 1);
+
 // Apply enhanced security headers based on environment
 const securityConfig = getSecurityHeadersConfig();
 const cookieConfig = getSecureCookieConfig();
+
+// Session middleware will be mounted before Helmet after function definitions
 
 // Enhanced Helmet configuration with custom security headers
 app.use(helmet({
@@ -160,21 +165,36 @@ export async function initializeRedis(): Promise<Redis | null> {
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) return null;
   
-  redisInstance = new Redis(redisUrl, {
-    lazyConnect: true,
-    maxRetriesPerRequest: 3,
-    connectTimeout: 10000,
-    commandTimeout: 5000,
-    enableAutoPipelining: true
-  });
-  
-  // Add error listener to prevent crashes
-  redisInstance.on('error', (e) => {
-    console.warn('⚠️  REDIS error:', e.message);
-  });
-  
-  await redisInstance.ping();
-  return redisInstance;
+  try {
+    redisInstance = new Redis(redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1, // Reduced for faster fallback in dev
+      connectTimeout: 5000,     // Reduced timeout for dev
+      commandTimeout: 3000,     // Reduced timeout for dev
+      enableAutoPipelining: true
+    });
+    
+    // Add error listener to prevent crashes
+    redisInstance.on('error', (e) => {
+      console.warn('⚠️  REDIS error:', e.message);
+    });
+    
+    // Test connection with timeout
+    await Promise.race([
+      redisInstance.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 5000))
+    ]);
+    
+    console.log('✅ REDIS: Connection established successfully');
+    return redisInstance;
+  } catch (error: any) {
+    console.warn(`⚠️  REDIS: Connection failed (${error.message}) - using memory store fallback`);
+    if (redisInstance) {
+      redisInstance.disconnect();
+      redisInstance = null;
+    }
+    return null;
+  }
 }
 
 async function initializeRedisSession(): Promise<any> {
@@ -222,22 +242,30 @@ async function initializeRedisSession(): Promise<any> {
 let redisStore: any = null;
 
 // Secure session configuration with Redis store for production
-const getSessionConfig = (store: any) => ({
-  secret: process.env.SESSION_SECRET || generateSecureSessionToken(),
-  name: 'agentSessionId', // Use unique session name for security
-  resave: false,
-  saveUninitialized: false,
-  rolling: true, // Reset expiration on activity
-  cookie: {
+const getSessionConfig = (store: any) => {
+  const cookieOptions: any = {
     httpOnly: cookieConfig.httpOnly,
     secure: cookieConfig.secure,
     sameSite: cookieConfig.sameSite,
     maxAge: cookieConfig.maxAge * 1000, // Convert to milliseconds
-    domain: cookieConfig.domain
-  },
-  // Use Redis store in production, memory store in development
-  store: store || undefined
-});
+  };
+  
+  // Only add domain if explicitly set (undefined domain breaks session cookies)
+  if (cookieConfig.domain) {
+    cookieOptions.domain = cookieConfig.domain;
+  }
+  
+  return {
+    secret: process.env.SESSION_SECRET || generateSecureSessionToken(),
+    name: 'agentSessionId', // Use unique session name for security
+    resave: false,
+    saveUninitialized: true, // CRITICAL FIX: Save sessions immediately for CSRF token persistence
+    rolling: true, // Reset expiration on activity
+    cookie: cookieOptions,
+    // Use Redis store in production, memory store in development
+    store: store || undefined
+  };
+};
 
 // Initialize session management (async startup)
 async function initializeSession() {
@@ -253,7 +281,13 @@ async function initializeSession() {
     }
     
     const sessionConfig = getSessionConfig(redisStore);
+    
+    // CRITICAL DEBUG: Log cookie configuration to verify secure flag
+    console.log('🔧 SECURITY: Cookie config debug:', JSON.stringify(sessionConfig.cookie, null, 2));
+    console.log('🔧 SECURITY: Session config created, mounting middleware...');
+    
     app.use(session(sessionConfig));
+    console.log('✅ SECURITY: Session middleware mounted successfully');
     
     return true;
   } catch (error) {
@@ -311,7 +345,29 @@ app.get('/api/health', (req: Request, res: Response) => {
     validateProductionSecurity();
     log('✅ Enhanced security configuration validated');
 
-    // STARTUP FIX: Start server first, then initialize Redis components to avoid blocking port 5000
+    // CRITICAL FIX: Mount session middleware BEFORE Helmet (at top of middleware stack)
+    log('🔧 SECURITY: Mounting session middleware first in stack...');
+    try {
+      const redisStore = await initializeRedisSession();
+      
+      if (redisStore) {
+        console.log('✅ SECURITY: Using Redis session store');
+      } else {
+        console.log('🔄 SECURITY: Using memory store for sessions');
+      }
+      
+      const sessionConfig = getSessionConfig(redisStore);
+      console.log('🔧 SECURITY: Cookie config:', JSON.stringify(sessionConfig.cookie, null, 2));
+      
+      app.use(session(sessionConfig));
+      console.log('✅ SECURITY: Session middleware mounted FIRST in middleware stack');
+      
+    } catch (error) {
+      console.error('❌ SECURITY: Session initialization failed:', error);
+      throw error;
+    }
+
+    // STARTUP FIX: Start server AFTER session is ready
     log('🚀 Starting HTTP server...');
     const server = await registerRoutes(app);
     
@@ -331,14 +387,6 @@ app.get('/api/health', (req: Request, res: Response) => {
       log('✅ Task queue system initialized');
     }).catch((error) => {
       log('⚠️  Task queue initialization failed, continuing with in-memory fallback:', error.message);
-    });
-
-    // Initialize session management with Redis (non-blocking)
-    log('🔐 Initializing session management (non-blocking)...');
-    initializeSession().then(() => {
-      log('✅ Session management initialized');
-    }).catch((error) => {
-      log('⚠️  Session management initialization failed, continuing with memory store:', error.message);
     });
 
 

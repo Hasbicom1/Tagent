@@ -1,0 +1,129 @@
+Fix the Session Store (Critical)
+
+👉 Memory store must never be used in production. That’s why CSRF fails (session data disappears).
+
+Use Redis instead:
+
+Install
+npm install connect-redis ioredis
+
+server/index.ts
+import session from "express-session";
+import RedisStore from "connect-redis";
+import Redis from "ioredis";
+
+// connect to Redis
+const redisClient = new Redis(process.env.REDIS_URL!);
+
+app.set("trust proxy", 1); // if behind proxy (Heroku, Railway, Vercel, etc.)
+
+app.use(
+  session({
+    store: new RedisStore({ client: redisClient }),
+    secret: process.env.SESSION_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // true in prod (HTTPS required)
+      httpOnly: true,
+      sameSite: "lax", // if frontend & backend same domain
+      // sameSite: "none" if frontend runs on different domain (requires HTTPS + secure:true)
+    },
+  })
+);
+
+
+✅ Now, when /api/csrf-token sets req.session.csrfToken, it will persist in Redis, and /api/create-checkout-session can read it back.
+
+2. Fix NODE_ENV Conflict
+
+Right now:
+
+Shell = production
+
+Server = development
+
+This mismatch makes Express default to dev-mode sessions.
+
+👉 In package.json (or deployment config):
+
+"scripts": {
+  "start": "NODE_ENV=production tsx server/index.ts"
+}
+
+
+Now cookies & sessions behave consistently with production rules.
+
+3. Ensure Frontend Sends Cookies + CSRF Token
+
+In PaymentFlow.tsx (lines 98–116), make sure you are:
+
+// Example using fetch
+const res = await fetch("/api/create-checkout-session", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "CSRF-Token": csrfToken,   // from GET /api/csrf-token
+  },
+  credentials: "include",       // <-- critical! sends session cookie
+  body: JSON.stringify({ planId }),
+});
+
+
+If you’re using Axios:
+
+axios.post("/api/create-checkout-session", 
+  { planId },
+  { 
+    headers: { "CSRF-Token": csrfToken },
+    withCredentials: true,
+  }
+);
+
+
+Without credentials: "include" (or withCredentials: true), the session cookie never reaches the backend → CSRF will always fail.
+
+4. Verify Redis Connection
+
+Your dev saw:
+
+getaddrinfo ENOTFOUND redis.railway.internal
+
+
+This means Redis hostname is wrong.
+
+👉 Check your hosting dashboard (Railway, Render, etc.) and get the correct Redis URL.
+Should look like:
+
+redis://default:<PASSWORD>@<HOST>:<PORT>
+
+
+Update .env:
+
+REDIS_URL=redis://default:password@yourhost:6379
+SESSION_SECRET=super_secure_secret
+
+5. Debug Checklist
+
+After applying the above:
+
+Run GET /api/csrf-token → should store CSRF token in Redis.
+Check with redis-cli if needed.
+
+Run POST /api/create-checkout-session with the token + credentials → should pass validation.
+
+Stripe checkoutUrl should now be returned.
+
+Frontend should redirect to Stripe checkout instead of showing PAYMENT_GATEWAY_ERROR.
+
+✅ Summary for your AI Dev
+
+Root Fix: Redis-backed session store (no memory store in prod).
+
+Config Fix: Set NODE_ENV=production when running server.
+
+Frontend Fix: Always send cookies (credentials: "include") + CSRF header.
+
+Infra Fix: Correct Redis URL in .env.
+
+Would you like me to write out a ready-to-drop Express csrfMiddleware.ts + sessionConfig.ts file that your dev can just plug in, so CSRF + Redis sessions are handled cleanly in production?

@@ -421,8 +421,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Store CSRF token in session for later validation
     if (req.session) {
       (req.session as any).csrfToken = csrfToken;
+      // CRITICAL FIX: Explicitly save session to ensure persistence  
+      req.session.save((err) => {
+        if (err) {
+          console.error('❌ CSRF: Session save failed:', err);
+          res.status(500).json({ error: 'Session save failed' });
+          return;
+        }
+        res.json({ csrfToken });
+      });
+    } else {
+      res.status(500).json({ error: 'Session not available' });
     }
-    res.json({ csrfToken });
   });
 
 
