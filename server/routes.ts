@@ -64,62 +64,40 @@ import {
   type BrowserAutomationPayload
 } from "./queue";
 
-// Enhanced environment-aware base URL detection
+// Production-ready secure getBaseUrl()
 function getBaseUrl(req: Request): string {
-  // Environment override with production validation
-  if (process.env.FRONTEND_URL) {
-    try {
-      const configuredUrl = new URL(process.env.FRONTEND_URL);
-      
-      // Production security checks
-      if (process.env.NODE_ENV === 'production') {
-        // Require HTTPS in production
-        if (configuredUrl.protocol !== 'https:') {
-          throw new Error(`Production requires HTTPS. Got: ${configuredUrl.protocol}`);
-        }
-        
-        // Disallow localhost/127.0.0.1 in production
-        if (configuredUrl.hostname === 'localhost' || 
-            configuredUrl.hostname === '127.0.0.1' || 
-            configuredUrl.hostname.startsWith('192.168.') ||
-            configuredUrl.hostname.startsWith('10.')) {
-          throw new Error(`Production cannot use local/private IPs. Got: ${configuredUrl.hostname}`);
-        }
-      }
-      
-      return configuredUrl.origin;
-    } catch (error: any) {
-      throw new Error(`Invalid FRONTEND_URL configuration: ${error.message}`);
-    }
-  }
-
-  // Normalize protocol handling
-  let protocol = req.headers["x-forwarded-proto"];
-  if (Array.isArray(protocol)) {
-    protocol = protocol[0];
-  } else if (typeof protocol === 'string' && protocol.includes(',')) {
-    protocol = protocol.split(',')[0].trim();
-  }
-  if (!protocol) {
-    protocol = req.protocol;
-  }
-
-  // Ensure protocol is lowercase and enforce HTTPS in production
-  protocol = String(protocol).toLowerCase();
-  if (process.env.NODE_ENV === 'production' && protocol === 'http') {
-    protocol = 'https';
-  }
-
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = (forwardedProto || req.protocol).toLowerCase();
   const host = req.headers.host;
-  
+
   if (!host) {
     throw new Error('Host header is required for URL generation');
   }
 
+  // Enforce HTTPS in production for Replit or custom domain
+  const productionDomains = ["replit.app", "onedollaragent.ai"];
+  if (productionDomains.some(domain => host.includes(domain))) {
+    if (protocol !== "https") {
+      console.log(`🔗 Enforcing HTTPS for production domain: ${host}`);
+      return `https://${host}`;
+    }
+  }
+
+  // Reject localhost in production
+  if (host.includes("localhost") && process.env.NODE_ENV === "production") {
+    throw new Error("Invalid base URL in production: localhost not allowed");
+  }
+
+  // Validate Host header to prevent header attacks (allow Replit format and localhost with ports)
+  if (!/^[a-z0-9._:-]+$/i.test(host)) {
+    console.error(`❌ Invalid host header format: "${host}"`);
+    throw new Error("Invalid host header format");
+  }
+
   const baseUrl = `${protocol}://${host}`;
   
-  // Log the generated URL for debugging
-  console.log(`🔗 Generated base URL: ${baseUrl} (protocol: ${protocol}, host: ${host})`);
+  // Enhanced logging for debugging
+  console.log(`🔗 Generated base URL: ${baseUrl} (protocol: ${protocol}, host: ${host}, NODE_ENV: ${process.env.NODE_ENV})`);
   
   return baseUrl;
 }
@@ -523,10 +501,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if Stripe is available
       if (!stripe) {
+        console.error("❌ Stripe session creation failed: Stripe not configured");
         return res.status(501).json({ 
           error: "PAYMENT_SYSTEM_OFFLINE: Stripe not configured" 
         });
       }
+
+      // Generate base URL with enhanced logging
+      const baseUrl = getBaseUrl(req);
       
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
@@ -544,15 +526,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             quantity: 1,
           },
         ],
-        success_url: `${getBaseUrl(req)}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${getBaseUrl(req)}/cancel`,
+        success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/cancel`,
         metadata: {
           product: "agent-hq-24h-session"
         }
       });
       
+      // ✅ Enhanced success logging
+      console.log("✅ Checkout session created:", session.id);
+      console.log("🔗 Success URL:", `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`);
+      console.log("🔗 Cancel URL:", `${baseUrl}/cancel`);
+      
       res.json({ checkoutUrl: session.url, sessionId: session.id });
     } catch (error: any) {
+      // ❌ Enhanced error logging
+      console.error("❌ Stripe session creation failed:", error.message);
+      console.error("❌ Full error details:", error);
+      
       logSecurityEvent('payment_fraud', {
         error: 'checkout_session_creation_failed',
         details: error.message,
@@ -560,9 +551,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.headers['user-agent']
       });
       
-      console.error("Error creating checkout session:", error);
       res.status(500).json({ 
-        error: "LIBERATION_GATEWAY_INITIALIZATION_FAILED: " + error.message 
+        error: "Stripe session creation failed",
+        details: error.message
       });
     }
   });
