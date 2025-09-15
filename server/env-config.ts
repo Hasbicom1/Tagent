@@ -12,7 +12,8 @@ function detectProductionEnvironment(): string {
   
   // Check for production domains
   const productionDomains = [
-    'onedollaragent.ai', 
+    'onedollaragent.ai',
+    'www.onedollaragent.ai', // Primary custom domain
     'onedollara.replit.app',
     'replit.app' // Any .replit.app domain should be production
   ];

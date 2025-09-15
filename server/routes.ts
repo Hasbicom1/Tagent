@@ -84,7 +84,7 @@ function getBaseUrl(req: Request): string {
   }
 
   // Enforce HTTPS in production for Replit or custom domain
-  const productionDomains = ["replit.app", "onedollaragent.ai"];
+  const productionDomains = ["replit.app", "onedollaragent.ai", "www.onedollaragent.ai"];
   if (productionDomains.some(domain => host.includes(domain))) {
     if (protocol !== "https") {
       console.log(`🔗 Enforcing HTTPS for production domain: ${host}`);

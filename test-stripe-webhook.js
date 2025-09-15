@@ -123,8 +123,8 @@ const createWebhookPayloads = () => {
             user_id: 'test_checkout_user_456'
           },
           mode: 'payment',
-          success_url: 'https://onedollaragent.ai/success?session_id={CHECKOUT_SESSION_ID}',
-          cancel_url: 'https://onedollaragent.ai/cancel',
+          success_url: 'https://www.onedollaragent.ai/success?session_id={CHECKOUT_SESSION_ID}',
+          cancel_url: 'https://www.onedollaragent.ai/cancel',
           created: baseTimestamp - 120
         }
       },

@@ -161,6 +161,42 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Canonical Host Middleware - Redirect apex domain to www for SEO consistency
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const host = req.get('host');
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Only apply canonical redirects in production for actual custom domains
+  if (isProduction && host) {
+    const isWebhookEndpoint = req.path === '/api/stripe/webhook';
+    const isHealthCheck = req.path.startsWith('/health');
+    
+    // Skip redirects for webhooks and health checks to prevent issues
+    if (!isWebhookEndpoint && !isHealthCheck) {
+      // Redirect apex domain to www subdomain for SEO and consistency
+      if (host === 'onedollaragent.ai') {
+        const protocol = req.header('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        const canonicalUrl = `https://www.onedollaragent.ai${req.url}`;
+        
+        console.log(`🔀 CANONICAL: Redirecting ${host}${req.url} to www.onedollaragent.ai${req.url}`);
+        return res.redirect(301, canonicalUrl);
+      }
+      
+      // Generalized canonical redirect for any apex domain to www
+      if (host && !host.startsWith('www.') && !host.includes('.replit.app') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+        // Only redirect if this appears to be a custom apex domain
+        const protocol = req.header('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        const canonicalUrl = `${protocol}://www.${host}${req.url}`;
+        
+        console.log(`🔀 CANONICAL: Redirecting apex domain ${host} to www.${host} for SEO consistency`);
+        return res.redirect(301, canonicalUrl);
+      }
+    }
+  }
+  
+  next();
+});
+
 // Initialize Redis for session storage and security features
 let redisInstance: Redis | null = null;
 let sessionSecurityStore: SessionSecurityStore | null = null;
