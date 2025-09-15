@@ -13,7 +13,9 @@ import {
   Twitter,
   Mail,
   Cpu,
-  Zap
+  Zap,
+  Minus,
+  Maximize2
 } from 'lucide-react';
 
 interface CommandTerminalInterfaceProps {
@@ -72,6 +74,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('');
+  const [isMinimized, setIsMinimized] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
 
@@ -348,18 +351,30 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
                   dream_terminal.exe
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground font-mono">
-                AI_DREAMS_ACTIVE
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 hover:bg-primary/20"
+                  onClick={() => setIsMinimized(!isMinimized)}
+                  data-testid="button-minimize-terminal"
+                >
+                  {isMinimized ? <Maximize2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                </Button>
+                <div className="text-xs text-muted-foreground font-mono">
+                  AI_DREAMS_ACTIVE
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="p-4">
-            {/* Terminal Output */}
-            <div 
-              ref={terminalRef}
-              className="min-h-[80px] max-h-[120px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
-            >
+          {!isMinimized && (
+            <div className="p-4">
+              {/* Terminal Output */}
+              <div 
+                ref={terminalRef}
+                className="min-h-[80px] max-h-[120px] overflow-y-auto space-y-1 text-sm font-mono mb-4"
+              >
               {!showHelp && history.length === 0 && (
                 <div className="space-y-4 text-center">
                   <pre className="text-xs text-primary/60 leading-none">
@@ -400,7 +415,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                className="flex-1 bg-transparent border-none outline-none text-foreground font-mono placeholder:text-muted-foreground"
+                className="flex-1 bg-transparent border-none outline-none text-primary font-mono placeholder:text-muted-foreground caret-primary"
                 placeholder="Type a command... (try 'help' or 'h')"
                 data-testid="input-command"
               />
@@ -409,6 +424,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
               </div>
             </div>
           </div>
+          )}
         </Card>
       </div>
 
