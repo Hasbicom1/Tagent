@@ -76,7 +76,7 @@ app.set('trust proxy', 1);
 const securityConfig = getSecurityHeadersConfig();
 const cookieConfig = getSecureCookieConfig();
 
-// Session middleware will be mounted before Helmet after function definitions
+// Initialize Redis for session storage and security features
 
 // Enhanced Helmet configuration with custom security headers
 app.use(helmet({
@@ -345,26 +345,13 @@ app.get('/api/health', (req: Request, res: Response) => {
     validateProductionSecurity();
     log('✅ Enhanced security configuration validated');
 
-    // CRITICAL FIX: Mount session middleware BEFORE Helmet (at top of middleware stack)
-    log('🔧 SECURITY: Mounting session middleware first in stack...');
+    // CRITICAL FIX: Initialize session management SYNCHRONOUSLY before routes
+    log('🔐 Initializing session management (synchronous)...');
     try {
-      const redisStore = await initializeRedisSession();
-      
-      if (redisStore) {
-        console.log('✅ SECURITY: Using Redis session store');
-      } else {
-        console.log('🔄 SECURITY: Using memory store for sessions');
-      }
-      
-      const sessionConfig = getSessionConfig(redisStore);
-      console.log('🔧 SECURITY: Cookie config:', JSON.stringify(sessionConfig.cookie, null, 2));
-      
-      app.use(session(sessionConfig));
-      console.log('✅ SECURITY: Session middleware mounted FIRST in middleware stack');
-      
+      await initializeSession();
+      log('✅ Session management initialized');
     } catch (error) {
-      console.error('❌ SECURITY: Session initialization failed:', error);
-      throw error;
+      log('⚠️  Session management initialization failed, continuing with memory store:', error instanceof Error ? error.message : String(error));
     }
 
     // STARTUP FIX: Start server AFTER session is ready

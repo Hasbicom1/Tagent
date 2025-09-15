@@ -349,10 +349,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.warn('⚠️  Rate limiting disabled - Redis not available');
   }
   
-  // Apply session security middleware
-  if (sessionSecurityStore) {
+  // Apply session security middleware (only when Redis available)
+  if (sessionSecurityStore && redis) {
     app.use(createSessionSecurityMiddleware(sessionSecurityStore, DEFAULT_SESSION_SECURITY_CONFIG));
     console.log('✅ Session security middleware applied');
+  } else {
+    console.log('🔄 SECURITY: Skipping Redis-based session validation (using memory store)');
   }
   
   // Health check endpoints
@@ -1246,8 +1248,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "NEURAL_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
-      // Enhanced session security validation using SessionSecurityStore
-      if (sessionSecurityStore) {
+      // Enhanced session security validation using SessionSecurityStore (only when Redis available)
+      if (sessionSecurityStore && redis) {
         const clientIP = req.ip || req.connection?.remoteAddress || '127.0.0.1';
         const ipValidation = await sessionSecurityStore.validateSessionIP(session.id, clientIP);
         if (!ipValidation.isValid) {

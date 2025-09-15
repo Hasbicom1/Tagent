@@ -680,6 +680,15 @@ export function createSessionSecurityMiddleware(
     const userAgent = req.headers['user-agent'] || '';
 
     try {
+      // DEVELOPMENT FIX: Skip Redis-based validation when using memory store
+      const isMemoryStore = req.sessionStore instanceof require('express-session').MemoryStore || 
+                           req.sessionStore?.constructor?.name === 'MemoryStore';
+      
+      if (!sessionStore || isMemoryStore) {
+        console.log('🔄 SESSION: Skipping Redis validation - using memory store');
+        return next();
+      }
+      
       // Validate session IP binding
       const ipValidation = await sessionStore.validateSessionIP(sessionId, clientIP);
       
