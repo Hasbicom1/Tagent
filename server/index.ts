@@ -1,3 +1,6 @@
+// CRITICAL: Import environment config FIRST to ensure consistent NODE_ENV
+import ENV_CONFIG from "./env-config";
+
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import helmet from "helmet";
@@ -33,7 +36,7 @@ import {
 validateEnvironment();
 
 // Add process-level error handlers for development debugging
-if (process.env.NODE_ENV === 'development') {
+if (ENV_CONFIG.IS_DEVELOPMENT) {
   process.on('uncaughtException', (err) => {
     console.error('🚨 Uncaught Exception:', err.message);
     console.error(err.stack);
@@ -44,16 +47,13 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Define Replit environment detection
-const isReplit = !!(process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID);
-
 const app = express();
 
 // Configure trust proxy first - BEFORE any middleware that needs it
 app.set('trust proxy', 1);
 
 // Ensure app environment matches NODE_ENV for Vite setup
-app.set('env', process.env.NODE_ENV || 'development');
+app.set('env', ENV_CONFIG.NODE_ENV);
 
 // Add request ID and logging middleware early
 app.use(addRequestId);
@@ -163,34 +163,56 @@ export function getRedis(): Redis | null {
 
 export async function initializeRedis(): Promise<Redis | null> {
   const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return null;
+  
+  // Skip Redis entirely if no URL provided (common in Replit deployments)
+  if (!redisUrl) {
+    console.log('🔄 REDIS: No REDIS_URL provided - using memory store for Replit deployment');
+    return null;
+  }
   
   try {
     redisInstance = new Redis(redisUrl, {
       lazyConnect: true,
-      maxRetriesPerRequest: 1, // Reduced for faster fallback in dev
-      connectTimeout: 5000,     // Reduced timeout for dev
-      commandTimeout: 3000,     // Reduced timeout for dev
-      enableAutoPipelining: true
+      maxRetriesPerRequest: 1, // Reduced for faster fallback
+      connectTimeout: 3000,     // Quick timeout for fast fallback
+      commandTimeout: 2000,     // Quick timeout
+      enableAutoPipelining: true,
+      enableOfflineQueue: false // Don't queue commands when offline
     });
     
-    // Add error listener to prevent crashes
+    // Comprehensive error handling to prevent crashes
     redisInstance.on('error', (e) => {
-      console.warn('⚠️  REDIS error:', e.message);
+      console.warn('⚠️  REDIS error (handled):', e.message.substring(0, 100));
+      // Don't rethrow - just log and continue
     });
     
-    // Test connection with timeout
+    redisInstance.on('close', () => {
+      console.warn('⚠️  REDIS connection closed');
+    });
+    
+    redisInstance.on('reconnecting', () => {
+      console.log('🔄 REDIS reconnecting...');
+    });
+    
+    // Quick connection test with aggressive timeout
     await Promise.race([
       redisInstance.ping(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 5000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 3000))
     ]);
     
     console.log('✅ REDIS: Connection established successfully');
     return redisInstance;
   } catch (error: any) {
-    console.warn(`⚠️  REDIS: Connection failed (${error.message}) - using memory store fallback`);
+    console.warn(`⚠️  REDIS: Connection failed (${error.message.substring(0, 100)}) - using memory store fallback`);
+    
+    // Ensure complete cleanup
     if (redisInstance) {
-      redisInstance.disconnect();
+      try {
+        redisInstance.removeAllListeners();
+        redisInstance.disconnect(false); // Force disconnect without retry
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
       redisInstance = null;
     }
     return null;
@@ -199,41 +221,55 @@ export async function initializeRedis(): Promise<Redis | null> {
 
 async function initializeRedisSession(): Promise<any> {
   try {
-    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isProduction = process.env.NODE_ENV === 'production';
     
-    // Initialize Redis using the new configuration
+    // Skip Redis initialization if no URL provided (Replit deployment)
+    if (!process.env.REDIS_URL) {
+      if (isProduction) {
+        console.log('🔄 SECURITY: Replit deployment detected - using secure memory store for sessions');
+      } else {
+        console.log('🔄 SECURITY: Using memory store for session storage in development');
+      }
+      return null;
+    }
+    
+    // Try to initialize Redis with robust error handling
     const redis = await initializeRedis();
     
     if (redis) {
       console.log('✅ SECURITY: Redis connection established for session storage');
       
-      // Initialize session security store
-      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-      console.log('✅ SECURITY: Session security store initialized');
-      
-      // Create Redis session store for production
-      const redisStore = createRedisSessionStore(redis);
-      
-      // Add error listener to RedisStore to prevent crashes
-      redisStore.on('error', (e) => {
-        console.warn('⚠️  SESSION store error:', e.message);
-      });
-      
-      console.log('✅ SECURITY: Redis session store created');
-      return redisStore;
-    } else {
-      // Fallback to memory store for development or when Redis is unavailable
-      if (isDevelopment) {
-        console.log('🔄 SECURITY: Using memory store for session storage in development');
-        return null;
-      } else {
-        console.warn('⚠️  SECURITY: Redis not available, using memory store (not recommended for production)');
+      // Initialize session security store with additional error handling
+      try {
+        sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+        console.log('✅ SECURITY: Session security store initialized');
+        
+        // Create Redis session store for production
+        const redisStore = createRedisSessionStore(redis);
+        
+        // Comprehensive error handling for session store
+        redisStore.on('error', (e) => {
+          console.warn('⚠️  SESSION store error (handled):', e.message.substring(0, 100));
+          // Don't crash - session will fallback to memory
+        });
+        
+        console.log('✅ SECURITY: Redis session store created');
+        return redisStore;
+      } catch (storeError) {
+        console.warn('⚠️  SECURITY: Failed to create session security store - using memory fallback');
         return null;
       }
+    } else {
+      // Graceful fallback to memory store
+      if (isProduction) {
+        console.warn('⚠️  SECURITY: Redis not available, using secure memory store for Replit deployment');
+      } else {
+        console.log('🔄 SECURITY: Using memory store for session storage in development');
+      }
+      return null;
     }
   } catch (error) {
-    console.error('❌ SECURITY: Redis session initialization failed:', error);
-    console.warn('⚠️  SECURITY: Falling back to memory store');
+    console.warn('⚠️  SECURITY: Session initialization failed - using memory store fallback:', error instanceof Error ? error.message.substring(0, 100) : 'unknown error');
     return null;
   }
 }
@@ -296,7 +332,53 @@ async function initializeSession() {
   }
 }
 
-// Enhanced body parsing with security limits
+// CRITICAL FIX: Stripe webhook MUST be registered before JSON body parser
+// This prevents express.json() from interfering with webhook signature verification
+app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.get('stripe-signature');
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('Missing STRIPE_WEBHOOK_SECRET');
+    return res.status(500).json({ error: 'Webhook secret not configured' });
+  }
+
+  try {
+    // Import Stripe dynamically to handle missing config
+    const Stripe = require('stripe');
+    const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+    
+    // Handle missing Stripe in development
+    if (!stripe) {
+      console.log('⚠️ DEV MODE: Stripe webhook received but Stripe not initialized');
+      return res.status(501).json({ error: 'Payments disabled in development mode' });
+    }
+    
+    // Use Stripe's constructEvent for proper signature verification
+    const event = stripe.webhooks.constructEvent(req.body, sig!, webhookSecret);
+
+    // Handle the event
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        console.log(`💰 Payment succeeded: ${event.data.object.id}`);
+        break;
+      
+      case 'payment_intent.payment_failed':
+        console.log(`💸 Payment failed: ${event.data.object.id}`);
+        break;
+      
+      default:
+        console.log(`🔔 Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (error: any) {
+    console.error('Webhook signature verification failed:', error.message);
+    res.status(400).json({ error: 'Webhook error' });
+  }
+});
+
+// Enhanced body parsing with security limits (AFTER webhook registration)
 app.use(express.json({ 
   limit: '1mb',
   type: 'application/json'

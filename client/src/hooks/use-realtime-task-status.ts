@@ -92,7 +92,7 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
       throw new Error('Session does not contain JWT token');
     }
 
-    console.log('✅ [TOKEN] JWT token fetched successfully, length:', sessionData.token.length);
+    console.log('✅ [TOKEN] JWT token fetched successfully');
     return sessionData.token;
   }, [agentId]);
 

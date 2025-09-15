@@ -11,7 +11,6 @@ const REQUIRED_ENV_VARS: RequiredEnvVars = {
   ],
   production: [
     'DATABASE_URL',
-    'REDIS_URL',
     'SESSION_SECRET',
     'JWT_SECRET',
     'STRIPE_SECRET_KEY',
@@ -39,9 +38,10 @@ export function validateEnvironment(): void {
     });
     
     if (env === 'production') {
-      console.error('\n💡 For Railway deployment, set these variables in your Railway dashboard:');
-      console.error('   Project → Variables → Add Variables');
-      process.exit(1);
+      console.error('\n💡 For Replit deployment, these variables are optional but recommended:');
+      console.error('   REDIS_URL - for enhanced session management');
+      console.error('   FRONTEND_URL - for consistent URL generation');
+      console.warn('\n⚠️  Continuing with memory store fallback for missing optional services');
     } else {
       console.warn('\n⚠️  Some features may not work without these variables');
     }

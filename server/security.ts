@@ -85,6 +85,138 @@ export enum RateLimitViolationType {
   WEBSOCKET_TASK_LIMIT = 'websocket_task_limit'
 }
 
+// Memory-based Rate Limiting Store (fallback when Redis unavailable)
+export class MemoryRateLimitStore {
+  private store = new Map<string, { count: number; resetTime: number }>();
+  private blacklist = new Map<string, number>(); // IP -> expiration timestamp
+  private keyPrefix: string;
+  private cleanupInterval: NodeJS.Timeout;
+
+  constructor(keyPrefix = 'rate_limit:') {
+    this.keyPrefix = keyPrefix;
+    
+    // Cleanup expired entries every 5 minutes
+    this.cleanupInterval = setInterval(() => {
+      this.cleanup();
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Increment rate limit counter and return current count
+   */
+  async increment(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+    const fullKey = `${this.keyPrefix}${key}`;
+    const now = Date.now();
+    const windowStart = Math.floor(now / windowMs) * windowMs;
+    const resetTime = windowStart + windowMs;
+
+    const existing = this.store.get(fullKey);
+    
+    // Reset if outside current window
+    if (!existing || existing.resetTime <= now) {
+      this.store.set(fullKey, { count: 1, resetTime });
+      return { count: 1, resetTime };
+    }
+
+    // Increment within current window
+    existing.count++;
+    this.store.set(fullKey, existing);
+    return { count: existing.count, resetTime: existing.resetTime };
+  }
+
+  /**
+   * Get current rate limit count
+   */
+  async get(key: string): Promise<number> {
+    const fullKey = `${this.keyPrefix}${key}`;
+    const existing = this.store.get(fullKey);
+    
+    if (!existing || existing.resetTime <= Date.now()) {
+      return 0;
+    }
+    
+    return existing.count;
+  }
+
+  /**
+   * Reset rate limit counter
+   */
+  async reset(key: string): Promise<void> {
+    const fullKey = `${this.keyPrefix}${key}`;
+    this.store.delete(fullKey);
+  }
+
+  /**
+   * Add to blacklist for progressive penalties
+   */
+  async addToBlacklist(ip: string, durationMs: number): Promise<void> {
+    const expirationTime = Date.now() + durationMs;
+    this.blacklist.set(ip, expirationTime);
+    
+    console.log(`🚨 SECURITY: IP ${ip} blacklisted for ${Math.round(durationMs / 1000)}s due to rate limit violation`);
+  }
+
+  /**
+   * Check if IP is blacklisted
+   */
+  async isBlacklisted(ip: string): Promise<boolean> {
+    const expiration = this.blacklist.get(ip);
+    
+    if (!expiration) {
+      return false;
+    }
+    
+    if (expiration <= Date.now()) {
+      this.blacklist.delete(ip);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Cleanup expired entries
+   */
+  private cleanup(): void {
+    const now = Date.now();
+    
+    // Clean rate limit store
+    for (const [key, value] of Array.from(this.store.entries())) {
+      if (value.resetTime <= now) {
+        this.store.delete(key);
+      }
+    }
+    
+    // Clean blacklist
+    for (const [ip, expiration] of Array.from(this.blacklist.entries())) {
+      if (expiration <= now) {
+        this.blacklist.delete(ip);
+      }
+    }
+  }
+
+  /**
+   * Get statistics for monitoring
+   */
+  getStats(): { totalEntries: number; blacklistedIPs: number } {
+    return {
+      totalEntries: this.store.size,
+      blacklistedIPs: this.blacklist.size
+    };
+  }
+
+  /**
+   * Cleanup and destroy store
+   */
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.store.clear();
+    this.blacklist.clear();
+  }
+}
+
 // Redis Rate Limiting Store
 export class RedisRateLimitStore {
   private redis: Redis;
@@ -150,14 +282,24 @@ export class RedisRateLimitStore {
   }
 }
 
-// Multi-Layer Rate Limiting Manager
+// Multi-Layer Rate Limiting Manager with fallback support
 export class MultiLayerRateLimiter {
-  private store: RedisRateLimitStore;
+  private store: RedisRateLimitStore | MemoryRateLimitStore;
   private config: RateLimitConfig;
+  private useRedis: boolean;
 
-  constructor(redis: Redis, config: RateLimitConfig = DEFAULT_RATE_LIMIT_CONFIG) {
-    this.store = new RedisRateLimitStore(redis);
+  constructor(redis: Redis | null = null, config: RateLimitConfig = DEFAULT_RATE_LIMIT_CONFIG) {
     this.config = config;
+    
+    if (redis) {
+      this.store = new RedisRateLimitStore(redis);
+      this.useRedis = true;
+      console.log('✅ SECURITY: Using Redis-based rate limiting');
+    } else {
+      this.store = new MemoryRateLimitStore();
+      this.useRedis = false;
+      console.log('🔄 SECURITY: Using memory-based rate limiting fallback');
+    }
   }
 
   /**
@@ -865,8 +1007,8 @@ export function validateSecurityConfiguration(): void {
     
     console.log(`✅ SECURITY: Production configuration validated successfully`);
     console.log(`✅ SECURITY: Allowed origins: ${origins.join(', ')}`);
-    console.log(`✅ SECURITY: JWT secret configured: ${process.env.JWT_SECRET.substring(0, 8)}...`);
-    console.log(`✅ SECURITY: OpenAI API key configured: ${process.env.OPENAI_API_KEY.substring(0, 8)}...`);
+    console.log(`✅ SECURITY: JWT secret configured: YES`);
+    console.log(`✅ SECURITY: OpenAI API key configured: YES`);
   } else {
     console.log('🔄 SECURITY: Development mode - using relaxed security configuration');
   }

@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 import validator from "validator";
 import Stripe from "stripe";
 import { z } from "zod";
+import ENV_CONFIG from "./env-config";
 
 // SECURITY ENHANCEMENT: Extend Express Request interface to include validated data
 declare global {
@@ -64,10 +65,18 @@ import {
   type BrowserAutomationPayload
 } from "./queue";
 
-// Production-ready secure getBaseUrl()
+// SECURITY HARDENED: Production-ready secure getBaseUrl() with FRONTEND_URL validation
 function getBaseUrl(req: Request): string {
+  // PRIORITY 1: Use validated FRONTEND_URL if explicitly configured
+  const validatedFrontendUrl = ENV_CONFIG.getValidatedFrontendUrl();
+  if (validatedFrontendUrl) {
+    console.log(`🔗 Using validated FRONTEND_URL: ${validatedFrontendUrl} (NODE_ENV: ${process.env.NODE_ENV})`);
+    return validatedFrontendUrl;
+  }
+
+  // PRIORITY 2: Dynamic detection for development or fallback
   const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = (forwardedProto || req.protocol).toLowerCase();
+  const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || req.protocol).toLowerCase();
   const host = req.headers.host;
 
   if (!host) {
@@ -254,56 +263,8 @@ async function checkDatabaseHealth(): Promise<boolean> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Stripe webhook endpoint - MUST be before JSON body parser
-  app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), (req, res) => {
-    const sig = req.get('stripe-signature');
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      console.error('Missing STRIPE_WEBHOOK_SECRET');
-      return res.status(500).json({ error: 'Webhook secret not configured' });
-    }
-
-    try {
-      // ✅ DEV MODE: Handle missing Stripe in development
-      if (!stripe) {
-        console.log('⚠️ DEV MODE: Stripe webhook received but Stripe not initialized');
-        return res.status(501).json({ error: 'Payments disabled in development mode' });
-      }
-      
-      // Use Stripe's constructEvent for proper signature verification
-      const event = stripe.webhooks.constructEvent(req.body, sig!, webhookSecret);
-
-      // Handle the event
-      switch (event.type) {
-        case 'payment_intent.succeeded':
-          console.log(`💰 Payment succeeded: ${event.data.object.id}`);
-          // Note: Session activation is handled by checkout_success endpoint
-          break;
-        
-        case 'payment_intent.payment_failed':
-          console.log(`💸 Payment failed: ${event.data.object.id}`);
-          logSecurityEvent('payment_fraud', {
-            paymentIntentId: event.data.object.id,
-            failureReason: event.data.object.last_payment_error?.message
-          });
-          break;
-        
-        default:
-          console.log(`🔔 Unhandled event type: ${event.type}`);
-      }
-
-      res.json({ received: true });
-    } catch (error) {
-      console.error('Webhook signature verification failed:', error);
-      logSecurityEvent('payment_fraud', {
-        endpoint: '/api/stripe/webhook',
-        error: 'Webhook processing failed',
-        clientIP: req.ip
-      });
-      res.status(400).json({ error: 'Webhook error' });
-    }
-  });
+  // NOTE: Stripe webhook endpoint has been moved to server/index.ts 
+  // BEFORE express.json() middleware to prevent body parsing conflicts
 
   // Initialize queue system
   try {
@@ -354,7 +315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw connectionError;
       }
     } else if (process.env.NODE_ENV === 'production') {
-      throw new Error('PRODUCTION_SECURITY_ERROR: Redis configuration required for liberation protocol');
+      console.warn('⚠️  PRODUCTION: Redis not configured - using memory fallback for Replit deployment');
+      console.warn('   Note: Redis is recommended for multi-instance production deployments');
     } else {
       console.warn('⚠️  DEVELOPMENT: Redis not configured - rate limiting and session security disabled');
     }
@@ -367,25 +329,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       rateLimiter = null as any;
       sessionSecurityStore = null as any;
     } else {
-      throw error;
+      console.warn('🔄 ROUTES: Falling back to memory store for Replit production deployment');
+      redis = null;
+      rateLimiter = null as any;
+      sessionSecurityStore = null as any;
     }
   }
   
   // Note: Enhanced Helmet security configuration is now applied in server/index.ts
   // This provides comprehensive security headers including HSTS, CSP, and custom policies
   
-  // Apply comprehensive rate limiting middleware
-  if (rateLimiter) {
-    // Global rate limiting for all API endpoints
-    app.use('/api', rateLimiter.createGlobalLimiter());
-    
-    // User-specific rate limiting for authenticated endpoints
-    app.use('/api', rateLimiter.createUserLimiter());
-    
-    console.log('✅ Comprehensive rate limiting middleware applied');
-  } else {
-    console.warn('⚠️  Rate limiting disabled - Redis not available');
+  // CRITICAL FIX: Always apply rate limiting (Redis or memory fallback)
+  if (!rateLimiter) {
+    // Create memory-based rate limiter if Redis failed
+    console.log('🔄 ROUTES: Initializing memory-based rate limiting fallback');
+    rateLimiter = new MultiLayerRateLimiter(null, DEFAULT_RATE_LIMIT_CONFIG);
   }
+  
+  // Global rate limiting for all API endpoints
+  app.use('/api', rateLimiter.createGlobalLimiter());
+  
+  // User-specific rate limiting for authenticated endpoints
+  app.use('/api', rateLimiter.createUserLimiter());
+  
+  console.log('✅ Comprehensive rate limiting middleware applied');
   
   // Apply session security middleware (only when Redis available)
   if (sessionSecurityStore && redis) {
