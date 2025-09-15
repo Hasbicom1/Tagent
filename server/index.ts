@@ -144,159 +144,70 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // Initialize Redis for session storage and security features
-let redis: Redis | null = null;
+let redisInstance: Redis | null = null;
 let sessionSecurityStore: SessionSecurityStore | null = null;
 
-// Helper function to test Redis connectivity with timeout
-async function testRedisConnection(redisUrl: string, timeoutMs: number = 3000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      resolve(false);
-    }, timeoutMs);
-    
-    const testRedis = new Redis(redisUrl, {
-      lazyConnect: true,
-      connectTimeout: timeoutMs,
-      commandTimeout: timeoutMs,
-      maxRetriesPerRequest: 1,
-    });
-    
-    // Add error listener to prevent crashes
-    testRedis.on('error', (e) => {
-      console.warn('⚠️  SESSION test redis error:', e.message);
-    });
-    
-    testRedis.ping()
-      .then(() => {
-        clearTimeout(timeout);
-        testRedis.disconnect();
-        resolve(true);
-      })
-      .catch(() => {
-        clearTimeout(timeout);
-        testRedis.disconnect();
-        resolve(false);
-      });
+export function getRedis(): Redis | null {
+  return redisInstance;
+}
+
+export async function initializeRedis(): Promise<Redis | null> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return null;
+  
+  redisInstance = new Redis(redisUrl, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+    commandTimeout: 5000,
+    enableAutoPipelining: true
   });
+  
+  // Add error listener to prevent crashes
+  redisInstance.on('error', (e) => {
+    console.warn('⚠️  REDIS error:', e.message);
+  });
+  
+  await redisInstance.ping();
+  return redisInstance;
 }
 
 async function initializeRedisSession(): Promise<any> {
   try {
-    const redisUrl = process.env.REDIS_URL;
     const isDevelopment = process.env.NODE_ENV === 'development';
-    const isReplit = process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID;
     
-    // REPLIT FIX: For Replit deployment, always fall back to memory store unless Redis is explicitly working
-    if (redisUrl && !isReplit) {
-      // Test Redis connection with timeout for non-Replit environments
-      const isRedisWorking = await testRedisConnection(redisUrl, 3000);
-      
-      if (isRedisWorking) {
-        try {
-          // Create the actual connection for session storage
-          redis = new Redis(redisUrl, {
-            lazyConnect: true,
-            connectTimeout: 5000,
-            commandTimeout: 3000,
-            maxRetriesPerRequest: 3,
-          });
-          
-          // Add error listener to prevent crashes
-          redis.on('error', (e) => {
-            console.warn('⚠️  SESSION redis error:', e.message);
-          });
-          
-          // Test the actual connection
-          await redis.ping();
-          console.log('✅ SECURITY: Redis connection established for session storage');
-          
-          // Initialize session security store
-          sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-          console.log('✅ SECURITY: Session security store initialized');
-          
-          // Create Redis session store for production
-          const redisStore = createRedisSessionStore(redis);
-          
-          // Add error listener to RedisStore to prevent crashes
-          redisStore.on('error', (e) => {
-            console.warn('⚠️  SESSION store error:', e.message);
-          });
-          
-          console.log('✅ SECURITY: Redis session store created');
-          
-          return redisStore;
-        } catch (connectionError) {
-          console.error('❌ SECURITY: Redis connection failed during setup:', connectionError instanceof Error ? connectionError.message : connectionError);
-          if (redis) {
-            redis.disconnect();
-            redis = null;
-          }
-        }
-      } else {
-        console.warn('⚠️  SECURITY: Redis connection test failed, falling back to memory store');
-      }
-    } else if (redisUrl && isReplit) {
-      console.log('🔄 SECURITY: Replit deployment detected - testing Redis connectivity with timeout');
-      
-      // For Replit, test Redis connectivity with aggressive timeout
-      const isRedisWorking = await testRedisConnection(redisUrl, 2000);
-      
-      if (!isRedisWorking) {
-        console.warn('⚠️  SECURITY: Redis not available in Replit environment, using memory store');
-      } else {
-        console.log('✅ SECURITY: Redis available in Replit, proceeding with Redis setup');
-        // Redis is working in Replit, proceed normally
-        try {
-          redis = new Redis(redisUrl, {
-            lazyConnect: true,
-            connectTimeout: 3000,
-            commandTimeout: 2000,
-            maxRetriesPerRequest: 2,
-          });
-          
-          // Add error listener to prevent crashes
-          redis.on('error', (e) => {
-            console.warn('⚠️  SESSION redis error (Replit):', e.message);
-          });
-          
-          await redis.ping();
-          sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-          const redisStore = createRedisSessionStore(redis);
-          
-          // Add error listener to RedisStore to prevent crashes
-          redisStore.on('error', (e) => {
-            console.warn('⚠️  SESSION store error (Replit):', e.message);
-          });
-          
-          console.log('✅ SECURITY: Redis session store created for Replit');
-          return redisStore;
-        } catch (connectionError) {
-          console.error('❌ SECURITY: Redis setup failed in Replit:', connectionError instanceof Error ? connectionError.message : connectionError);
-          if (redis) {
-            redis.disconnect();
-            redis = null;
-          }
-        }
-      }
-    }
+    // Initialize Redis using the new configuration
+    const redis = await initializeRedis();
     
-    // Fallback to memory store for development or when Redis is unavailable
-    if (isDevelopment || isReplit) {
-      console.log('🔄 SECURITY: Using memory store for session storage');
-      return null;
+    if (redis) {
+      console.log('✅ SECURITY: Redis connection established for session storage');
+      
+      // Initialize session security store
+      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+      console.log('✅ SECURITY: Session security store initialized');
+      
+      // Create Redis session store for production
+      const redisStore = createRedisSessionStore(redis);
+      
+      // Add error listener to RedisStore to prevent crashes
+      redisStore.on('error', (e) => {
+        console.warn('⚠️  SESSION store error:', e.message);
+      });
+      
+      console.log('✅ SECURITY: Redis session store created');
+      return redisStore;
     } else {
-      // Only throw error in production non-Replit environments when Redis is required
-      throw new Error('REDIS_URL required for production session storage and security features');
+      // Fallback to memory store for development or when Redis is unavailable
+      if (isDevelopment) {
+        console.log('🔄 SECURITY: Using memory store for session storage in development');
+        return null;
+      } else {
+        console.warn('⚠️  SECURITY: Redis not available, using memory store (not recommended for production)');
+        return null;
+      }
     }
   } catch (error) {
     console.error('❌ SECURITY: Redis session initialization failed:', error);
-    
-    // In production, gracefully degrade rather than failing startup
-    if (process.env.NODE_ENV === 'production') {
-      console.warn('⚠️  SECURITY: Production detected but Redis unavailable - using memory store (not recommended for production)');
-      return null;
-    }
-    
     console.warn('⚠️  SECURITY: Falling back to memory store');
     return null;
   }
@@ -468,7 +379,7 @@ app.get('/api/health', (req: Request, res: Response) => {
           vncHost: process.env.VNC_HOST || '127.0.0.1',
           vncPort: parseInt(process.env.VNC_PORT || '5901', 10),
           maxConnections: parseInt(process.env.VNC_MAX_CONNECTIONS || '10', 10)
-        }, redis || undefined); // Pass Redis connection for session validation
+        }, redisInstance || undefined); // Pass Redis connection for session validation
         log('✅ VNC proxy server initialized');
 
         // SECURITY FIX: Validate WebSocket configuration is working

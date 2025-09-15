@@ -1,0 +1,68 @@
+We need to fix our production deployment for Replit + Railway Redis and make sure the app runs correctly on our custom domain: onedolaragent.ai. Please use the following details to update the code and environment.
+
+1️⃣ Redis Setup:
+
+// Original server/index.ts snippet:
+import { Redis } from 'ioredis';
+let redisInstance: Redis | null = null;
+
+export function getRedis(): Redis | null {
+  return redisInstance;
+}
+
+export async function initializeRedis(): Promise<Redis | null> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return null;
+  
+  redisInstance = new Redis(redisUrl, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 3,
+    retryDelayOnFailover: 100,
+    connectTimeout: 10000,
+    commandTimeout: 5000,
+    enableAutoPipelining: true
+  });
+  
+  await redisInstance.ping();
+  return redisInstance;
+}
+
+// Current issue: getaddrinfo EAI_AGAIN redis.railway.internal
+
+2️⃣ Environment Variables (for Replit deployment):
+
+// Use Railway public Redis URL with your actual password
+REDIS_URL=redis://default:<your_redis_password>@trolley.proxy.rlwy.net:35645
+NODE_ENV=production
+PORT=5000
+HOST=0.0.0.0
+FORCE_HTTPS=true
+SESSION_SECRET=BC085FD94EFDB4477A8E93688189C16AEDA240A94B22CC7FA567BDBD7E4E3F77
+CSRF_SECRET=74f23ad8eeb4579c3375b1ba097605b30c614d7c6a442aa69223a413fb0065a2
+DOMAIN=onedolaragent.ai
+CORS_ORIGINS=https://onedolaragent.ai,https://www.onedolaragent.ai
+
+3️⃣ Goals:
+
+- Ensure production app connects to Railway Redis for sessions, rate limiting, and caching.
+- Keep fallback to in-memory mode for development.
+- Deploy correctly on custom domain onedolaragent.ai.
+- All production features must be enabled (health endpoints, WebSockets, ML fraud detection, etc.).
+
+4️⃣ Verification:
+
+After deployment, run the verification script:
+
+node verify-deployment.js https://onedolaragent.ai
+
+It should check:
+
+✅ Website accessibility and HTTPS  
+✅ Health endpoints  
+✅ Database and Redis connections  
+✅ Security headers and configurations  
+✅ Payment system integration  
+✅ WebSocket functionality  
+✅ Performance benchmarks
+
+Please update the code and environment variables correctly based on the above information and redeploy. Ensure no Redis connection errors appear during startup.
