@@ -1231,8 +1231,11 @@ export function createCSRFProtectionMiddleware() {
       '/api/health'           // API health endpoint
     ];
     
-    // Skip for GET requests (CSRF is for state-changing operations)
-    if (req.method === 'GET' || exemptPaths.includes(req.path)) {
+    // Skip for safe HTTP methods and static files
+    const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+    const isStaticFile = req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|html)$/i);
+    
+    if (safeMethods.includes(req.method) || exemptPaths.includes(req.path) || isStaticFile) {
       return next();
     }
     
