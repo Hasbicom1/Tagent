@@ -118,8 +118,8 @@ app.use(helmet({
     reportOnly: false
   } : false,
 
-  // X-Frame-Options
-  frameguard: {
+  // X-Frame-Options - disabled in development for Replit preview panel
+  frameguard: ENV_CONFIG.IS_DEVELOPMENT ? false : {
     action: securityConfig.frameOptions.toLowerCase() as 'deny' | 'sameorigin'
   },
 
