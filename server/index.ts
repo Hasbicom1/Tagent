@@ -105,7 +105,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
-      frameAncestors: ["'none'"],
+      frameAncestors: ["'none'", "*.replit.dev", "*.replit.com"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
       upgradeInsecureRequests: []
@@ -113,8 +113,8 @@ app.use(helmet({
     reportOnly: false
   } : false,
 
-  // X-Frame-Options
-  frameguard: {
+  // X-Frame-Options - Allow Replit preview while maintaining security
+  frameguard: process.env.REPL_ID ? { action: 'sameorigin' } : {
     action: securityConfig.frameOptions.toLowerCase() as 'deny' | 'sameorigin'
   },
 
