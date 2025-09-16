@@ -112,12 +112,39 @@ export const ENV_CONFIG = {
   
   // Security-safe configuration logging
   getValidatedAllowedOrigins(): string[] {
+    // In development mode, include development origins with Replit domains
+    if (detectedEnv === 'development') {
+      const devOrigins = [
+        'http://localhost:5000', 
+        'http://127.0.0.1:5000', 
+        'https://localhost:5000', 
+        'http://localhost:3000', 
+        'https://localhost:3000',
+        'https://onedollaragent.ai',
+        'https://www.onedollaragent.ai'
+      ];
+      
+      // Include Replit domain for development
+      if (ENV_CONFIG.IS_REPLIT && process.env.REPL_ID) {
+        const replitDomain = `https://${process.env.REPL_ID}-00-37l83xb173uim.kirk.replit.dev`;
+        devOrigins.push(replitDomain);
+      }
+      
+      // Include any additional environment origins
+      if (process.env.ALLOWED_ORIGINS) {
+        const envOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+        devOrigins.push(...envOrigins);
+      }
+      
+      return devOrigins;
+    }
+    
+    // Production mode: Extract base domain from FRONTEND_URL
     const frontendUrl = this.getValidatedFrontendUrl();
     if (!frontendUrl) {
       return [];
     }
     
-    // Extract base domain from FRONTEND_URL
     try {
       const url = new URL(frontendUrl);
       const hostname = url.hostname;
