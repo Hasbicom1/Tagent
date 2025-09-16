@@ -913,36 +913,40 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     });
 
 
-    // TEMP FIX: Skip Vite dev server due to restart loop issue
-    // Backend is fully functional - focusing on API stability first
-    log(`🔍 Temporarily using production mode to avoid Vite restart loop`);
-    log('📦 Setting up static file serving...');
-    try {
-      // Create a basic index.html for testing if dist doesn't exist
-      const distPath = path.resolve(import.meta.dirname, "../dist/public");
-      if (!fs.existsSync(distPath)) {
-        fs.mkdirSync(distPath, { recursive: true });
-        const basicHtml = `<!DOCTYPE html>
-<html><head><title>Agent HQ - Backend Ready</title></head>
-<body style="font-family:monospace;background:#000;color:#00ff41;padding:20px;">
-<h1>🤖 Agent HQ Backend Systems Online</h1>
-<p>✅ All backend systems functional</p>
-<p>✅ WebSocket: ws://localhost:5000/ws</p>
-<p>✅ Health: <a href="/health" style="color:#00ff41">/health</a></p>
-<p>✅ Payment system ready</p>
-<p>⚠️ Frontend in development mode - using API endpoints</p>
+    // Frontend serving: Vite dev server in development, static in production
+    if (ENV_CONFIG.IS_DEVELOPMENT) {
+      log('⚡ Setting up Vite dev server for live development...');
+      try {
+        await setupVite(app, server);
+        log('✅ Vite dev server initialized - React app ready for live development');
+      } catch (error) {
+        log(`❌ Vite dev server failed: ${error.message}`);
+        log('🔄 Falling back to static file serving...');
+        
+        // Fallback to static serving if Vite fails
+        const distPath = path.resolve(import.meta.dirname, "../dist/public");
+        if (!fs.existsSync(distPath)) {
+          fs.mkdirSync(distPath, { recursive: true });
+          const basicHtml = `<!DOCTYPE html>
+<html><head><title>Agent HQ - Development Fallback</title></head>
+<body style="font-family:monospace;background:#000;color:#ff6b35;padding:20px;">
+<h1>⚠️ Agent HQ - Development Fallback Mode</h1>
+<p>❌ Vite dev server failed to start</p>
+<p>✅ Backend systems operational</p>
+<p>🔧 Fix Vite issues and restart for full React app</p>
 </body></html>`;
-        fs.writeFileSync(path.join(distPath, 'index.html'), basicHtml);
+          fs.writeFileSync(path.join(distPath, 'index.html'), basicHtml);
+        }
+        app.use(express.static(distPath));
+        app.use("*", (_req, res) => {
+          res.sendFile(path.resolve(distPath, "index.html"));
+        });
       }
-      // Direct static file serving - bypass protected serveStatic function
-      app.use(express.static(distPath));
-      
-      // SPA fallback for React Router
-      app.use("*", (_req, res) => {
-        res.sendFile(path.resolve(distPath, "index.html"));
-      });
-      
-      log('✅ Static file serving setup complete');
+    } else {
+      log('📦 Setting up static file serving for production...');
+      try {
+        serveStatic(app);
+        log('✅ Static file serving setup complete');
     } catch (error) {
       log('❌ Static setup failed:', error instanceof Error ? error.message : String(error));
       // Don't throw - continue with backend only
