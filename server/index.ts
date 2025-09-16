@@ -769,23 +769,30 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     // SECURITY ENHANCEMENT: Validate enhanced security headers and production setup
     log('🔐 Validating enhanced security configuration...');
     validateSecurityHeaders();
-    validateProductionSecurity();
-    log('✅ Enhanced security configuration validated');
     
-    // STRIPE LIVE KEY VALIDATION: Enforce production-only live keys
-    log('🔐 Validating Stripe keys for production deployment...');
-    const stripeValidation = validateStripeKeysForProduction();
-    if (!stripeValidation.success) {
-      logger.error('❌ STRIPE: Production key validation failed', {
-        errors: stripeValidation.errors,
-        action: 'Application startup aborted'
-      });
-      console.error('🚨 CRITICAL ERROR: Stripe production key validation failed');
-      stripeValidation.errors.forEach(error => console.error(`   ${error}`));
-      console.error('   REQUIRED: Configure live Stripe keys (sk_live_/pk_live_) for production deployment');
-      process.exit(1); // FAIL FAST: Invalid Stripe keys not allowed in production
+    // Only validate production security in production mode
+    if (ENV_CONFIG.NODE_ENV === 'production') {
+      validateProductionSecurity();
+      
+      // STRIPE LIVE KEY VALIDATION: Enforce production-only live keys
+      log('🔐 Validating Stripe keys for production deployment...');
+      const stripeValidation = validateStripeKeysForProduction();
+      if (!stripeValidation.success) {
+        logger.error('❌ STRIPE: Production key validation failed', {
+          errors: stripeValidation.errors,
+          action: 'Application startup aborted'
+        });
+        console.error('🚨 CRITICAL ERROR: Stripe production key validation failed');
+        stripeValidation.errors.forEach(error => console.error(`   ${error}`));
+        console.error('   REQUIRED: Configure live Stripe keys (sk_live_/pk_live_) for production deployment');
+        process.exit(1); // FAIL FAST: Invalid Stripe keys not allowed in production
+      }
+      logger.info('✅ STRIPE: Production key validation successful - live keys confirmed');
+    } else {
+      console.log('🔄 SECURITY: Development mode - using relaxed security configuration');
     }
-    logger.info('✅ STRIPE: Production key validation successful - live keys confirmed');
+    
+    log('✅ Enhanced security configuration validated');
     
     // CORS RUNTIME CONFIRMATION: Log exact allowed origins for production verification
     const allowedOrigins = ENV_CONFIG.getValidatedAllowedOrigins();
