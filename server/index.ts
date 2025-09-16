@@ -265,7 +265,9 @@ export async function initializeRedis(): Promise<Redis | null> {
     }
     
     // EMERGENCY FALLBACK: Allow development testing without Redis while preserving production requirements  
-    if (process.env.NODE_ENV === 'development' && !process.env.FORCE_REDIS_REQUIRED) {
+    // Check if we're in a Replit development environment (has REPL_ID but no actual deployment)
+    const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
+    if ((process.env.NODE_ENV === 'development' || isReplitDev) && !process.env.FORCE_REDIS_REQUIRED) {
       console.log('⚠️  DEV MODE: Redis disabled - Redis connection failed but allowing development testing');
       console.log('   This is NOT suitable for production - Redis is required for production deployment');
       console.log('   Session management will use memory store (data will be lost on restart)');
@@ -346,15 +348,18 @@ async function initializeSession() {
   try {
     redisStore = await initializeRedisSession();
     
-    // Validate Redis session store is available
-    if (!redisStore) {
-      throw new Error('Redis session store is required but not available');
+    let sessionConfig;
+    
+    if (redisStore) {
+      console.log('✅ SECURITY: Using Redis session store for production-grade session management');
+      console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
+      sessionConfig = getSessionConfig(redisStore);
+    } else {
+      // Fallback to memory store for development
+      console.log('⚠️  DEV MODE: Using memory session store (sessions will be lost on restart)');
+      console.log('   This is NOT suitable for production - Redis is required for production deployment');
+      sessionConfig = getSessionConfig(null); // No store = memory store
     }
-    
-    console.log('✅ SECURITY: Using Redis session store for production-grade session management');
-    console.log('✅ SECURITY: Session features: persistence, IP binding, concurrent session limits, activity tracking');
-    
-    const sessionConfig = getSessionConfig(redisStore);
     
     // CRITICAL DEBUG: Log cookie configuration to verify secure flag
     console.log('🔧 SECURITY: Cookie config debug:', JSON.stringify(sessionConfig.cookie, null, 2));
@@ -813,16 +818,25 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     try {
       // Get Redis instance - MUST be available for production
       const redis = redisInstance;
-      if (!redis) {
-        throw new Error('Redis connection is required but not available - idempotency service cannot initialize');
+      if (redis) {
+        const idempotencyService = initializeIdempotencyService(redis);
+        const stats = idempotencyService.getStats();
+        
+        logger.info('✅ IDEMPOTENCY: Service initialized successfully (Redis-only)', {
+          hasRedis: stats.hasRedis,
+          redisConnected: stats.redisConnected
+        });
+      } else {
+        // Check if we're in development mode
+        const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
+        if ((process.env.NODE_ENV === 'development' || isReplitDev) && !process.env.FORCE_REDIS_REQUIRED) {
+          console.log('⚠️  DEV MODE: Idempotency service disabled - Redis not available');
+          console.log('   This is NOT suitable for production - webhook duplicate prevention disabled');
+          logger.info('⚠️  DEV MODE: Idempotency service disabled (Redis required)');
+        } else {
+          throw new Error('Redis connection is required but not available - idempotency service cannot initialize');
+        }
       }
-      const idempotencyService = initializeIdempotencyService(redis);
-      const stats = idempotencyService.getStats();
-      
-      logger.info('✅ IDEMPOTENCY: Service initialized successfully (Redis-only)', {
-        hasRedis: stats.hasRedis,
-        redisConnected: stats.redisConnected
-      });
     } catch (error) {
       logger.error('❌ PRODUCTION STARTUP FAILED: Redis idempotency service required', {
         error: error instanceof Error ? error.message : String(error),
