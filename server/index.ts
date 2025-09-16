@@ -65,6 +65,18 @@ app.set('env', ENV_CONFIG.NODE_ENV);
 // Add request ID and logging middleware early
 app.use(addRequestId);
 
+// Add Replit www-variant redirect middleware (before other middleware)
+app.use((req, res, next) => {
+  const host = req.get('host');
+  // Check if this is a Replit domain with www prefix
+  if (host && host.startsWith('www.') && host.includes('.replit.dev')) {
+    const redirectUrl = `https://${host.substring(4)}${req.url}`;
+    console.log(`🔀 REPLIT: Redirecting www variant to non-www: ${redirectUrl}`);
+    return res.redirect(301, redirectUrl);
+  }
+  next();
+});
+
 // Add health check endpoints (before other middleware)
 app.get('/health', healthCheck);
 app.get('/health/live', livenessCheck);
