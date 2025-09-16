@@ -883,35 +883,24 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     });
 
 
-    // PRODUCTION MODE: Serve built static files
-    log(`🔍 Temporarily using production mode to avoid Vite restart loop`);
-    log('📦 Setting up static file serving...');
+    // DEVELOPMENT MODE: Set up Vite development server with HMR
+    log('🔧 Setting up Vite development server...');
     try {
-      // FIXED: Correct path to built static files (relative to project root)
-      const distPath = path.resolve(import.meta.dirname, "../dist/public");
-      
-      if (!fs.existsSync(distPath)) {
-        throw new Error(`Build directory not found: ${distPath}. Run 'npm run build' first.`);
-      }
-      
-      log(`📂 Serving static files from: ${distPath}`);
-      
-      // Serve static assets (JS, CSS, images)
-      app.use(express.static(distPath));
-      
-      // SPA fallback - serve index.html for all non-API routes
-      app.use("*", (req, res) => {
-        if (req.originalUrl.startsWith('/api/')) {
-          return res.status(404).json({ error: 'API endpoint not found' });
-        }
-        res.sendFile(path.resolve(distPath, "index.html"));
-      });
-      
-      log('✅ Static file serving setup complete');
+      await setupVite(app, server);
+      log('✅ Vite development server setup complete');
       log(`📍 Frontend accessible at: http://localhost:${port}`);
+      log('⚡ Hot module replacement enabled');
     } catch (error) {
-      log('❌ Static setup failed:', error instanceof Error ? error.message : String(error));
-      throw error; // This is critical - app won't work without frontend
+      log('❌ Vite setup failed:', error instanceof Error ? error.message : String(error));
+      // Fallback to static serving if Vite fails
+      log('🔄 Falling back to static file serving...');
+      try {
+        serveStatic(app);
+        log('✅ Static file serving setup complete (fallback)');
+      } catch (staticError) {
+        log('❌ Static fallback also failed:', staticError instanceof Error ? staticError.message : String(staticError));
+        throw error; // Original Vite error
+      }
     }
 
     // Global error handler - MUST be after all routes to catch route errors
