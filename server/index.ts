@@ -920,7 +920,7 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
         await setupVite(app, server);
         log('✅ Vite dev server initialized - React app ready for live development');
       } catch (error) {
-        log(`❌ Vite dev server failed: ${error.message}`);
+        log(`❌ Vite dev server failed: ${error instanceof Error ? error.message : String(error)}`);
         log('🔄 Falling back to static file serving...');
         
         // Fallback to static serving if Vite fails
@@ -947,9 +947,10 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       try {
         serveStatic(app);
         log('✅ Static file serving setup complete');
-    } catch (error) {
-      log('❌ Static setup failed:', error instanceof Error ? error.message : String(error));
-      // Don't throw - continue with backend only
+      } catch (error) {
+        log('❌ Static setup failed:', error instanceof Error ? error.message : String(error));
+        // Don't throw - continue with backend only
+      }
     }
 
     // Global error handler - MUST be after all routes to catch route errors
