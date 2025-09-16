@@ -85,7 +85,7 @@ const ENV_SECURITY_REQUIREMENTS: Record<string, SecurityRequirement> = {
     description: 'Stripe publishable key (pk_test_... or pk_live_...)'
   },
   'OPENAI_API_KEY': {
-    pattern: /^sk-[a-zA-Z0-9_-]{20,}$/,
+    pattern: /^sk-[a-zA-Z0-9]{48,}$/,
     required: true,
     description: 'OpenAI API key (sk-...)'
   },

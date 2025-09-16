@@ -6,14 +6,6 @@
 
 // AUTO-DETECT PRODUCTION ENVIRONMENT for public deployments
 function detectProductionEnvironment(): string {
-  // PRIORITY 1: If NODE_ENV is explicitly set to development, honor it (for debugging)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔧 OVERRIDE: Development mode explicitly requested via NODE_ENV');
-    console.log(`   REPL_ID: ${process.env.REPL_ID ? 'YES' : 'NO'}`);
-    console.log(`   FRONTEND_URL: ${process.env.FRONTEND_URL || 'NOT_SET'}`);
-    return 'development';
-  }
-
   // Force auto-detection for Replit deployments
   const isReplitDeployment = !!(process.env.REPLIT_DEPLOYMENT_ID || process.env.REPL_ID);
   const frontendUrl = process.env.FRONTEND_URL || '';
@@ -46,8 +38,8 @@ function detectProductionEnvironment(): string {
     return 'production';
   }
 
-  // Auto-detect production ONLY for actual Replit deployments (not development)
-  if (process.env.REPLIT_DEPLOYMENT_ID) {
+  // Auto-detect production for Replit deployments
+  if (isReplitDeployment) {
     console.log('🚀 AUTO-DETECTED: Production environment for Replit deployment');
     console.log(`   REPLIT_DEPLOYMENT_ID: ${process.env.REPLIT_DEPLOYMENT_ID ? 'YES' : 'NO'}`);
     console.log(`   REPL_ID: ${process.env.REPL_ID ? 'YES' : 'NO'}`);
@@ -55,14 +47,14 @@ function detectProductionEnvironment(): string {
     return 'production';
   }
 
-  // Check for production domain in FRONTEND_URL (only when not in explicit development)
-  if (isProductionDomain && process.env.NODE_ENV !== 'development') {
+  // Check for production domain in FRONTEND_URL
+  if (isProductionDomain) {
     console.log('🚀 AUTO-DETECTED: Production environment for production domain');
     console.log(`   FRONTEND_URL: ${frontendUrl}`);
     return 'production';
   }
 
-  // If NODE_ENV is explicitly set, use it
+  // If NODE_ENV is explicitly set and not auto-detected as production, use it
   if (process.env.NODE_ENV) {
     console.log(`🎯 Environment explicitly set: ${process.env.NODE_ENV}`);
     return process.env.NODE_ENV;
