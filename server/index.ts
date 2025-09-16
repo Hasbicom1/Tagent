@@ -152,8 +152,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     // Webhooks must accept HTTP requests and return 2xx responses, not redirects
     const isWebhookEndpoint = req.path === '/api/stripe/webhook';
     
-    // Force HTTPS in production (except for Stripe webhooks)
-    if (!isWebhookEndpoint && req.header('x-forwarded-proto') !== 'https' && process.env.FORCE_HTTPS !== 'false') {
+    // Force HTTPS in production (except for Stripe webhooks and localhost/replit development)
+    const isLocalhost = req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname?.includes('replit.dev');
+    const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
+    
+    if (!isWebhookEndpoint && !isLocalhost && !isReplitDev && req.header('x-forwarded-proto') !== 'https' && process.env.FORCE_HTTPS !== 'false') {
       return res.redirect(301, `https://${req.header('host')}${req.url}`);
     }
     
@@ -880,39 +883,35 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     });
 
 
-    // TEMP FIX: Skip Vite dev server due to restart loop issue
-    // Backend is fully functional - focusing on API stability first
+    // PRODUCTION MODE: Serve built static files
     log(`🔍 Temporarily using production mode to avoid Vite restart loop`);
     log('📦 Setting up static file serving...');
     try {
-      // Create a basic index.html for testing if dist doesn't exist
+      // FIXED: Correct path to built static files (relative to project root)
       const distPath = path.resolve(import.meta.dirname, "../dist/public");
+      
       if (!fs.existsSync(distPath)) {
-        fs.mkdirSync(distPath, { recursive: true });
-        const basicHtml = `<!DOCTYPE html>
-<html><head><title>Agent HQ - Backend Ready</title></head>
-<body style="font-family:monospace;background:#000;color:#00ff41;padding:20px;">
-<h1>🤖 Agent HQ Backend Systems Online</h1>
-<p>✅ All backend systems functional</p>
-<p>✅ WebSocket: ws://localhost:5000/ws</p>
-<p>✅ Health: <a href="/health" style="color:#00ff41">/health</a></p>
-<p>✅ Payment system ready</p>
-<p>⚠️ Frontend in development mode - using API endpoints</p>
-</body></html>`;
-        fs.writeFileSync(path.join(distPath, 'index.html'), basicHtml);
+        throw new Error(`Build directory not found: ${distPath}. Run 'npm run build' first.`);
       }
-      // Direct static file serving - bypass protected serveStatic function
+      
+      log(`📂 Serving static files from: ${distPath}`);
+      
+      // Serve static assets (JS, CSS, images)
       app.use(express.static(distPath));
       
-      // SPA fallback for React Router
-      app.use("*", (_req, res) => {
+      // SPA fallback - serve index.html for all non-API routes
+      app.use("*", (req, res) => {
+        if (req.originalUrl.startsWith('/api/')) {
+          return res.status(404).json({ error: 'API endpoint not found' });
+        }
         res.sendFile(path.resolve(distPath, "index.html"));
       });
       
       log('✅ Static file serving setup complete');
+      log(`📍 Frontend accessible at: http://localhost:${port}`);
     } catch (error) {
       log('❌ Static setup failed:', error instanceof Error ? error.message : String(error));
-      // Don't throw - continue with backend only
+      throw error; // This is critical - app won't work without frontend
     }
 
     // Global error handler - MUST be after all routes to catch route errors
