@@ -65,9 +65,19 @@ app.set('env', ENV_CONFIG.NODE_ENV);
 // Add request ID and logging middleware early
 app.use(addRequestId);
 
-// Note: Replit's internal editor preview uses www.*.replit.dev but their SSL certs
-// don't cover this variant, causing editor preview to fail at infrastructure level.
-// External preview links (non-www) work correctly. This is a known Replit limitation.
+// Development-only redirect for Replit internal preview SSL fix
+app.use((req, res, next) => {
+  // Only in development mode and only for Replit domains
+  if (ENV_CONFIG.IS_DEVELOPMENT && ENV_CONFIG.IS_REPLIT) {
+    const host = req.get('host');
+    if (host && host.startsWith('www.') && host.includes('.replit.dev')) {
+      const redirectUrl = `https://${host.substring(4)}${req.originalUrl}`;
+      console.log(`🔀 REPLIT DEV: Redirecting www variant → non-www: ${redirectUrl}`);
+      return res.redirect(301, redirectUrl);
+    }
+  }
+  next();
+});
 
 // Add health check endpoints (before other middleware)
 app.get('/health', healthCheck);
