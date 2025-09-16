@@ -124,10 +124,11 @@ export const ENV_CONFIG = {
         'https://www.onedollaragent.ai'
       ];
       
-      // Include Replit domain for development
+      // Include Replit domains for development (both normal and www variants)
       if (ENV_CONFIG.IS_REPLIT && process.env.REPL_ID) {
-        const replitDomain = `https://${process.env.REPL_ID}-00-37l83xb173uim.kirk.replit.dev`;
-        devOrigins.push(replitDomain);
+        const baseReplitDomain = `https://${process.env.REPL_ID}-00-37l83xb173uim.kirk.replit.dev`;
+        const wwwReplitDomain = `https://www.${process.env.REPL_ID}-00-37l83xb173uim.kirk.replit.dev`;
+        devOrigins.push(baseReplitDomain, wwwReplitDomain);
       }
       
       // Include any additional environment origins
