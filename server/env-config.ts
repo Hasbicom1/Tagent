@@ -134,14 +134,21 @@ export const ENV_CONFIG = {
     
     // REPLIT PREVIEW: Add current Replit domain when in Replit environment
     if (process.env.REPL_ID) {
-      const replitHost = process.env.REPLIT_URL || process.env.REPL_URL;
-      if (replitHost) {
-        origins.push(replitHost);
-        console.log('🔧 REPLIT: Added current Replit domain to CORS origins:', replitHost);
+      // Add current Replit domain from REPLIT_DOMAINS environment variable
+      const replitDomains = process.env.REPLIT_DOMAINS;
+      if (replitDomains) {
+        const httpsUrl = `https://${replitDomains}`;
+        origins.push(httpsUrl);
+        console.log('🔧 REPLIT: Added current Replit domain to CORS origins:', httpsUrl);
       }
       
-      // Add generic Replit domain patterns for broader compatibility
-      // Note: Actual pattern validation happens in validateWebSocketOrigin function
+      // Also check legacy environment variables
+      const replitHost = process.env.REPLIT_URL || process.env.REPL_URL;
+      if (replitHost && !origins.includes(replitHost)) {
+        origins.push(replitHost);
+        console.log('🔧 REPLIT: Added legacy Replit domain to CORS origins:', replitHost);
+      }
+      
       console.log('🔧 REPLIT: Replit domain pattern validation enabled');
     }
     

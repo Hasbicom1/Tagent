@@ -85,6 +85,57 @@ const cookieConfig = getSecureCookieConfig();
 
 // Initialize Redis for session storage and security features
 
+// CORS Configuration - Simple manual CORS for Replit preview domains
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin;
+  
+  // Always allow requests without origin (same-origin)
+  if (!origin) {
+    return next();
+  }
+
+  // Get allowed origins from environment configuration
+  const allowedOrigins = ENV_CONFIG.getValidatedAllowedOrigins();
+  let isAllowed = allowedOrigins.includes(origin);
+
+  // Check Replit domain patterns when in Replit environment
+  if (!isAllowed && process.env.REPL_ID) {
+    const replitPatterns = [
+      /^https?:\/\/.*\.replit\.app$/,
+      /^https?:\/\/.*\.replit\.dev$/,
+      /^https?:\/\/.*\.repl\.co$/
+    ];
+    
+    if (replitPatterns.some(pattern => pattern.test(origin))) {
+      console.log('🔧 REPLIT: Allowing Replit origin:', origin);
+      isAllowed = true;
+    }
+  }
+
+  // Allow localhost in development/Replit
+  if (!isAllowed && (process.env.NODE_ENV === 'development' || process.env.REPL_ID)) {
+    const localhostPattern = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/;
+    if (localhostPattern.test(origin)) {
+      isAllowed = true;
+    }
+  }
+
+  if (isAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+  }
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
+
 // Enhanced Helmet configuration with custom security headers
 app.use(helmet({
   // HSTS - HTTP Strict Transport Security
@@ -105,7 +156,9 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       frameSrc: ["https://checkout.stripe.com", "https://js.stripe.com"],
-      frameAncestors: ["'none'", "*.replit.dev", "*.replit.com"],
+      frameAncestors: ENV_CONFIG.IS_REPLIT ? 
+        ["'self'", "https://*.replit.app", "https://*.replit.dev", "https://replit.com", "https://*.replit.com"] :
+        ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
       upgradeInsecureRequests: []
@@ -113,8 +166,8 @@ app.use(helmet({
     reportOnly: false
   } : false,
 
-  // X-Frame-Options - Allow Replit preview while maintaining security
-  frameguard: process.env.REPL_ID ? { action: 'sameorigin' } : {
+  // X-Frame-Options - Disable for Replit to allow iframe embedding
+  frameguard: ENV_CONFIG.IS_REPLIT ? false : {
     action: securityConfig.frameOptions.toLowerCase() as 'deny' | 'sameorigin'
   },
 
