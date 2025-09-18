@@ -189,7 +189,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       }
       
       // Generalized canonical redirect for any apex domain to www
-      if (host && !host.startsWith('www.') && !host.includes('.replit.app') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      if (host && !host.startsWith('www.') && !host.includes('.replit.app') && !host.includes('.replit.dev') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
         // Only redirect if this appears to be a custom apex domain
         const protocol = req.header('x-forwarded-proto') === 'https' ? 'https' : 'http';
         const canonicalUrl = `${protocol}://www.${host}${req.url}`;

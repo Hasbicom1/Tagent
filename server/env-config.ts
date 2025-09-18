@@ -105,33 +105,47 @@ export const ENV_CONFIG = {
   // Security-safe configuration logging
   getValidatedAllowedOrigins(): string[] {
     const frontendUrl = this.getValidatedFrontendUrl();
-    if (!frontendUrl) {
-      return [];
+    const origins: string[] = [];
+    
+    if (frontendUrl) {
+      // Extract base domain from FRONTEND_URL
+      try {
+        const url = new URL(frontendUrl);
+        const hostname = url.hostname;
+        
+        // For www subdomain, return both apex and www
+        if (hostname.startsWith('www.')) {
+          const apexDomain = hostname.substring(4);
+          origins.push(
+            `https://${apexDomain}`,
+            `https://${hostname}`
+          );
+        } else {
+          // For apex domain, return both apex and www
+          origins.push(
+            `https://${hostname}`,
+            `https://www.${hostname}`
+          );
+        }
+      } catch (error) {
+        console.warn('⚠️  SECURITY: Failed to parse FRONTEND_URL for CORS origins:', error);
+      }
     }
     
-    // Extract base domain from FRONTEND_URL
-    try {
-      const url = new URL(frontendUrl);
-      const hostname = url.hostname;
-      
-      // For www subdomain, return both apex and www
-      if (hostname.startsWith('www.')) {
-        const apexDomain = hostname.substring(4);
-        return [
-          `https://${apexDomain}`,
-          `https://${hostname}`
-        ];
+    // REPLIT PREVIEW: Add current Replit domain when in Replit environment
+    if (process.env.REPL_ID) {
+      const replitHost = process.env.REPLIT_URL || process.env.REPL_URL;
+      if (replitHost) {
+        origins.push(replitHost);
+        console.log('🔧 REPLIT: Added current Replit domain to CORS origins:', replitHost);
       }
       
-      // For apex domain, return both apex and www
-      return [
-        `https://${hostname}`,
-        `https://www.${hostname}`
-      ];
-    } catch (error) {
-      console.warn('⚠️  SECURITY: Failed to parse FRONTEND_URL for CORS origins:', error);
-      return [];
+      // Add generic Replit domain patterns for broader compatibility
+      // Note: Actual pattern validation happens in validateWebSocketOrigin function
+      console.log('🔧 REPLIT: Replit domain pattern validation enabled');
     }
+    
+    return origins.length > 0 ? origins : [];
   },
 
   logConfiguration(): void {
