@@ -478,13 +478,19 @@ export class MultiLayerRateLimiter {
 
 // PRODUCTION SECURITY: Locked-down CORS for Railway deployment
 const getProductionAllowedOrigins = (): string[] => {
-  // SECURITY: Production CORS locked to custom domain only - NO Replit URLs
+  // SECURITY: Production CORS locked to custom domain only
   const productionOrigins = [
     'https://onedollaragent.ai',
     'https://www.onedollaragent.ai'
   ];
   
-  console.log('🔒 SECURITY: Production CORS locked to domains:', productionOrigins.join(', '));
+  // REPLIT PREVIEW: Allow Replit domains when in Replit environment
+  if (process.env.REPL_ID) {
+    // Note: Actual validation uses pattern matching in validateWebSocketOrigin
+    console.log('🔧 REPLIT: Enabling Replit preview domain validation');
+  }
+  
+  console.log('🔒 SECURITY: CORS origins configured:', productionOrigins.join(', '));
   return productionOrigins;
 };
 
@@ -742,8 +748,8 @@ export function validateWebSocketOrigin(origin: string | undefined): boolean {
     return true;
   }
   
-  // SECURITY CHANGE: Only allow localhost in development mode - NO Replit patterns in production
-  if (process.env.NODE_ENV === 'development') {
+  // SECURITY CHANGE: Allow localhost in development, Replit patterns when in Replit environment
+  if (process.env.NODE_ENV === 'development' || process.env.REPL_ID) {
     const localhostPattern = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/;
     if (localhostPattern.test(origin)) {
       console.log('🔧 DEVELOPMENT: Allowing localhost origin:', origin);
