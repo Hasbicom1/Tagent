@@ -4,14 +4,14 @@ import { validateAIInput, createSafePrompt, logSecurityEvent, redactSecrets } fr
 // Dual AI API integration with automatic failover
 // Primary: OpenAI API for gpt-oss-120b | Fallback: DeepSeek API
 
-const openai = new OpenAI({ 
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY
-});
+}) : null;
 
-const deepseek = new OpenAI({ 
+const deepseek = process.env.DEEPSEEK_API_KEY ? new OpenAI({ 
   apiKey: process.env.DEEPSEEK_API_KEY,
   baseURL: "https://api.deepseek.com/v1"
-});
+}) : null;
 
 export interface TaskAnalysis {
   isExecutable: boolean;
@@ -103,6 +103,10 @@ async function attemptAnalysisWithFallback(prompt: string): Promise<TaskAnalysis
   ];
 
   // Try primary API (gpt-oss-120b)
+  if (!openai) {
+    throw new Error('OpenAI API key not configured');
+  }
+  
   try {
     console.log('🚀 Attempting with primary API: gpt-oss-120b');
     const response = await Promise.race([
@@ -139,6 +143,10 @@ async function attemptAnalysisWithFallback(prompt: string): Promise<TaskAnalysis
     console.log('⚠️  Primary API failed, trying fallback: DeepSeek');
     
     // Try fallback API (DeepSeek)
+    if (!deepseek) {
+      throw new Error('DeepSeek API key not configured');
+    }
+    
     try {
       const response = await Promise.race([
         deepseek.chat.completions.create({
@@ -216,6 +224,10 @@ async function attemptInitialMessageWithFallback(): Promise<string> {
   ];
 
   // Try primary API (gpt-oss-120b)
+  if (!openai) {
+    throw new Error('OpenAI API key not configured');
+  }
+  
   try {
     console.log('🚀 Generating initial message with primary API: gpt-oss-120b');
     const response = await Promise.race([
@@ -236,6 +248,10 @@ async function attemptInitialMessageWithFallback(): Promise<string> {
     console.log('⚠️  Primary API failed for initial message, trying fallback: DeepSeek');
     
     // Try fallback API (DeepSeek)
+    if (!deepseek) {
+      throw new Error('DeepSeek API key not configured');
+    }
+    
     try {
       const response = await Promise.race([
         deepseek.chat.completions.create({

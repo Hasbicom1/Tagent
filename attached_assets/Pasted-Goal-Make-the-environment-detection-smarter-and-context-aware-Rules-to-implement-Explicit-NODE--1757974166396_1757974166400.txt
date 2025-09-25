@@ -1,0 +1,59 @@
+Goal: Make the environment detection smarter and context-aware.
+
+Rules to implement:
+
+Explicit NODE_ENV wins:
+
+If NODE_ENV=development, app must run in development mode regardless of FRONTEND_URL or Replit variables.
+
+Auto-detection only triggers production mode when:
+
+REPLIT_DEPLOYMENT_ID is present OR
+
+FRONTEND_URL matches production domain AND NODE_ENV is not explicitly development.
+
+Dev vs Production logic:
+
+Dev: Allow memory fallback for Redis, flexible CORS, no strict startup failures.
+
+Production: Redis-only, strict CORS, enforce HTTPS, enforce live Stripe keys.
+
+Outcome after fix:
+
+Replit preview/testing works normally without failing Redis checks.
+
+Production deployments on Railway or VPS still enforce full production-grade security and persistence.
+
+Developers can safely test on Replit or locally without switching environment variables manually.
+
+🛠 Suggested Prompt for AI Dev
+
+Prompt:
+
+The problem is clear: development/testing environments (like Replit or local) are being forced into production mode because FRONTEND_URL matches production domains. This triggers Redis-only enforcement and startup failures, even when NODE_ENV=development is explicitly set.
+
+Please implement the following environment detection logic:
+
+Explicit NODE_ENV wins:
+
+If NODE_ENV=development, the app must run in development mode, even if FRONTEND_URL matches production domains.
+
+Auto-detection triggers production mode only when:
+
+REPLIT_DEPLOYMENT_ID exists OR
+
+FRONTEND_URL matches production domain AND NODE_ENV is not explicitly development.
+
+Environment-specific behavior:
+
+Development: allow memory fallback for Redis, flexible CORS, no strict startup failures.
+
+Production: Redis-only, strict CORS, enforce HTTPS, enforce live Stripe keys, enforce startup failure if Redis missing.
+
+Expected Outcome:
+
+Replit preview/testing works normally without Redis or production errors.
+
+Production deployment (Railway / VPS) still enforces full production-grade configuration.
+
+Developers can test safely without modifying FRONTEND_URL or other configs.
