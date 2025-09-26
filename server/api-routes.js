@@ -20,6 +20,31 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Test import endpoint
+router.get('/test-import', async (req, res) => {
+  console.log('🔍 API: Test import requested');
+  
+  try {
+    const { getStatus } = await import('./stripe-simple.js');
+    const status = getStatus();
+    
+    res.status(200).json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      import: 'successful',
+      stripeStatus: status
+    });
+  } catch (error) {
+    console.error('❌ API: Test import failed:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Basic API status
 router.get('/status', (req, res) => {
   console.log('📊 API: Status requested');
