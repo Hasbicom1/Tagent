@@ -5,23 +5,17 @@
 
 import { Router, Request, Response } from 'express';
 import { logger } from '../logger';
-import LocalAgentManager from '../agents/local-agent-manager';
-
 const router = Router();
-let localAgentManager: LocalAgentManager | null = null;
 
-// Initialize local agent manager
+// Mock agent manager for compatibility
 const initializeAgentManager = async () => {
-  if (!localAgentManager) {
-    try {
-      localAgentManager = new LocalAgentManager();
-      await localAgentManager.initialize();
-      logger.info('✅ Local Agent Manager initialized');
-    } catch (error) {
-      logger.error('❌ Failed to initialize Local Agent Manager:', error);
-    }
-  }
-  return localAgentManager;
+  logger.info('✅ Agent routes initialized (simulation mode)');
+  return {
+    getAvailableAgents: () => [],
+    getAgent: (id: string) => null,
+    executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Agent system not available' }),
+    healthCheck: () => false
+  };
 };
 
 /**
