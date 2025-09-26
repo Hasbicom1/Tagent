@@ -5,23 +5,23 @@
 
 import { Router, Request, Response } from 'express';
 import { logger } from '../logger';
-import LocalAgentManager from '../agents/local-agent-manager';
+import { RealAIAgentOrchestrator } from '../agents/real-ai-agents';
 
 const router = Router();
-let localAgentManager: LocalAgentManager | null = null;
+let realAgentOrchestrator: RealAIAgentOrchestrator | null = null;
 
-// Initialize local agent manager
+// Initialize real AI agent orchestrator
 const initializeAgentManager = async () => {
-  if (!localAgentManager) {
+  if (!realAgentOrchestrator) {
     try {
-      localAgentManager = new LocalAgentManager();
-      await localAgentManager.initialize();
-      logger.info('✅ Local Agent Manager initialized');
+      realAgentOrchestrator = new RealAIAgentOrchestrator();
+      await realAgentOrchestrator.initialize();
+      logger.info('✅ Real AI Agent Orchestrator initialized');
     } catch (error) {
-      logger.error('❌ Failed to initialize Local Agent Manager:', error);
+      logger.error('❌ Failed to initialize Real AI Agent Orchestrator:', error);
     }
   }
-  return localAgentManager;
+  return realAgentOrchestrator;
 };
 
 /**
