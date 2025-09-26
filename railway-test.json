@@ -1,0 +1,48 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "echo 'No build required for minimal test'"
+  },
+  "deploy": {
+    "startCommand": "node test-server.js",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "NODE_ENV": "production",
+        "RAILWAY_ENVIRONMENT": "production"
+      }
+    }
+  },
+  "services": [
+    {
+      "name": "minimal-test",
+      "source": ".",
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "echo 'No build required for minimal test'"
+      },
+      "deploy": {
+        "startCommand": "node test-server.js",
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 300,
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 3
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "NODE_ENV": "production",
+            "RAILWAY_ENVIRONMENT": "production",
+            "PORT": "5000"
+          }
+        }
+      }
+    }
+  ]
+}
