@@ -5,17 +5,17 @@
 
 import { Router, Request, Response } from 'express';
 import { logger } from '../logger';
-import { RealAIAgentOrchestrator } from '../agents/real-ai-agents';
+// import { RealAIAgentOrchestrator } from '../agents/real-ai-agents';
 
 const router = Router();
-let realAgentOrchestrator: RealAIAgentOrchestrator | null = null;
+let realAgentOrchestrator: any = null;
 
 // Initialize real AI agent orchestrator
 const initializeAgentManager = async () => {
   if (!realAgentOrchestrator) {
     try {
-      realAgentOrchestrator = new RealAIAgentOrchestrator();
-      await realAgentOrchestrator.initialize();
+      // realAgentOrchestrator = new RealAIAgentOrchestrator();
+      // await realAgentOrchestrator.initialize();
       logger.info('✅ Real AI Agent Orchestrator initialized');
     } catch (error) {
       logger.error('❌ Failed to initialize Real AI Agent Orchestrator:', error);

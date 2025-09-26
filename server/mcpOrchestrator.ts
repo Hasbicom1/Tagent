@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { browserAgent } from "./browserAutomation";
-import { RealAIAgentOrchestrator } from "./agents/real-ai-agents";
+// import { RealAIAgentOrchestrator } from "./agents/real-ai-agents";
 
 // MCP (Message Control Protocol) Orchestrator
 // Routes commands to appropriate AI agents transparently
@@ -77,7 +77,7 @@ const AVAILABLE_AGENTS: AgentCapability[] = [
 
 class MCPOrchestrator {
   private activeCommands: Map<string, CommandResponse> = new Map();
-  private realAgentOrchestrator: RealAIAgentOrchestrator | null = null;
+  private realAgentOrchestrator: any = null;
 
   async routeCommand(request: CommandRequest): Promise<CommandResponse> {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -195,8 +195,8 @@ Respond with JSON: { "selectedAgent": "agent-id", "reasoning": "brief explanatio
    */
   async initializeRealAgents(): Promise<void> {
     if (!this.realAgentOrchestrator) {
-      this.realAgentOrchestrator = new RealAIAgentOrchestrator();
-      await this.realAgentOrchestrator.initialize();
+      // this.realAgentOrchestrator = new RealAIAgentOrchestrator();
+      // await this.realAgentOrchestrator.initialize();
     }
   }
 
