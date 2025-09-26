@@ -8,7 +8,13 @@
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 // import { getSharedRedis, waitForRedis } from './redis-singleton.js';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 console.log('🚀 PRODUCTION: Starting application with proven Railway patterns...');
 console.log('🚀 PRODUCTION: Environment:', process.env.NODE_ENV);
@@ -44,6 +50,11 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// STEP 5.5: Serve static files from dist/public
+const staticPath = path.join(__dirname, '..', 'dist', 'public');
+console.log('📁 PRODUCTION: Serving static files from:', staticPath);
+app.use(express.static(staticPath));
+
 // STEP 6: Health endpoints setup (IMMEDIATE AVAILABILITY - proven pattern)
 app.get('/health', async (req, res) => {
   console.log('🏥 PRODUCTION: Health check requested');
@@ -71,17 +82,11 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// STEP 7: Root endpoint (proven pattern)
+// STEP 7: Root endpoint - Serve React application
 app.get('/', (req, res) => {
-  console.log('🏠 PRODUCTION: Root endpoint requested');
-  res.status(200).json({
-    status: 'running',
-    timestamp: new Date().toISOString(),
-    message: 'Production application is running',
-    environment: process.env.NODE_ENV || 'development',
-    endpoints: ['/health', '/', '/api/health']
-  });
-  console.log('🏠 PRODUCTION: Root response sent');
+  console.log('🏠 PRODUCTION: Root endpoint requested - serving React app');
+  res.sendFile(path.join(staticPath, 'index.html'));
+  console.log('🏠 PRODUCTION: React application served');
 });
 
 // STEP 8: API health endpoint
@@ -132,15 +137,23 @@ app.use((err, req, res, next) => {
   });
 });
 
-// STEP 12: 404 handler
-app.use('*', (req, res) => {
-  console.log('❓ PRODUCTION: 404 - Route not found:', req.method, req.originalUrl);
-  res.status(404).json({
-    status: 'not_found',
-    timestamp: new Date().toISOString(),
-    message: 'Route not found',
-    path: req.originalUrl
-  });
+// STEP 12: Catch-all handler for React Router (SPA routing)
+app.get('*', (req, res) => {
+  console.log('🔄 PRODUCTION: SPA route requested:', req.originalUrl);
+  // Serve React app for all non-API routes
+  if (!req.originalUrl.startsWith('/api/') && !req.originalUrl.startsWith('/health')) {
+    res.sendFile(path.join(staticPath, 'index.html'));
+    console.log('🔄 PRODUCTION: SPA route served');
+  } else {
+    // API routes that don't exist
+    console.log('❓ PRODUCTION: API route not found:', req.method, req.originalUrl);
+    res.status(404).json({
+      status: 'not_found',
+      timestamp: new Date().toISOString(),
+      message: 'API route not found',
+      path: req.originalUrl
+    });
+  }
 });
 
 // STEP 13: Create HTTP server
