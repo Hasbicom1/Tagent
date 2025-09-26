@@ -79,60 +79,39 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
   });
 }
 
-// RAILWAY 2025: Modern Redis connection configuration
+// CRITICAL FIX: Use Redis singleton for queue system
 const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> => {
-  // Use Railway 2025 Redis URL detection
-  const { getRailwayRedisUrl } = await import('./railway-redis-2025');
-  const redisConfig = getRailwayRedisUrl();
-  const redisUrl = redisConfig.url;
+  // CRITICAL FIX: Use Redis singleton to prevent multiple connections
+  const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
   
-  // REPLIT FIX: Test Redis connection with aggressive timeout
+  console.log('🔧 QUEUE: Using Redis singleton for shared connection...');
+  debugRedisStatus();
+  
+  const redis = await getSharedRedis();
+  if (!redis) {
+    throw new Error('Redis singleton not available - queue system requires Redis for production deployment');
+  }
+  
+  // CRITICAL FIX: Test Redis connection using the singleton
   try {
     const connectionTimeout = isReplit ? 2000 : 5000;
-    const isRedisWorking = await testQueueRedisConnection(redisUrl, connectionTimeout);
     
-    if (!isRedisWorking) {
-      throw new Error('Redis connection test failed - queue system requires Redis for production deployment');
-    }
+    // Test the singleton Redis connection
+    await Promise.race([
+      redis.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis test timeout')), connectionTimeout))
+    ]);
     
-    console.log('✅ QUEUE: Redis connection test successful');
+    console.log('✅ QUEUE: Redis singleton connection test successful');
     
-    // Return proper configuration for BullMQ with adjusted timeouts for Replit
-    if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
-      const redisClient = new Redis(redisUrl, {
-        maxRetriesPerRequest: null, // Required for BullMQ
-        lazyConnect: true,
-        connectTimeout: isReplit ? 3000 : 10000,
-        commandTimeout: isReplit ? 2000 : 5000,
-        enableAutoPipelining: true,
-      });
-      
-      // Add error listener to prevent crashes
-      redisClient.on('error', (err) => {
-        console.warn('⚠️  QUEUE: Redis connection error:', err.message);
-      });
-      
-      return { 
-        connection: redisClient
-      };
-    }
-    
-    return {
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '0'),
-        maxRetriesPerRequest: null, // Required for BullMQ
-        lazyConnect: true,
-        connectTimeout: isReplit ? 3000 : 10000,
-        commandTimeout: isReplit ? 2000 : 5000,
-        enableAutoPipelining: true,
-      }
+    // CRITICAL FIX: Return the singleton Redis instance for BullMQ
+    return { 
+      connection: redis
     };
+    
   } catch (error) {
-    console.error('❌ QUEUE: Redis connection test failed:', error instanceof Error ? error.message : error);
-    throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ QUEUE: Redis singleton connection failed:', error instanceof Error ? error.message : error);
+    throw new Error(`Redis singleton connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 

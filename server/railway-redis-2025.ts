@@ -222,15 +222,13 @@ export function createRailwayRedisClient(config: RailwayRedisConfig): Redis {
     enableOfflineQueue: true, // CRITICAL: Enable offline queue for Railway
     keepAlive: true,
     family: 4, // Force IPv4
-    retryDelayOnFailover: 100,
-    retryDelayOnClusterDown: 300,
+    retryDelayOnFailover: 200,
+    retryDelayOnClusterDown: 500,
     enableReadyCheck: true,
     maxLoadingTimeout: 10000,
     
     // Railway 2025: Modern connection pooling
     maxRetriesPerRequest: null, // Unlimited retries for Railway
-    retryDelayOnFailover: 200,
-    retryDelayOnClusterDown: 500,
     
     // Railway 2025: Enhanced socket configuration
     socket: {
@@ -281,11 +279,11 @@ export function createRailwayRedisClient(config: RailwayRedisConfig): Redis {
   redis.on('error', (error) => {
     console.warn('⚠️  RAILWAY 2025 Redis error (handled):', error.message.substring(0, 100));
     console.warn('⚠️  RAILWAY 2025 Redis error details:', {
-      code: error.code,
-      errno: error.errno,
-      syscall: error.syscall,
-      address: error.address,
-      port: error.port,
+      code: (error as any).code,
+      errno: (error as any).errno,
+      syscall: (error as any).syscall,
+      address: (error as any).address,
+      port: (error as any).port,
       source: source,
       serviceType: serviceType,
       isRailway: isRailway,

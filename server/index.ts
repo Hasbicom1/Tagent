@@ -265,9 +265,13 @@ export function getRedis(): Redis | null {
 }
 
 export async function initializeRedis(): Promise<Redis | null> {
-  // RAILWAY 2025: Use modern Railway Redis configuration
-  const { initializeRailwayRedis2025 } = await import('./railway-redis-2025');
-  return await initializeRailwayRedis2025();
+  // CRITICAL FIX: Use Redis singleton to prevent multiple connections
+  const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
+  
+  console.log('🔧 REDIS: Using Redis singleton for shared connection...');
+  debugRedisStatus();
+  
+  return await getSharedRedis();
 }
 
 async function initializeRedisSession(): Promise<any> {
@@ -808,11 +812,18 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       process.exit(1); // FAIL FAST: No memory store fallback allowed
     }
 
-    // CRITICAL: Initialize idempotency service for webhook duplicate prevention
+    // CRITICAL FIX: Initialize idempotency service with Redis singleton
     log('🔄 Initializing webhook idempotency service...');
     try {
-      // Get Redis instance - MUST be available for production
-      const redis = redisInstance;
+      // CRITICAL FIX: Use Redis singleton to ensure shared connection
+      const { getSharedRedis, waitForRedis, debugRedisStatus } = await import('./redis-singleton');
+      
+      console.log('🔧 IDEMPOTENCY: Waiting for Redis singleton to be ready...');
+      debugRedisStatus();
+      
+      // Wait for Redis to be ready with timeout
+      const redis = await waitForRedis(30000); // 30 second timeout
+      
       if (redis) {
         const idempotencyService = initializeIdempotencyService(redis);
         const stats = idempotencyService.getStats();
@@ -821,6 +832,8 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
           hasRedis: stats.hasRedis,
           redisConnected: stats.redisConnected
         });
+        
+        console.log('✅ IDEMPOTENCY: Service initialized with shared Redis connection');
       } else {
         // Check if we're in development mode
         const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
