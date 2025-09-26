@@ -10,7 +10,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// import { getSharedRedis, waitForRedis } from './redis-singleton.js';
+import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -60,11 +60,23 @@ app.get('/health', async (req, res) => {
   console.log('🏥 PRODUCTION: Health check requested');
   
   try {
-    // Simple health check without Redis for now
+    // Check Redis connection
+    let redisStatus = 'disconnected';
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        redisStatus = 'connected';
+      }
+    } catch (error) {
+      console.warn('⚠️ PRODUCTION: Redis ping failed:', error.message);
+      redisStatus = 'disconnected';
+    }
+    
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      redis: 'not_configured',
+      redis: redisStatus,
       environment: process.env.NODE_ENV || 'development',
       port: port,
       railway: true,
@@ -94,15 +106,27 @@ app.get('/api/health', async (req, res) => {
   console.log('🔍 PRODUCTION: API health check requested');
   
   try {
-    // Simple API health check without Redis for now
+    // Check Redis connection
+    let redisStatus = 'disconnected';
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        redisStatus = 'connected';
+      }
+    } catch (error) {
+      console.warn('⚠️ PRODUCTION: Redis ping failed:', error.message);
+      redisStatus = 'disconnected';
+    }
+    
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      redis: 'not_configured',
+      redis: redisStatus,
       environment: process.env.NODE_ENV || 'development',
       services: {
         express: 'running',
-        redis: 'not_configured',
+        redis: redisStatus,
         server: 'listening'
       }
     });
@@ -118,10 +142,21 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// STEP 9: Initialize Redis singleton (NON-BLOCKING) - DISABLED FOR NOW
-console.log('🔧 PRODUCTION: Redis initialization disabled for minimal test');
+// STEP 9: Initialize Redis (NON-BLOCKING)
+console.log('🔧 PRODUCTION: Initializing Redis...');
 let redisConnected = false;
-console.log('⚠️ PRODUCTION: Redis not configured - using minimal setup');
+
+try {
+  const redis = await getRedis();
+  if (redis) {
+    console.log('✅ PRODUCTION: Redis connection established');
+    redisConnected = true;
+  } else {
+    console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
+  }
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
+}
 
 // STEP 10: Initialize API routes (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Initializing API routes...');
