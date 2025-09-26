@@ -819,6 +819,16 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
 
     console.log('🚀 5. Redis singleton initialized successfully');
     
+    // CRITICAL: Start server listening IMMEDIATELY for Railway health checks
+    console.log('🚀 6. Starting server for Railway health checks...');
+    const port = parseInt(process.env.PORT || '5000', 10);
+    
+    // Create server and start listening immediately
+    const server = app.listen(port, '0.0.0.0', () => {
+      console.log(`🌐 Server listening on port ${port} for Railway health checks`);
+      console.log('🚀 7. Server ready for health checks');
+    });
+    
     // CRITICAL FIX: Initialize idempotency service with Redis singleton (NON-BLOCKING)
     log('🔄 Initializing webhook idempotency service...');
     
@@ -863,20 +873,29 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       }
     })();
 
-    console.log('🚀 6. Idempotency service initialized successfully');
+    console.log('🚀 8. Idempotency service initialized successfully');
     
     // CRITICAL: Add Railway health check endpoints BEFORE routes
-    console.log('🚀 7. Adding Railway health check endpoints...');
+    console.log('🚀 9. Adding Railway health check endpoints...');
     
-    // Simple health check - always responds immediately
+    // CRITICAL: Railway health check endpoint - must respond immediately
     app.get('/health', (req, res) => {
-      console.log('🏥 Health check requested');
+      console.log('🏥 Railway health check requested');
+      console.log('🏥 Request headers:', req.headers);
+      console.log('🏥 Request IP:', req.ip);
+      console.log('🏥 Request URL:', req.url);
+      
+      // Always respond immediately with 200 status
       res.status(200).json({ 
         status: 'healthy', 
         timestamp: new Date().toISOString(),
         redis: redisInstance ? 'connected' : 'not_available',
-        environment: process.env.NODE_ENV || 'development'
+        environment: process.env.NODE_ENV || 'development',
+        port: process.env.PORT || '5000',
+        railway: true
       });
+      
+      console.log('🏥 Health check response sent');
     });
 
     // Root endpoint for Railway fallback
@@ -924,24 +943,12 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       }
     });
 
-    // STARTUP FIX: Start server AFTER session is ready
-    log('🚀 Starting HTTP server...');
-    console.log('🚀 8. Registering routes...');
-    const server = await registerRoutes(app);
-    console.log('🚀 9. Routes registered successfully');
-    
-    // Start listening on port immediately - CRITICAL for Replit deployment
-    const port = parseInt(process.env.PORT || '5000', 10);
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
-      log(`🌐 Server running on port ${port}`);
-      console.log('🚀 10. Server listening successfully');
-      console.log('🚀 11. Application startup complete!');
-      console.log('🚀 12. Health endpoints available: /health, /ready, /');
-    });
+    // Register routes with the already listening server
+    console.log('🚀 10. Registering routes...');
+    await registerRoutes(app);
+    console.log('🚀 11. Routes registered successfully');
+    console.log('🚀 12. Application startup complete!');
+    console.log('🚀 13. Health endpoints available: /health, /ready, /');
     
     // Now initialize Redis components asynchronously without blocking startup
     log('🚀 Initializing task queue system (non-blocking)...');
