@@ -123,9 +123,16 @@ console.log('🔧 PRODUCTION: Redis initialization disabled for minimal test');
 let redisConnected = false;
 console.log('⚠️ PRODUCTION: Redis not configured - using minimal setup');
 
-// STEP 10: Initialize other services (NON-BLOCKING) - DISABLED FOR NOW
-console.log('🔧 PRODUCTION: Other services initialization disabled for minimal test');
-console.log('⚠️ PRODUCTION: Using minimal setup without complex services');
+// STEP 10: Initialize API routes (NON-BLOCKING)
+console.log('🔧 PRODUCTION: Initializing API routes...');
+
+try {
+  const { default: apiRoutes } = await import('./api-routes.js');
+  app.use('/api', apiRoutes);
+  console.log('✅ PRODUCTION: API routes initialized');
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: API routes initialization failed (non-blocking):', error.message);
+}
 
 // STEP 11: Error handling middleware
 app.use((err, req, res, next) => {
