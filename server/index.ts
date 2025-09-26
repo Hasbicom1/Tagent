@@ -265,9 +265,9 @@ export function getRedis(): Redis | null {
 }
 
 export async function initializeRedis(): Promise<Redis | null> {
-  // RAILWAY FIX: Use flexible Redis configuration
-  const { initializeRedisWithFallback } = await import('./redis-config');
-  return await initializeRedisWithFallback();
+  // RAILWAY 2025: Use modern Railway Redis configuration
+  const { initializeRailwayRedis2025 } = await import('./railway-redis-2025');
+  return await initializeRailwayRedis2025();
 }
 
 async function initializeRedisSession(): Promise<any> {

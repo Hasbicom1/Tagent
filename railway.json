@@ -1,0 +1,59 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run build"
+  },
+  "deploy": {
+    "startCommand": "npm run start",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "NODE_ENV": "production",
+        "RAILWAY_ENVIRONMENT": "production"
+      }
+    }
+  },
+  "services": [
+    {
+      "name": "main-app",
+      "source": ".",
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "npm run build"
+      },
+      "deploy": {
+        "startCommand": "npm run start",
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 300,
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 3
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "NODE_ENV": "production",
+            "RAILWAY_ENVIRONMENT": "production",
+            "PORT": "5000"
+          }
+        }
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "name": "redis",
+      "type": "database",
+      "config": {
+        "version": "7.0",
+        "persistence": true,
+        "maxmemory": "256mb"
+      }
+    }
+  ]
+}

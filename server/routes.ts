@@ -278,15 +278,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Redis for rate limiting and session security (if available)
   let redis: Redis | null = null;
   
-  // RAILWAY FIX: Use flexible Redis URL detection
+  // RAILWAY 2025: Use modern Railway Redis URL detection
   let redisUrl: string | null = null;
   try {
-    const { getRedisUrl } = await import('./redis-config');
-    const redisConfig = getRedisUrl();
+    const { getRailwayRedisUrl } = await import('./railway-redis-2025');
+    const redisConfig = getRailwayRedisUrl();
     redisUrl = redisConfig.url;
-    console.log(`✅ ROUTES: Redis URL found from ${redisConfig.source}`);
+    console.log(`✅ RAILWAY 2025 ROUTES: Redis URL found from ${redisConfig.source}`);
+    console.log(`   Service Type: ${redisConfig.serviceType}`);
+    console.log(`   Railway: ${redisConfig.isRailway}`);
   } catch (error) {
-    console.log('⚠️  ROUTES: No Redis URL found, skipping rate limiting');
+    console.log('⚠️  RAILWAY 2025 ROUTES: No Redis URL found, skipping rate limiting');
     redisUrl = null;
   }
   

@@ -192,12 +192,15 @@ export class WebSocketManager {
    */
   private async initializeRedis(): Promise<void> {
     try {
-      // RAILWAY FIX: Use flexible Redis URL detection
-      const { getRedisUrl } = await import('./redis-config');
-      const redisConfig = getRedisUrl();
+      // RAILWAY 2025: Use modern Railway Redis URL detection
+      const { getRailwayRedisUrl } = await import('./railway-redis-2025');
+      const redisConfig = getRailwayRedisUrl();
       const redisUrl = redisConfig.url;
       
-      console.log(`✅ WEBSOCKET: Redis URL found from ${redisConfig.source}`);
+      console.log(`✅ RAILWAY 2025 WEBSOCKET: Redis URL found from ${redisConfig.source}`);
+      console.log(`   Service Type: ${redisConfig.serviceType}`);
+      console.log(`   Railway: ${redisConfig.isRailway}`);
+      console.log(`   Internal: ${redisConfig.isInternal}`);
 
       // Test Redis connection first
       const testRedis = new Redis(redisUrl, {

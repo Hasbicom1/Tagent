@@ -229,21 +229,23 @@ function validateHTTPSEnforcement(): void {
 }
 
 /**
- * RAILWAY FIX: Flexible Redis URL validation
- * Checks for multiple possible Redis URL environment variables
+ * RAILWAY 2025: Modern Redis URL validation
+ * Checks for multiple possible Redis URL environment variables with 2025 patterns
  */
 function validateRedisUrlFlexibly(): void {
-  console.log('🔍 REDIS: Scanning for Redis URL in environment variables...');
+  console.log('🔍 RAILWAY 2025: Scanning for Redis URL with modern patterns...');
   
-  // Priority order for Redis URL detection
+  // RAILWAY 2025: Priority order for Redis URL detection
   const redisUrlCandidates = [
-    'REDIS_PRIVATE_URL',    // Railway Redis Service (Private)
+    'REDIS_PRIVATE_URL',    // Railway Redis Service (Private) - HIGHEST PRIORITY
     'REDIS_URL',           // Standard Redis URL
     'REDIS_PUBLIC_URL',    // Railway Redis Service (Public)
     'REDIS_EXTERNAL_URL',  // Railway Redis Service (External)
     'REDIS_CONNECTION_STRING', // Alternative Redis URL
     'CACHE_URL',           // Cache URL (Redis)
-    'DATABASE_URL'         // Database URL (if Redis)
+    'DATABASE_URL',        // Database URL (if Redis)
+    'REDIS_SERVICE_URL',   // Railway Service Discovery
+    'REDIS_INTERNAL_URL'   // Railway Internal Service
   ];
   
   let foundRedisUrl = false;
@@ -252,30 +254,30 @@ function validateRedisUrlFlexibly(): void {
   for (const candidate of redisUrlCandidates) {
     const url = process.env[candidate];
     if (url) {
-      console.log(`✅ REDIS: Found ${candidate}: ${url.substring(0, 20)}...`);
+      console.log(`✅ RAILWAY 2025: Found ${candidate}: ${url.substring(0, 30)}...`);
       
-      // Validate Redis URL format
-      if (isValidRedisUrl(url)) {
+      // Validate Redis URL format with 2025 patterns
+      if (isValidRailwayRedisUrl2025(url)) {
         foundRedisUrl = true;
         redisSource = candidate;
-        console.log(`✅ REDIS: Valid Redis URL found in ${candidate}`);
+        console.log(`✅ RAILWAY 2025: Valid Redis URL found in ${candidate}`);
         break;
       } else {
-        console.warn(`⚠️  REDIS: Invalid Redis URL format in ${candidate}: ${url.substring(0, 20)}...`);
+        console.warn(`⚠️  RAILWAY 2025: Invalid Redis URL format in ${candidate}: ${url.substring(0, 30)}...`);
       }
     }
   }
   
   if (!foundRedisUrl) {
-    console.error('❌ REDIS: No valid Redis URL found in environment variables');
+    console.error('❌ RAILWAY 2025: No valid Redis URL found in environment variables');
     console.error('   Checked variables:', redisUrlCandidates.join(', '));
-    console.error('\n🚨 REDIS REQUIREMENT: This application requires Redis for:');
+    console.error('\n🚨 RAILWAY 2025 REDIS REQUIREMENT: This application requires Redis for:');
     console.error('   • Session management (NO memory fallback in production)');
     console.error('   • Rate limiting coordination');
     console.error('   • Webhook idempotency protection');
     console.error('   • Queue system operations');
     console.error('   • WebSocket coordination');
-    console.error('\n🔧 RAILWAY FIX: Ensure Redis addon is attached:');
+    console.error('\n🔧 RAILWAY 2025 FIX: Ensure Redis service is attached to your project');
     console.error('   1. Go to Railway Dashboard > Project > Services');
     console.error('   2. Click "+ New" > Database > Redis');
     console.error('   3. Wait for deployment and verify REDIS_PRIVATE_URL appears in Variables');
@@ -283,25 +285,50 @@ function validateRedisUrlFlexibly(): void {
     process.exit(1);
   }
   
-  console.log(`✅ REDIS: Redis URL validated from ${redisSource}`);
+  console.log(`✅ RAILWAY 2025: Redis URL validated from ${redisSource}`);
 }
 
 /**
- * Validate Redis URL format
+ * RAILWAY 2025: Validate Redis URL format with modern patterns
  */
-function isValidRedisUrl(url: string): boolean {
+function isValidRailwayRedisUrl2025(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
   
-  // Check for Redis URL patterns
-  const redisPatterns = [
+  // Railway 2025 Redis URL patterns
+  const railwayRedisPatterns = [
+    // Standard Redis patterns
     /^redis:\/\/.+/,
     /^rediss:\/\/.+/,
-    /^redis:\/\/default:.+@.+/,
+    
+    // Railway internal patterns
     /^redis:\/\/default:.+@redis\.railway\.internal:\d+/,
-    /^redis:\/\/default:.+@containers-.+\.railway\.app:\d+/
+    /^rediss:\/\/default:.+@redis\.railway\.internal:\d+/,
+    
+    // Railway external patterns
+    /^redis:\/\/default:.+@containers-.+\.railway\.app:\d+/,
+    /^rediss:\/\/default:.+@containers-.+\.railway\.app:\d+/,
+    
+    // Railway 2025 service discovery patterns
+    /^redis:\/\/default:.+@redis-service-\d+\.railway\.internal:\d+/,
+    /^rediss:\/\/default:.+@redis-service-\d+\.railway\.internal:\d+/,
+    
+    // Railway 2025 regional patterns
+    /^redis:\/\/default:.+@redis-\w+-\d+\.railway\.app:\d+/,
+    /^rediss:\/\/default:.+@redis-\w+-\d+\.railway\.app:\d+/,
+    
+    // Railway 2025 internal networking
+    /^redis:\/\/default:.+@redis\.railway\.internal:\d+/,
+    /^rediss:\/\/default:.+@redis\.railway\.internal:\d+/
   ];
   
-  return redisPatterns.some(pattern => pattern.test(url));
+  return railwayRedisPatterns.some(pattern => pattern.test(url));
+}
+
+/**
+ * Legacy Redis URL validation (for backward compatibility)
+ */
+function isValidRedisUrl(url: string): boolean {
+  return isValidRailwayRedisUrl2025(url);
 }
 
 /**

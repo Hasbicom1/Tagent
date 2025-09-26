@@ -79,11 +79,11 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
   });
 }
 
-// RAILWAY FIX: Flexible Redis connection configuration
+// RAILWAY 2025: Modern Redis connection configuration
 const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> => {
-  // Use flexible Redis URL detection
-  const { getRedisUrl } = await import('./redis-config');
-  const redisConfig = getRedisUrl();
+  // Use Railway 2025 Redis URL detection
+  const { getRailwayRedisUrl } = await import('./railway-redis-2025');
+  const redisConfig = getRailwayRedisUrl();
   const redisUrl = redisConfig.url;
   
   // REPLIT FIX: Test Redis connection with aggressive timeout
