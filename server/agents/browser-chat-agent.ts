@@ -707,9 +707,6 @@ export class BrowserChatAgent extends EventEmitter {
     return 'input[type="search"], input[name*="search"], input[placeholder*="search"]';
   }
 
-  async getChatHistory(sessionId: string): Promise<any[]> {
-    return this.getChatHistory(sessionId);
-  }
 
   async clearChatHistory(sessionId: string): Promise<void> {
     this.chatSessions.delete(sessionId);

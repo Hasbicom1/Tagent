@@ -8,21 +8,21 @@ import { logger } from '../logger';
 const router = Router();
 let localAgentManager: any = null;
 
-// Initialize real agent manager
-const initializeAgentManager = async () => {
+// Initialize unified AI agent
+const initializeUnifiedAgent = async () => {
   if (!localAgentManager) {
     try {
-      const { default: LocalAgentManager } = await import('../agents/local-agent-manager');
-      localAgentManager = new LocalAgentManager();
+      const { default: UnifiedAIAgent } = await import('../agents/unified-ai-agent');
+      localAgentManager = new UnifiedAIAgent();
       await localAgentManager.initialize();
-      logger.info('✅ Agent routes initialized with real agent manager');
+      logger.info('✅ Agent routes initialized with unified AI agent');
     } catch (error) {
-      logger.error('❌ Failed to initialize real agent manager:', error);
+      logger.error('❌ Failed to initialize unified AI agent:', error);
       // Fallback to mock
       localAgentManager = {
-        getAvailableAgents: () => [],
-        getAgent: (id: string) => null,
-        executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Agent system not available' }),
+        getAvailableAgents: () => [{ id: 'unified-ai', name: 'AI Assistant', type: 'unified', capabilities: ['chat', 'automation'], status: 'active' }],
+        getAgent: (id: string) => ({ id: 'unified-ai', name: 'AI Assistant', type: 'unified', capabilities: ['chat', 'automation'], status: 'active' }),
+        executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Unified AI agent not available' }),
         healthCheck: () => false
       };
     }
@@ -36,7 +36,7 @@ const initializeAgentManager = async () => {
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const agentManager = await initializeAgentManager();
+    const agentManager = await initializeUnifiedAgent();
     
     if (!agentManager) {
       return res.status(500).json({
@@ -74,7 +74,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const agentManager = await initializeAgentManager();
+    const agentManager = await initializeUnifiedAgent();
     
     if (!agentManager) {
       return res.status(500).json({
@@ -112,7 +112,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { instruction } = req.body;
     
-    const agentManager = await initializeAgentManager();
+    const agentManager = await initializeUnifiedAgent();
     
     if (!agentManager) {
       return res.status(500).json({
@@ -165,7 +165,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
  */
 router.get('/health', async (req: Request, res: Response) => {
   try {
-    const agentManager = await initializeAgentManager();
+    const agentManager = await initializeUnifiedAgent();
     
     if (!agentManager) {
       return res.status(500).json({
@@ -207,7 +207,7 @@ router.post('/select', async (req: Request, res: Response) => {
       });
     }
 
-    const agentManager = await initializeAgentManager();
+    const agentManager = await initializeUnifiedAgent();
     
     if (!agentManager) {
       return res.status(500).json({

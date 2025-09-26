@@ -6,8 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { BrowserChatInterface } from '@/components/chat/BrowserChatInterface';
-import { AgentSelector } from '@/components/agent/AgentSelector';
+import { UnifiedChatInterface } from '@/components/chat/UnifiedChatInterface';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,25 +24,13 @@ import {
 } from 'lucide-react';
 
 export default function BrowserChatPage() {
-  const [selectedAgent, setSelectedAgent] = useState<string>('');
-  const [showAgentSelector, setShowAgentSelector] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
-  const [isAgentActive, setIsAgentActive] = useState(false);
 
   // Initialize session
   useEffect(() => {
     const newSessionId = `browser_session_${Date.now()}`;
     setSessionId(newSessionId);
   }, []);
-
-  /**
-   * Handle agent selection
-   */
-  const handleAgentSelect = (agentId: string) => {
-    setSelectedAgent(agentId);
-    setShowAgentSelector(false);
-    setIsAgentActive(true);
-  };
 
   /**
    * Handle session change
@@ -70,21 +57,10 @@ export default function BrowserChatPage() {
             </div>
             
             <div className="flex items-center gap-3">
-              {selectedAgent && (
-                <Badge variant="default" className="flex items-center gap-1">
-                  <Zap className="w-3 h-3" />
-                  {selectedAgent}
-                </Badge>
-              )}
-              
-              <Button
-                variant="outline"
-                onClick={() => setShowAgentSelector(!showAgentSelector)}
-                className="flex items-center gap-2"
-              >
-                <Settings className="w-4 h-4" />
-                {selectedAgent ? 'Change Agent' : 'Select Agent'}
-              </Button>
+              <Badge variant="default" className="flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                AI Assistant
+              </Badge>
             </div>
           </div>
         </div>
@@ -92,36 +68,11 @@ export default function BrowserChatPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Agent Selector Sidebar */}
-          {showAgentSelector && (
-            <div className="lg:col-span-1">
-              <Card className="p-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">AI Agents</h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowAgentSelector(false)}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                  
-                  <AgentSelector
-                    onAgentSelect={handleAgentSelect}
-                    selectedAgent={selectedAgent}
-                  />
-                </div>
-              </Card>
-            </div>
-          )}
-
+        <div className="grid grid-cols-1 gap-6">
           {/* Chat Interface */}
-          <div className={`${showAgentSelector ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
+          <div className="col-span-1">
             <Card className="h-[calc(100vh-8rem)]">
-              <BrowserChatInterface
+              <UnifiedChatInterface
                 sessionId={sessionId}
                 onSessionChange={handleSessionChange}
               />

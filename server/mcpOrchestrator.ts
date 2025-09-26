@@ -1,17 +1,6 @@
 import OpenAI from "openai";
 import { browserAgent } from "./browserAutomation";
-import UITarsAgent from "./agents/ui-tars-agent";
-import LocalAgentManager from "./agents/local-agent-manager";
-import BrowserUseAgent from "./agents/browser-use-agent";
-import SkyvernAgent from "./agents/skyvern-agent";
-import LaVagueAgent from "./agents/lavague-agent";
-import StagehandAgent from "./agents/stagehand-agent";
-import PlaywrightVisionAgent from "./agents/playwright-vision-agent";
-import PuppeteerAIAgent from "./agents/puppeteer-ai-agent";
-import RuleBasedPlannerAgent from "./agents/rule-based-planner-agent";
-import CheerioExtractorAgent from "./agents/cheerio-extractor-agent";
-import BrowserChatAgent from "./agents/browser-chat-agent";
-import InvisibleAgentOrchestrator from "./agents/invisible-agent-orchestrator";
+import { LocalUnifiedAIAgent } from "./agents/local-unified-ai-agent";
 
 // MCP (Message Control Protocol) Orchestrator
 // Routes commands to appropriate AI agents transparently
@@ -88,33 +77,29 @@ const AVAILABLE_AGENTS: AgentCapability[] = [
 
 class MCPOrchestrator {
   private activeCommands: Map<string, CommandResponse> = new Map();
-  private agents: Map<string, any> = new Map();
-  private invisibleOrchestrator: InvisibleAgentOrchestrator | null = null;
+  private unifiedAgent: LocalUnifiedAIAgent | null = null;
   private isInitialized: boolean = false;
 
   async routeCommand(request: CommandRequest): Promise<CommandResponse> {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
-      // Initialize agents if not already done
+      // Initialize unified agent if not already done
       if (!this.isInitialized) {
-        await this.initializeAgents();
+        await this.initializeUnifiedAgent();
       }
 
-      // Analyze command and select optimal agent
-      const selectedAgent = await this.selectAgent(request.command);
-      
       // Create command response
       const response: CommandResponse = {
         commandId,
-        agent: selectedAgent.name,
+        agent: 'AI Assistant',
         status: 'executing'
       };
       
       this.activeCommands.set(commandId, response);
       
-      // Route to appropriate agent based on selection
-      await this.executeWithSelectedAgent(request, response, selectedAgent);
+      // Route to unified agent
+      await this.executeWithUnifiedAgent(request, response);
       
       return response;
       
@@ -210,182 +195,66 @@ Respond with JSON: { "selectedAgent": "agent-id", "reasoning": "brief explanatio
 
 
   /**
-   * Initialize all agents
+   * Initialize unified AI agent
    */
-  private async initializeAgents(): Promise<void> {
+  private async initializeUnifiedAgent(): Promise<void> {
     try {
-      logger.info('🔧 MCP Orchestrator: Initializing all real agents...');
+      logger.info('🔧 MCP Orchestrator: Initializing unified AI agent...');
 
-      // Initialize individual agents
-      const agentConfigs = [
-        { name: 'ui-tars', agent: new UITarsAgent() },
-        { name: 'local-manager', agent: new LocalAgentManager() },
-        { name: 'browser-use', agent: new BrowserUseAgent() },
-        { name: 'skyvern', agent: new SkyvernAgent() },
-        { name: 'lavague', agent: new LaVagueAgent() },
-        { name: 'stagehand', agent: new StagehandAgent() },
-        { name: 'playwright-vision', agent: new PlaywrightVisionAgent() },
-        { name: 'puppeteer-ai', agent: new PuppeteerAIAgent() },
-        { name: 'rule-planner', agent: new RuleBasedPlannerAgent() },
-        { name: 'cheerio-extractor', agent: new CheerioExtractorAgent() },
-        { name: 'browser-chat', agent: new BrowserChatAgent() }
-      ];
+      // Initialize local unified agent
+      this.unifiedAgent = new LocalUnifiedAIAgent({
+        maxConcurrentTasks: 3,
+        taskTimeout: 60000,
+        retries: 3,
+        enableScreenshots: true,
+        enableVideo: false
+      });
 
-      for (const { name, agent } of agentConfigs) {
-        try {
-          await agent.initialize();
-          this.agents.set(name, agent);
-          logger.info(`✅ MCP Orchestrator: ${name} agent initialized`);
-        } catch (error) {
-          logger.warn(`⚠️ MCP Orchestrator: ${name} agent initialization failed:`, error);
-        }
-      }
-
-      // Initialize invisible orchestrator
-      this.invisibleOrchestrator = new InvisibleAgentOrchestrator();
-      await this.invisibleOrchestrator.initialize();
+      await this.unifiedAgent.initialize();
 
       this.isInitialized = true;
-      logger.info('✅ MCP Orchestrator: All real agents initialized');
+      logger.info('✅ MCP Orchestrator: Unified AI agent initialized');
     } catch (error) {
-      logger.error('❌ MCP Orchestrator: Agent initialization failed:', error);
+      logger.error('❌ MCP Orchestrator: Unified agent initialization failed:', error);
       throw error;
     }
   }
 
   /**
-   * Execute command with selected agent
+   * Execute command with unified agent
    */
-  private async executeWithSelectedAgent(request: CommandRequest, response: CommandResponse, selectedAgent: AgentCapability): Promise<void> {
+  private async executeWithUnifiedAgent(request: CommandRequest, response: CommandResponse): Promise<void> {
     try {
+      if (!this.unifiedAgent) {
+        throw new Error('Unified agent not initialized');
+      }
+
       const task = {
         id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         sessionId: request.sessionId,
-        instruction: request.command,
+        message: request.command,
         timestamp: new Date().toISOString()
       };
 
-      let result: any;
-
-      switch (selectedAgent.id) {
-        case 'ui-tars':
-          result = await this.executeWithUITars(task);
-          break;
-        case 'browser-use':
-          result = await this.executeWithBrowserUse(task);
-          break;
-        case 'skyvern':
-          result = await this.executeWithSkyvern(task);
-          break;
-        case 'lavague':
-          result = await this.executeWithLaVague(task);
-          break;
-        case 'stagehand':
-          result = await this.executeWithStagehand(task);
-          break;
-        case 'playwright-vision':
-          result = await this.executeWithPlaywrightVision(task);
-          break;
-        case 'puppeteer-ai':
-          result = await this.executeWithPuppeteerAI(task);
-          break;
-        case 'rule-planner':
-          result = await this.executeWithRulePlanner(task);
-          break;
-        case 'cheerio-extractor':
-          result = await this.executeWithCheerioExtractor(task);
-          break;
-        case 'browser-chat':
-          result = await this.executeWithBrowserChat(task);
-          break;
-        default:
-          // Use invisible orchestrator for complex coordination
-          result = await this.executeWithInvisibleOrchestrator(task);
-      }
+      // Process message with unified agent
+      const result = await this.unifiedAgent.processMessage(task);
 
       if (result.success) {
         response.status = 'completed';
-        response.result = result.result?.message || 'Task completed successfully';
+        response.result = result.message;
       } else {
         response.status = 'failed';
-        response.error = result.error || 'Task execution failed';
+        response.error = result.error || 'Message processing failed';
       }
       
       this.activeCommands.set(response.commandId, response);
     } catch (error) {
       response.status = 'failed';
-      response.error = error instanceof Error ? error.message : 'Agent execution error';
+      response.error = error instanceof Error ? error.message : 'Unified agent execution error';
       this.activeCommands.set(response.commandId, response);
     }
   }
 
-  /**
-   * Execute with individual agents
-   */
-  private async executeWithUITars(task: any): Promise<any> {
-    const agent = this.agents.get('ui-tars');
-    if (!agent) throw new Error('UI-TARS agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithBrowserUse(task: any): Promise<any> {
-    const agent = this.agents.get('browser-use');
-    if (!agent) throw new Error('Browser-Use agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithSkyvern(task: any): Promise<any> {
-    const agent = this.agents.get('skyvern');
-    if (!agent) throw new Error('Skyvern agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithLaVague(task: any): Promise<any> {
-    const agent = this.agents.get('lavague');
-    if (!agent) throw new Error('LaVague agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithStagehand(task: any): Promise<any> {
-    const agent = this.agents.get('stagehand');
-    if (!agent) throw new Error('Stagehand agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithPlaywrightVision(task: any): Promise<any> {
-    const agent = this.agents.get('playwright-vision');
-    if (!agent) throw new Error('Playwright Vision agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithPuppeteerAI(task: any): Promise<any> {
-    const agent = this.agents.get('puppeteer-ai');
-    if (!agent) throw new Error('Puppeteer AI agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithRulePlanner(task: any): Promise<any> {
-    const agent = this.agents.get('rule-planner');
-    if (!agent) throw new Error('Rule Planner agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithCheerioExtractor(task: any): Promise<any> {
-    const agent = this.agents.get('cheerio-extractor');
-    if (!agent) throw new Error('Cheerio Extractor agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithBrowserChat(task: any): Promise<any> {
-    const agent = this.agents.get('browser-chat');
-    if (!agent) throw new Error('Browser Chat agent not available');
-    return await agent.executeTask(task);
-  }
-
-  private async executeWithInvisibleOrchestrator(task: any): Promise<any> {
-    if (!this.invisibleOrchestrator) throw new Error('Invisible Orchestrator not available');
-    return await this.invisibleOrchestrator.executeTask(task);
-  }
 
   /**
    * Execute command with browser agent (fallback)

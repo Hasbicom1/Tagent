@@ -19,6 +19,7 @@ import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
 import { mcpOrchestrator } from "./mcpOrchestrator";
 import agentsRouter from "./routes/agents";
+import chatRouter from "./routes/chat";
 import {
   createCheckoutSessionSchema,
   checkoutSuccessSchema,
@@ -471,6 +472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Agents API routes
   app.use('/api/agents', agentsRouter);
+  app.use('/api/chat', chatRouter);
 
   // Create Stripe Checkout session for 24h agent access
   // SECURITY HARDENED: Create checkout session with CSRF protection and validation
