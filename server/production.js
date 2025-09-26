@@ -11,6 +11,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
+import { debugStripeComprehensive } from './stripe-debug.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -156,6 +157,15 @@ try {
   }
 } catch (error) {
   console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
+}
+
+// STEP 9.5: Debug Stripe Configuration (NON-BLOCKING)
+console.log('🔧 PRODUCTION: Debugging Stripe configuration...');
+try {
+  const stripeDebugResults = await debugStripeComprehensive();
+  console.log('🔍 PRODUCTION: Stripe debugging completed');
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Stripe debugging failed (non-blocking):', error.message);
 }
 
 // STEP 10: Initialize API routes (NON-BLOCKING)

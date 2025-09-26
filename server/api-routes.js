@@ -47,6 +47,29 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Stripe status endpoint
+router.get('/stripe/status', async (req, res) => {
+  console.log('💳 API: Stripe status requested');
+  
+  try {
+    const { debugStripeComprehensive } = await import('../stripe-debug.js');
+    const stripeStatus = await debugStripeComprehensive();
+    
+    res.status(200).json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      stripe: stripeStatus
+    });
+  } catch (error) {
+    console.error('❌ API: Stripe status check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
 // Basic error handling for API routes
 router.use((err, req, res, next) => {
   console.error('❌ API: Error in API route:', err);
