@@ -52,7 +52,7 @@ router.get('/stripe/status', async (req, res) => {
   console.log('💳 API: Stripe status requested');
   
   try {
-    const { getStatus } = await import('./stripe-simple.js');
+    const { getStatus } = await import('./server/stripe-simple.js');
     const stripeStatus = getStatus();
     
     res.status(200).json({
@@ -75,7 +75,7 @@ router.post('/stripe/create-checkout-session', async (req, res) => {
   console.log('💳 API: Create checkout session requested');
   
   try {
-    const { createSession } = await import('./stripe-simple.js');
+    const { createSession } = await import('./server/stripe-simple.js');
     await createSession(req, res);
   } catch (error) {
     console.error('❌ API: Create checkout session failed:', error);
@@ -92,7 +92,7 @@ router.post('/stripe/webhook', async (req, res) => {
   console.log('🔔 API: Stripe webhook received');
   
   try {
-    const { handleWebhook } = await import('./stripe-simple.js');
+    const { handleWebhook } = await import('./server/stripe-simple.js');
     await handleWebhook(req, res);
   } catch (error) {
     console.error('❌ API: Stripe webhook failed:', error);
