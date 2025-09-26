@@ -79,11 +79,22 @@ export function VNCClient({
     try {
       updateConnectionState({ authenticating: true, error: null });
 
+      // First, get CSRF token
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include'
+      });
+      
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token');
+      }
+      
+      const { csrfToken } = await csrfResponse.json();
+
       // Request VNC authentication token
       const response = await apiRequest(
         'POST',
         `/api/session/${agentId}/live-view`,
-        {}
+        { csrfToken }
       );
 
       if (!response.ok) {

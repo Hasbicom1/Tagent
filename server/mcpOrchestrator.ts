@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { browserAgent } from "./browserAutomation";
-// import { RealAIAgentOrchestrator } from "./agents/real-ai-agents";
+import UITarsAgent from "./agents/ui-tars-agent";
+import LocalAgentManager from "./agents/local-agent-manager";
 
 // MCP (Message Control Protocol) Orchestrator
 // Routes commands to appropriate AI agents transparently
@@ -77,7 +78,8 @@ const AVAILABLE_AGENTS: AgentCapability[] = [
 
 class MCPOrchestrator {
   private activeCommands: Map<string, CommandResponse> = new Map();
-  private realAgentOrchestrator: any = null;
+  private uiTarsAgent: UITarsAgent | null = null;
+  private localAgentManager: LocalAgentManager | null = null;
 
   async routeCommand(request: CommandRequest): Promise<CommandResponse> {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -95,8 +97,15 @@ class MCPOrchestrator {
       
       this.activeCommands.set(commandId, response);
       
-      // Route to real AI agent orchestrator
-      await this.executeWithRealAgents(request, response, selectedAgent);
+      // Route to appropriate agent based on selection
+      if (selectedAgent.id === 'ui-tars') {
+        await this.executeWithUITars(request, response);
+      } else if (this.isLocalAgent(selectedAgent.id)) {
+        await this.executeWithLocalAgent(request, response, selectedAgent.id);
+      } else {
+        // Fallback to existing browser agent for other agents
+        await this.executeWithBrowserAgent(request, response);
+      }
       
       return response;
       
@@ -191,53 +200,119 @@ Respond with JSON: { "selectedAgent": "agent-id", "reasoning": "brief explanatio
   }
 
   /**
-   * Initialize real AI agent orchestrator
+   * Initialize UI-TARS agent
    */
-  async initializeRealAgents(): Promise<void> {
-    if (!this.realAgentOrchestrator) {
-      // this.realAgentOrchestrator = new RealAIAgentOrchestrator();
-      // await this.realAgentOrchestrator.initialize();
+  async initializeUITars(): Promise<void> {
+    if (!this.uiTarsAgent) {
+      this.uiTarsAgent = new UITarsAgent({
+        apiEndpoint: process.env.UI_TARS_API_ENDPOINT || 'https://api.huggingface.co/models/ByteDance-Seed/UI-TARS-1.5-7B',
+        apiKey: process.env.UI_TARS_API_KEY,
+        model: 'ui-tars-1.5-7b',
+        maxRetries: 3,
+        timeout: 30000
+      });
+      
+      await this.uiTarsAgent.initialize();
     }
   }
 
   /**
-   * Execute command with real AI agents
+   * Execute command with UI-TARS agent
    */
-  private async executeWithRealAgents(request: CommandRequest, response: CommandResponse, selectedAgent: AgentCapability): Promise<void> {
+  private async executeWithUITars(request: CommandRequest, response: CommandResponse): Promise<void> {
     try {
-      // Initialize real agent orchestrator if not already done
-      if (!this.realAgentOrchestrator) {
-        await this.initializeRealAgents();
+      // Initialize UI-TARS if not already done
+      if (!this.uiTarsAgent) {
+        await this.initializeUITars();
       }
 
-      if (!this.realAgentOrchestrator) {
-        throw new Error('Real AI agent orchestrator not available');
+      if (!this.uiTarsAgent) {
+        throw new Error('UI-TARS agent not available');
       }
 
-      // Create task for real agent execution
+      // Create automation task
       const task = {
         id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         sessionId: request.sessionId,
-        instruction: request.command,
-        agentType: selectedAgent.id,
+        description: request.command,
+        type: 'automation',
         timestamp: new Date().toISOString()
       };
 
-      // Execute with real AI agents
-      const result = await this.realAgentOrchestrator.executeTask(task);
+      // Execute with UI-TARS
+      const result = await this.uiTarsAgent.executeTask(task);
       
       if (result.success) {
         response.status = 'completed';
-        response.result = result.result || `Task completed successfully with ${selectedAgent.name}`;
+        response.result = result.result?.message || 'Task completed successfully with UI-TARS';
       } else {
         response.status = 'failed';
-        response.error = result.error || `${selectedAgent.name} execution failed`;
+        response.error = 'UI-TARS execution failed';
       }
       
       this.activeCommands.set(response.commandId, response);
     } catch (error) {
       response.status = 'failed';
-      response.error = error instanceof Error ? error.message : 'Real AI agent execution error';
+      response.error = error instanceof Error ? error.message : 'UI-TARS execution error';
+      this.activeCommands.set(response.commandId, response);
+    }
+  }
+
+  /**
+   * Check if agent is a local agent
+   */
+  private isLocalAgent(agentId: string): boolean {
+    const localAgents = ['browser-use', 'skyvern', 'lavague', 'stagehand'];
+    return localAgents.includes(agentId);
+  }
+
+  /**
+   * Initialize local agent manager
+   */
+  async initializeLocalAgents(): Promise<void> {
+    if (!this.localAgentManager) {
+      this.localAgentManager = new LocalAgentManager();
+      await this.localAgentManager.initialize();
+    }
+  }
+
+  /**
+   * Execute command with local agent
+   */
+  private async executeWithLocalAgent(request: CommandRequest, response: CommandResponse, agentId: string): Promise<void> {
+    try {
+      // Initialize local agent manager if not already done
+      if (!this.localAgentManager) {
+        await this.initializeLocalAgents();
+      }
+
+      if (!this.localAgentManager) {
+        throw new Error('Local agent manager not available');
+      }
+
+      // Create task for local agent
+      const task = {
+        id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        sessionId: request.sessionId,
+        instruction: request.command,
+        selectedAgent: agentId
+      };
+
+      // Execute with local agent
+      const result = await this.localAgentManager.executeTask(task, agentId);
+      
+      if (result.success) {
+        response.status = 'completed';
+        response.result = result.reasoning || `Task completed successfully with ${result.agent}`;
+      } else {
+        response.status = 'failed';
+        response.error = result.error || `${result.agent} execution failed`;
+      }
+      
+      this.activeCommands.set(response.commandId, response);
+    } catch (error) {
+      response.status = 'failed';
+      response.error = error instanceof Error ? error.message : 'Local agent execution error';
       this.activeCommands.set(response.commandId, response);
     }
   }

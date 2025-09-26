@@ -14,8 +14,14 @@ export default function Landing() {
     try {
       setIsCreatingCheckout(true);
       
+      // Get CSRF token
+      const csrfResponse = await apiRequest('GET', '/api/csrf-token');
+      const { csrfToken } = await csrfResponse.json();
+
       // Create Stripe checkout session
-      const response = await apiRequest('POST', '/api/stripe/create-checkout-session', {});
+      const response = await apiRequest('POST', '/api/create-checkout-session', {
+        csrfToken
+      });
 
       const { checkoutUrl } = await response.json();
       
