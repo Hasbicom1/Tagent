@@ -77,7 +77,7 @@ class RedisSingleton {
       return this.redis;
       
     } catch (error) {
-      console.error('❌ REDIS SINGLETON: Redis initialization failed:', error.message);
+      console.error('❌ REDIS SINGLETON: Redis initialization failed:', error instanceof Error ? error.message : String(error));
       
       // Check if we're in development mode
       const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;

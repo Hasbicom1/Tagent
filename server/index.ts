@@ -749,6 +749,11 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
 
 (async () => {
   try {
+    console.log('🚀 1. App starting...');
+    console.log('🚀 2. Environment:', process.env.NODE_ENV);
+    console.log('🚀 3. Port:', process.env.PORT);
+    console.log('🚀 4. Railway Environment:', process.env.RAILWAY_ENVIRONMENT);
+    
     // SECURITY FIX: Validate critical security configuration at startup
     log('🔐 Validating security configuration...');
     validateSecurityConfiguration();
@@ -812,6 +817,8 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       process.exit(1); // FAIL FAST: No memory store fallback allowed
     }
 
+    console.log('🚀 5. Redis singleton initialized successfully');
+    
     // CRITICAL FIX: Initialize idempotency service with Redis singleton
     log('🔄 Initializing webhook idempotency service...');
     try {
@@ -857,9 +864,49 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       process.exit(1); // FAIL FAST: No memory store fallback allowed
     }
 
+    // CRITICAL: Add Railway health check endpoint
+    app.get('/health', (req, res) => {
+      res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        redis: redisInstance ? 'connected' : 'not_available',
+        environment: process.env.NODE_ENV || 'development'
+      });
+    });
+
+    // CRITICAL: Add Railway readiness check endpoint
+    app.get('/ready', async (req, res) => {
+      try {
+        if (redisInstance) {
+          await redisInstance.ping();
+          res.status(200).json({ 
+            status: 'ready', 
+            timestamp: new Date().toISOString(),
+            redis: 'connected'
+          });
+        } else {
+          res.status(503).json({ 
+            status: 'not_ready', 
+            timestamp: new Date().toISOString(),
+            redis: 'not_available'
+          });
+        }
+      } catch (error) {
+        res.status(503).json({ 
+          status: 'not_ready', 
+          timestamp: new Date().toISOString(),
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
+    console.log('🚀 6. Idempotency service initialized successfully');
+    
     // STARTUP FIX: Start server AFTER session is ready
     log('🚀 Starting HTTP server...');
+    console.log('🚀 7. Registering routes...');
     const server = await registerRoutes(app);
+    console.log('🚀 8. Routes registered successfully');
     
     // Start listening on port immediately - CRITICAL for Replit deployment
     const port = parseInt(process.env.PORT || '5000', 10);
@@ -869,6 +916,8 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       reusePort: true,
     }, () => {
       log(`🌐 Server running on port ${port}`);
+      console.log('🚀 9. Server listening successfully');
+      console.log('🚀 10. Application startup complete!');
     });
     
     // Now initialize Redis components asynchronously without blocking startup

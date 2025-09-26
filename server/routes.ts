@@ -396,8 +396,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check Redis connectivity (required for production)
       let redisHealthy = false;
       try {
-        await redis.ping();
-        redisHealthy = true;
+        if (redis) {
+          await redis.ping();
+          redisHealthy = true;
+        }
       } catch {
         redisHealthy = false;
       }

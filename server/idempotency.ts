@@ -54,7 +54,7 @@ export class IdempotencyService {
       const value = JSON.stringify({ state: 'processing', timestamp: Date.now() });
       
       // SET key value NX EX - atomic claim operation (Redis-only)
-      const result = await this.redis.set(key, value, 'NX', 'EX', processingTtl);
+      const result = await this.redis.set(key, value, 'EX', processingTtl, 'NX');
       
       if (result === 'OK') {
         logger.info('🔒 IDEMPOTENCY: Event claimed for processing (Redis)', {

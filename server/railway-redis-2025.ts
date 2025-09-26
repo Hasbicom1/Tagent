@@ -405,7 +405,7 @@ export async function testRailwayRedisConnection(redis: Redis, config: RailwayRe
       console.log('✅ RAILWAY 2025: Connection test successful');
       return true;
     } catch (error) {
-      console.warn(`⚠️  RAILWAY 2025: Connection attempt ${attempt} failed:`, error.message);
+      console.warn(`⚠️  RAILWAY 2025: Connection attempt ${attempt} failed:`, error instanceof Error ? error.message : String(error));
       
       if (attempt < maxAttempts) {
         const retryDelay = isRailway ? 3000 : 1000;
@@ -441,7 +441,7 @@ export async function initializeRailwayRedis2025(): Promise<Redis | null> {
     return redis;
     
   } catch (error) {
-    console.error('❌ RAILWAY 2025: Redis initialization failed:', error.message);
+    console.error('❌ RAILWAY 2025: Redis initialization failed:', error instanceof Error ? error.message : String(error));
     
     // Check if we're in development mode
     const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
