@@ -5,7 +5,7 @@
  * without any complex dependencies or Redis connections.
  */
 
-const http = require('http');
+import http from 'http';
 
 console.log('🚀 MINIMAL TEST: Starting basic HTTP server...');
 console.log('🚀 MINIMAL TEST: Environment:', process.env.NODE_ENV);
