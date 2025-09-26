@@ -79,13 +79,12 @@ async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 20
   });
 }
 
-// Redis connection configuration (Redis required for production deployment)
+// RAILWAY FIX: Flexible Redis connection configuration
 const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> => {
-  const redisUrl = process.env.REDIS_URL;
-  
-  if (!redisUrl) {
-    throw new Error('REDIS_URL environment variable is required for queue system in production deployment');
-  }
+  // Use flexible Redis URL detection
+  const { getRedisUrl } = await import('./redis-config');
+  const redisConfig = getRedisUrl();
+  const redisUrl = redisConfig.url;
   
   // REPLIT FIX: Test Redis connection with aggressive timeout
   try {

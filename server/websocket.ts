@@ -192,11 +192,12 @@ export class WebSocketManager {
    */
   private async initializeRedis(): Promise<void> {
     try {
-      const redisUrl = process.env.REDIS_URL;
+      // RAILWAY FIX: Use flexible Redis URL detection
+      const { getRedisUrl } = await import('./redis-config');
+      const redisConfig = getRedisUrl();
+      const redisUrl = redisConfig.url;
       
-      if (!redisUrl) {
-        throw new Error('REDIS_URL required for WebSocket coordination in production deployment');
-      }
+      console.log(`✅ WEBSOCKET: Redis URL found from ${redisConfig.source}`);
 
       // Test Redis connection first
       const testRedis = new Redis(redisUrl, {

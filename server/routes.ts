@@ -277,7 +277,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Initialize Redis for rate limiting and session security (if available)
   let redis: Redis | null = null;
-  const redisUrl = process.env.REDIS_URL;
+  
+  // RAILWAY FIX: Use flexible Redis URL detection
+  let redisUrl: string | null = null;
+  try {
+    const { getRedisUrl } = await import('./redis-config');
+    const redisConfig = getRedisUrl();
+    redisUrl = redisConfig.url;
+    console.log(`✅ ROUTES: Redis URL found from ${redisConfig.source}`);
+  } catch (error) {
+    console.log('⚠️  ROUTES: No Redis URL found, skipping rate limiting');
+    redisUrl = null;
+  }
+  
   const isDevelopment = process.env.NODE_ENV === 'development';
   const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;
   

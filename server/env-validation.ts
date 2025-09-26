@@ -8,13 +8,13 @@ interface RequiredEnvVars {
 // PRODUCTION LOCKDOWN: Comprehensive environment variable requirements
 const REQUIRED_ENV_VARS: RequiredEnvVars = {
   development: [
-    'DATABASE_URL',
-    'REDIS_URL'
+    'DATABASE_URL'
+    // REDIS_URL removed - will be detected flexibly
   ],
   production: [
     // Database and Storage (CRITICAL - NO FALLBACKS)
     'DATABASE_URL',
-    'REDIS_URL',
+    // REDIS_URL removed - will be detected flexibly
     
     // Security Secrets (CRITICAL - NO DEFAULTS)
     'SESSION_SECRET',
@@ -110,6 +110,9 @@ export function validateEnvironment(): void {
   console.log(`   Environment: ${env}`);
   console.log(`   Required variables: ${required.length}`);
   
+  // RAILWAY FIX: Flexible Redis URL validation
+  validateRedisUrlFlexibly();
+  
   // Check for missing variables
   const missing = required.filter(envVar => !process.env[envVar]);
   
@@ -124,20 +127,6 @@ export function validateEnvironment(): void {
       const requirement = ENV_SECURITY_REQUIREMENTS[envVar];
       console.error(`  - ${envVar}: ${requirement?.description || 'Required environment variable'}`);
     });
-    
-    if (missing.includes('REDIS_URL')) {
-      console.error('\n🚨 REDIS REQUIREMENT: This application requires Redis for:');
-      console.error('   • Session management (NO memory fallback in production)');
-      console.error('   • Rate limiting coordination');
-      console.error('   • Webhook idempotency protection');
-      console.error('   • Queue system operations');
-      console.error('   • WebSocket coordination');
-      console.error('\n🔧 RAILWAY FIX: Ensure Redis addon is attached:');
-      console.error('   1. Go to Railway Dashboard > Project > Services');
-      console.error('   2. Click "+ New" > Database > Redis');
-      console.error('   3. Wait for deployment and verify REDIS_URL appears in Variables');
-      console.error('   4. Redeploy the application');
-    }
     
     console.error('\n❌ PRODUCTION SECURITY: Application cannot start without all required variables');
     process.exit(1);
@@ -240,30 +229,87 @@ function validateHTTPSEnforcement(): void {
 }
 
 /**
+ * RAILWAY FIX: Flexible Redis URL validation
+ * Checks for multiple possible Redis URL environment variables
+ */
+function validateRedisUrlFlexibly(): void {
+  console.log('🔍 REDIS: Scanning for Redis URL in environment variables...');
+  
+  // Priority order for Redis URL detection
+  const redisUrlCandidates = [
+    'REDIS_PRIVATE_URL',    // Railway Redis Service (Private)
+    'REDIS_URL',           // Standard Redis URL
+    'REDIS_PUBLIC_URL',    // Railway Redis Service (Public)
+    'REDIS_EXTERNAL_URL',  // Railway Redis Service (External)
+    'REDIS_CONNECTION_STRING', // Alternative Redis URL
+    'CACHE_URL',           // Cache URL (Redis)
+    'DATABASE_URL'         // Database URL (if Redis)
+  ];
+  
+  let foundRedisUrl = false;
+  let redisSource = '';
+  
+  for (const candidate of redisUrlCandidates) {
+    const url = process.env[candidate];
+    if (url) {
+      console.log(`✅ REDIS: Found ${candidate}: ${url.substring(0, 20)}...`);
+      
+      // Validate Redis URL format
+      if (isValidRedisUrl(url)) {
+        foundRedisUrl = true;
+        redisSource = candidate;
+        console.log(`✅ REDIS: Valid Redis URL found in ${candidate}`);
+        break;
+      } else {
+        console.warn(`⚠️  REDIS: Invalid Redis URL format in ${candidate}: ${url.substring(0, 20)}...`);
+      }
+    }
+  }
+  
+  if (!foundRedisUrl) {
+    console.error('❌ REDIS: No valid Redis URL found in environment variables');
+    console.error('   Checked variables:', redisUrlCandidates.join(', '));
+    console.error('\n🚨 REDIS REQUIREMENT: This application requires Redis for:');
+    console.error('   • Session management (NO memory fallback in production)');
+    console.error('   • Rate limiting coordination');
+    console.error('   • Webhook idempotency protection');
+    console.error('   • Queue system operations');
+    console.error('   • WebSocket coordination');
+    console.error('\n🔧 RAILWAY FIX: Ensure Redis addon is attached:');
+    console.error('   1. Go to Railway Dashboard > Project > Services');
+    console.error('   2. Click "+ New" > Database > Redis');
+    console.error('   3. Wait for deployment and verify REDIS_PRIVATE_URL appears in Variables');
+    console.error('   4. Redeploy the application');
+    process.exit(1);
+  }
+  
+  console.log(`✅ REDIS: Redis URL validated from ${redisSource}`);
+}
+
+/**
+ * Validate Redis URL format
+ */
+function isValidRedisUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  
+  // Check for Redis URL patterns
+  const redisPatterns = [
+    /^redis:\/\/.+/,
+    /^rediss:\/\/.+/,
+    /^redis:\/\/default:.+@.+/,
+    /^redis:\/\/default:.+@redis\.railway\.internal:\d+/,
+    /^redis:\/\/default:.+@containers-.+\.railway\.app:\d+/
+  ];
+  
+  return redisPatterns.some(pattern => pattern.test(url));
+}
+
+/**
  * PRODUCTION SECURITY: Validate Redis requirements
  */
 function validateRedisRequirements(): void {
-  const redisUrl = process.env.REDIS_URL;
-  
-  if (!redisUrl) {
-    console.error('❌ REDIS: REDIS_URL is required for production deployment');
-    process.exit(1);
-  }
-  
-  // Validate Redis URL format
-  if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
-    console.error('❌ REDIS: Invalid Redis URL format');
-    console.error(`   Current: ${redisUrl.substring(0, 20)}...`);
-    console.error(`   Expected: redis://... or rediss://...`);
-    process.exit(1);
-  }
-  
-  // Recommend rediss:// for production
-  if (redisUrl.startsWith('redis://') && !redisUrl.includes('localhost')) {
-    console.warn('⚠️  REDIS: Consider using rediss:// (SSL) for production Redis connections');
-  }
-  
-  console.log('✅ REDIS: Production Redis configuration validated');
+  // This function is now handled by validateRedisUrlFlexibly()
+  console.log('✅ REDIS: Redis requirements validated via flexible detection');
 }
 
 /**
