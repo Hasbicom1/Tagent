@@ -30,14 +30,9 @@ export default function Success() {
           throw new Error('No session ID found in URL');
         }
 
-        // Get CSRF token
-        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
-        const { csrfToken } = await csrfResponse.json();
-
-        // Verify payment and create agent session
-        const response = await apiRequest('POST', '/api/checkout-success', {
-          sessionId,
-          csrfToken
+        // Verify payment with Stripe and create agent session
+        const response = await apiRequest('POST', '/api/stripe/verify-payment', {
+          sessionId
         });
 
         if (!response.ok) {
@@ -46,11 +41,11 @@ export default function Success() {
         }
 
         const data = await response.json();
-        setSessionData(data);
+        setSessionData(data.data);
         
         toast({
-          title: "Liberation Successful!",
-          description: `Agent ${data.agentId} is now active for 24 hours`,
+          title: "Payment Successful!",
+          description: `Agent ${data.data.agentId} is now active for 24 hours`,
         });
         
       } catch (error: any) {
@@ -72,7 +67,7 @@ export default function Success() {
 
   const handleEnterChat = () => {
     if (sessionData) {
-      setLocation(`/live/agent/${sessionData.agentId}`);
+      setLocation('/browser-chat');
     }
   };
 
@@ -144,7 +139,7 @@ export default function Success() {
         <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-6" />
         
         <h1 className="text-3xl font-bold mb-4">
-          Liberation Successful!
+          Payment Successful!
         </h1>
         
         <div className="bg-muted/50 rounded-lg p-4 mb-6">

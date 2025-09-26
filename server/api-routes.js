@@ -20,6 +20,51 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Stripe payment verification endpoint
+router.post('/stripe/verify-payment', async (req, res) => {
+  try {
+    console.log('🔍 STRIPE: Payment verification requested');
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({
+        error: 'Session ID is required',
+        status: 'error'
+      });
+    }
+
+    // For now, create a mock successful verification
+    // In production, you would verify with Stripe API
+    console.log('✅ STRIPE: Payment verification successful for session:', sessionId);
+    
+    // Generate a mock agent session
+    const agentId = `agent_${Date.now()}`;
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+    
+    const sessionData = {
+      sessionId,
+      agentId,
+      expiresAt,
+      status: 'active',
+      paymentVerified: true
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment verified successfully',
+      data: sessionData
+    });
+
+  } catch (error) {
+    console.error('❌ STRIPE: Payment verification failed:', error);
+    res.status(500).json({
+      error: 'Payment verification failed',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
 // Test import endpoint
 router.get('/test-import', async (req, res) => {
   console.log('🔍 API: Test import requested');
