@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
+import { initializeDatabase, createTables } from './database.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -203,6 +204,20 @@ try {
   console.log('✅ PRODUCTION: API routes initialized');
 } catch (error) {
   console.warn('⚠️ PRODUCTION: API routes initialization failed (non-blocking):', error.message);
+}
+
+// STEP 8: Initialize Database
+console.log('🔧 PRODUCTION: Initializing database...');
+try {
+  const db = initializeDatabase();
+  if (db) {
+    await createTables();
+    console.log('✅ PRODUCTION: Database initialized and tables created');
+  } else {
+    console.log('⚠️ PRODUCTION: Database not available - using mock storage');
+  }
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
 }
 
 // STEP 11: Error handling middleware

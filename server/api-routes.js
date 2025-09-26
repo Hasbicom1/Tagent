@@ -6,6 +6,8 @@
  */
 
 import express from 'express';
+import { createUserSession, getUserSession, updateSessionStatus } from './database.js';
+import { getBrowserSession, createBrowserSession, removeBrowserSession } from './browser-automation.js';
 
 const router = express.Router();
 
@@ -20,10 +22,10 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Stripe payment verification endpoint
+// Real Stripe payment verification endpoint
 router.post('/stripe/verify-payment', async (req, res) => {
   try {
-    console.log('🔍 STRIPE: Payment verification requested');
+    console.log('🔍 STRIPE: Real payment verification requested');
     const { sessionId } = req.body;
     
     if (!sessionId) {
@@ -33,12 +35,49 @@ router.post('/stripe/verify-payment', async (req, res) => {
       });
     }
 
-    // For now, create a mock successful verification
-    // In production, you would verify with Stripe API
-    console.log('✅ STRIPE: Payment verification successful for session:', sessionId);
+    // Real Stripe verification
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     
-    // Generate a mock agent session
-    const agentId = `agent_${Date.now()}`;
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.log('⚠️ STRIPE: Using mock verification (no secret key)');
+      // Fallback to mock for development
+      const agentId = `agent_${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      
+      const sessionData = {
+        sessionId,
+        agentId,
+        expiresAt,
+        status: 'active',
+        paymentVerified: true,
+        mockMode: true
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: 'Payment verified successfully (mock mode)',
+        data: sessionData
+      });
+    }
+
+    // Real Stripe API verification
+    console.log('🔍 STRIPE: Verifying session with Stripe API:', sessionId);
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({
+        error: 'Payment not completed',
+        status: 'error',
+        details: 'Session payment status is not paid'
+      });
+    }
+
+    console.log('✅ STRIPE: Real payment verification successful');
+    console.log('💰 STRIPE: Amount paid:', session.amount_total / 100, 'USD');
+    console.log('👤 STRIPE: Customer email:', session.customer_details?.email);
+    
+    // Generate real agent session
+    const agentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
     
     const sessionData = {
@@ -46,19 +85,224 @@ router.post('/stripe/verify-payment', async (req, res) => {
       agentId,
       expiresAt,
       status: 'active',
-      paymentVerified: true
+      paymentVerified: true,
+      amountPaid: session.amount_total / 100,
+      customerEmail: session.customer_details?.email,
+      stripeCustomerId: session.customer,
+      realPayment: true
     };
 
-    res.status(200).json({
-      success: true,
-      message: 'Payment verified successfully',
-      data: sessionData
-    });
+    // Store in database
+    console.log('💾 STRIPE: Storing session in database...');
+    try {
+      const storedSession = await createUserSession(sessionData);
+      console.log('✅ DATABASE: Session stored with ID:', storedSession.id);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Payment verified successfully',
+        data: {
+          ...sessionData,
+          databaseId: storedSession.id,
+          createdAt: storedSession.createdAt
+        }
+      });
+    } catch (dbError) {
+      console.error('❌ DATABASE: Failed to store session:', dbError);
+      // Still return success but log the database error
+      res.status(200).json({
+        success: true,
+        message: 'Payment verified successfully (database storage failed)',
+        data: sessionData,
+        warning: 'Session not persisted to database'
+      });
+    }
 
   } catch (error) {
     console.error('❌ STRIPE: Payment verification failed:', error);
     res.status(500).json({
       error: 'Payment verification failed',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+// Agent session validation endpoint
+router.get('/agent/:agentId/status', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    console.log('🔍 AGENT: Checking status for agent:', agentId);
+    
+    const session = await getUserSession(agentId);
+    
+    if (!session) {
+      return res.status(404).json({
+        error: 'Agent session not found or expired',
+        status: 'not_found'
+      });
+    }
+
+    // Check if session is expired
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('⚠️ AGENT: Session expired for agent:', agentId);
+      await updateSessionStatus(agentId, 'expired');
+      
+      return res.status(410).json({
+        error: 'Agent session has expired',
+        status: 'expired',
+        expiredAt: session.expires_at
+      });
+    }
+
+    console.log('✅ AGENT: Active session found for agent:', agentId);
+    res.status(200).json({
+      success: true,
+      agentId: session.agent_id,
+      status: session.status,
+      expiresAt: session.expires_at,
+      paymentVerified: session.payment_verified,
+      amountPaid: session.amount_paid,
+      customerEmail: session.customer_email,
+      timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
+    });
+
+  } catch (error) {
+    console.error('❌ AGENT: Failed to check agent status:', error);
+    res.status(500).json({
+      error: 'Failed to check agent status',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+// Browser automation endpoints
+router.post('/browser/:agentId/initialize', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    console.log('🚀 BROWSER: Initializing browser session for agent:', agentId);
+    
+    // Verify agent session
+    const session = await getUserSession(agentId);
+    if (!session) {
+      return res.status(404).json({
+        error: 'Agent session not found or expired',
+        status: 'not_found'
+      });
+    }
+
+    // Create browser session
+    const browserSession = createBrowserSession(agentId);
+    await browserSession.initialize();
+    
+    console.log('✅ BROWSER: Browser session initialized for agent:', agentId);
+    res.status(200).json({
+      success: true,
+      message: 'Browser automation initialized',
+      agentId,
+      status: 'active'
+    });
+
+  } catch (error) {
+    console.error('❌ BROWSER: Failed to initialize browser session:', error);
+    res.status(500).json({
+      error: 'Failed to initialize browser automation',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+router.post('/browser/:agentId/execute', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { task } = req.body;
+    
+    console.log('🎯 BROWSER: Executing task for agent:', agentId, 'Task:', task);
+    
+    const browserSession = getBrowserSession(agentId);
+    if (!browserSession) {
+      return res.status(404).json({
+        error: 'Browser session not found',
+        status: 'not_found'
+      });
+    }
+
+    const result = await browserSession.executeTask(task);
+    
+    console.log('✅ BROWSER: Task executed successfully for agent:', agentId);
+    res.status(200).json({
+      success: true,
+      result,
+      agentId,
+      task
+    });
+
+  } catch (error) {
+    console.error('❌ BROWSER: Failed to execute task:', error);
+    res.status(500).json({
+      error: 'Failed to execute browser task',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+router.get('/browser/:agentId/screenshot', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    console.log('📸 BROWSER: Taking screenshot for agent:', agentId);
+    
+    const browserSession = getBrowserSession(agentId);
+    if (!browserSession) {
+      return res.status(404).json({
+        error: 'Browser session not found',
+        status: 'not_found'
+      });
+    }
+
+    const result = await browserSession.takeScreenshot();
+    
+    console.log('✅ BROWSER: Screenshot taken for agent:', agentId);
+    res.status(200).json({
+      success: true,
+      screenshot: result.screenshot,
+      timestamp: result.timestamp,
+      agentId
+    });
+
+  } catch (error) {
+    console.error('❌ BROWSER: Failed to take screenshot:', error);
+    res.status(500).json({
+      error: 'Failed to take screenshot',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+router.delete('/browser/:agentId', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    console.log('🔒 BROWSER: Closing browser session for agent:', agentId);
+    
+    removeBrowserSession(agentId);
+    
+    console.log('✅ BROWSER: Browser session closed for agent:', agentId);
+    res.status(200).json({
+      success: true,
+      message: 'Browser session closed',
+      agentId
+    });
+
+  } catch (error) {
+    console.error('❌ BROWSER: Failed to close browser session:', error);
+    res.status(500).json({
+      error: 'Failed to close browser session',
       status: 'error',
       details: error.message
     });
