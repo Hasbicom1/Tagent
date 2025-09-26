@@ -20,11 +20,8 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
   useEffect(() => {
     const createCheckoutSession = async () => {
       try {
-        // Get CSRF token first
-        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
-        const { csrfToken } = await csrfResponse.json();
-        
-        const response = await apiRequest('POST', '/api/stripe/create-checkout-session', { csrfToken });
+        // Call Stripe endpoint directly (no CSRF token required)
+        const response = await apiRequest('POST', '/api/stripe/create-checkout-session', {});
         const data = await response.json();
         console.log('🎯 Checkout session response:', data);
         console.log('🔍 Response keys:', Object.keys(data || {}));
