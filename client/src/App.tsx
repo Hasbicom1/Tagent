@@ -53,14 +53,9 @@ function CheckoutSuccess() {
       }
 
       try {
-        // Get CSRF token first
-        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
-        const { csrfToken } = await csrfResponse.json();
-        
-        // Process the successful checkout with CSRF token
-        const response = await apiRequest('POST', '/api/checkout-success', {
-          sessionId: checkoutSessionId,
-          csrfToken: csrfToken
+        // Process the successful checkout
+        const response = await apiRequest('POST', '/api/stripe/verify-payment', {
+          sessionId: checkoutSessionId
         });
 
         const data = await response.json();

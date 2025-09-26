@@ -151,14 +151,9 @@ export default function AgentChat() {
     try {
       setIsSending(true);
       
-      // Get CSRF token
-      const csrfResponse = await apiRequest('GET', '/api/csrf-token');
-      const { csrfToken } = await csrfResponse.json();
-
       // Send message
       const response = await apiRequest('POST', `/api/session/${agentId}/message`, {
-        content: inputMessage.trim(),
-        csrfToken
+        content: inputMessage.trim()
       });
 
       if (!response.ok) {
