@@ -1,6 +1,7 @@
 {
   "name": "rest-express",
   "version": "1.0.0",
+  "_comment": "Railway build fix - removed esbuild compilation",
   "type": "module",
   "license": "MIT",
   "scripts": {
