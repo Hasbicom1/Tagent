@@ -70,6 +70,40 @@ router.get('/stripe/status', async (req, res) => {
   }
 });
 
+// Create checkout session endpoint
+router.post('/stripe/create-checkout-session', async (req, res) => {
+  console.log('💳 API: Create checkout session requested');
+  
+  try {
+    const { createCheckoutSession } = await import('../stripe-integration.js');
+    await createCheckoutSession(req, res);
+  } catch (error) {
+    console.error('❌ API: Create checkout session failed:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// Stripe webhook endpoint
+router.post('/stripe/webhook', async (req, res) => {
+  console.log('🔔 API: Stripe webhook received');
+  
+  try {
+    const { handleStripeWebhook } = await import('../stripe-integration.js');
+    await handleStripeWebhook(req, res);
+  } catch (error) {
+    console.error('❌ API: Stripe webhook failed:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
 // Basic error handling for API routes
 router.use((err, req, res, next) => {
   console.error('❌ API: Error in API route:', err);

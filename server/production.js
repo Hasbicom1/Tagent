@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
+import { initializeStripe, isStripeAvailable } from './stripe-integration.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -74,14 +75,18 @@ app.get('/health', async (req, res) => {
       redisStatus = 'disconnected';
     }
     
+    // Check Stripe connection
+    const stripeStatus = isStripeAvailable() ? 'connected' : 'disconnected';
+    
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       redis: redisStatus,
+      stripe: stripeStatus,
       environment: process.env.NODE_ENV || 'development',
       port: port,
       railway: true,
-      endpoints: ['/health', '/', '/api/health']
+      endpoints: ['/health', '/', '/api/health', '/api/stripe/status']
     });
     
     console.log('🏥 PRODUCTION: Health check response sent');
@@ -120,14 +125,19 @@ app.get('/api/health', async (req, res) => {
       redisStatus = 'disconnected';
     }
     
+    // Check Stripe connection
+    const stripeStatus = isStripeAvailable() ? 'connected' : 'disconnected';
+    
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       redis: redisStatus,
+      stripe: stripeStatus,
       environment: process.env.NODE_ENV || 'development',
       services: {
         express: 'running',
         redis: redisStatus,
+        stripe: stripeStatus,
         server: 'listening'
       }
     });
@@ -159,7 +169,23 @@ try {
   console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
 }
 
-// STEP 9.5: Debug Stripe Configuration (NON-BLOCKING)
+// STEP 9.5: Initialize Stripe Payment Gateway (NON-BLOCKING)
+console.log('🔧 PRODUCTION: Initializing Stripe payment gateway...');
+let stripeConnected = false;
+
+try {
+  const stripeResult = initializeStripe();
+  if (stripeResult.success) {
+    console.log('✅ PRODUCTION: Stripe payment gateway initialized');
+    stripeConnected = true;
+  } else {
+    console.warn('⚠️ PRODUCTION: Stripe initialization failed (non-blocking):', stripeResult.error);
+  }
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Stripe initialization failed (non-blocking):', error.message);
+}
+
+// STEP 9.6: Debug Stripe Configuration (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Debugging Stripe configuration...');
 try {
   const stripeDebugResults = await debugStripeComprehensive();
