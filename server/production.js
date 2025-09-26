@@ -12,7 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
-import { initializeStripe, isStripeAvailable } from './stripe-integration.js';
+import { initStripe, isStripeReady } from './stripe-simple.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -76,7 +76,7 @@ app.get('/health', async (req, res) => {
     }
     
     // Check Stripe connection
-    const stripeStatus = isStripeAvailable() ? 'connected' : 'disconnected';
+    const stripeStatus = isStripeReady() ? 'connected' : 'disconnected';
     
     res.status(200).json({
       status: 'healthy',
@@ -126,7 +126,7 @@ app.get('/api/health', async (req, res) => {
     }
     
     // Check Stripe connection
-    const stripeStatus = isStripeAvailable() ? 'connected' : 'disconnected';
+    const stripeStatus = isStripeReady() ? 'connected' : 'disconnected';
     
     res.status(200).json({
       status: 'healthy',
@@ -174,12 +174,12 @@ console.log('🔧 PRODUCTION: Initializing Stripe payment gateway...');
 let stripeConnected = false;
 
 try {
-  const stripeResult = initializeStripe();
-  if (stripeResult.success) {
+  const stripeResult = initStripe();
+  if (stripeResult) {
     console.log('✅ PRODUCTION: Stripe payment gateway initialized');
     stripeConnected = true;
   } else {
-    console.warn('⚠️ PRODUCTION: Stripe initialization failed (non-blocking):', stripeResult.error);
+    console.warn('⚠️ PRODUCTION: Stripe initialization failed (non-blocking)');
   }
 } catch (error) {
   console.warn('⚠️ PRODUCTION: Stripe initialization failed (non-blocking):', error.message);
