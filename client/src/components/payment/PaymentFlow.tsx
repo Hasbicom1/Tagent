@@ -24,7 +24,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
         const csrfResponse = await apiRequest('GET', '/api/csrf-token');
         const { csrfToken } = await csrfResponse.json();
         
-        const response = await apiRequest('POST', '/api/create-checkout-session', { csrfToken });
+        const response = await apiRequest('POST', '/api/stripe/create-checkout-session', { csrfToken });
         const data = await response.json();
         console.log('🎯 Checkout session response:', data);
         console.log('🔍 Response keys:', Object.keys(data || {}));
