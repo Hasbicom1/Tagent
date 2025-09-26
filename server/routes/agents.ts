@@ -6,16 +6,28 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '../logger';
 const router = Router();
+let localAgentManager: any = null;
 
-// Mock agent manager for compatibility
+// Initialize real agent manager
 const initializeAgentManager = async () => {
-  logger.info('✅ Agent routes initialized (simulation mode)');
-  return {
-    getAvailableAgents: () => [],
-    getAgent: (id: string) => null,
-    executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Agent system not available' }),
-    healthCheck: () => false
-  };
+  if (!localAgentManager) {
+    try {
+      const { default: LocalAgentManager } = await import('../agents/local-agent-manager');
+      localAgentManager = new LocalAgentManager();
+      await localAgentManager.initialize();
+      logger.info('✅ Agent routes initialized with real agent manager');
+    } catch (error) {
+      logger.error('❌ Failed to initialize real agent manager:', error);
+      // Fallback to mock
+      localAgentManager = {
+        getAvailableAgents: () => [],
+        getAgent: (id: string) => null,
+        executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Agent system not available' }),
+        healthCheck: () => false
+      };
+    }
+  }
+  return localAgentManager;
 };
 
 /**
