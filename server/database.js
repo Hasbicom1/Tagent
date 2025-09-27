@@ -52,8 +52,8 @@ export function getDatabase() {
 // User session management
 export async function createUserSession(sessionData) {
   if (!pool) {
-    console.log('⚠️ DATABASE: No database connection, using mock storage');
-    return { id: Date.now(), ...sessionData };
+    console.error('❌ DATABASE: No database connection - session creation failed');
+    throw new Error('Database connection required for session creation');
   }
 
   try {
@@ -93,8 +93,8 @@ export async function createUserSession(sessionData) {
 
 export async function getUserSession(agentId) {
   if (!pool) {
-    console.log('⚠️ DATABASE: No database connection, using mock lookup');
-    return null;
+    console.error('❌ DATABASE: No database connection - session lookup failed');
+    throw new Error('Database connection required for session lookup');
   }
 
   try {
@@ -121,8 +121,8 @@ export async function getUserSession(agentId) {
 
 export async function updateSessionStatus(agentId, status) {
   if (!pool) {
-    console.log('⚠️ DATABASE: No database connection, mock status update');
-    return true;
+    console.error('❌ DATABASE: No database connection - status update failed');
+    throw new Error('Database connection required for status update');
   }
 
   try {
