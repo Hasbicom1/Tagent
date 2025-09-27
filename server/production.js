@@ -53,6 +53,12 @@ app.use(cors({
   credentials: true
 }));
 
+// TEST ROUTE - Add immediately after CORS
+app.get('/api/test-route', (req, res) => {
+  console.log('🧪 TEST: Route found and working');
+  res.json({ message: 'Test route is working', timestamp: new Date().toISOString() });
+});
+
 // STEP 5: Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -213,56 +219,19 @@ try {
 // STEP 10.5: Add missing API endpoints that frontend expects
 console.log('🔧 PRODUCTION: Adding missing API endpoints...');
 
-// CSRF Token endpoint (frontend expects this) - ACTIVATED REAL CSRF
+// CSRF Token endpoint (frontend expects this) - TEST ROUTE
 app.get('/api/csrf-token', (req, res) => {
-  console.log('🔐 PRODUCTION: CSRF token requested');
-  try {
-    // Generate real CSRF token using crypto
-    const crypto = require('crypto');
-    const realToken = crypto.randomBytes(32).toString('hex');
-    
-    res.json({ 
-      csrfToken: realToken,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ PRODUCTION: CSRF token generation failed:', error);
-    res.status(500).json({
-      error: 'CSRF token generation failed',
-      timestamp: new Date().toISOString()
-    });
-  }
+  console.log('🔐 PRODUCTION: CSRF token requested - ROUTE FOUND');
+  res.json({ 
+    csrfToken: 'test-token-123',
+    timestamp: new Date().toISOString(),
+    message: 'Route is working'
+  });
 });
 
-// Create checkout session endpoint (frontend expects this)
-app.post('/api/create-checkout-session', async (req, res) => {
-  console.log('💳 PRODUCTION: Create checkout session requested');
-  try {
-    const { createSession } = await import('./stripe-simple.js');
-    await createSession(req, res);
-  } catch (error) {
-    console.error('❌ PRODUCTION: Create checkout session failed:', error);
-    res.status(500).json({
-      error: 'PAYMENT_GATEWAY_ERROR',
-      message: 'Payment gateway not available'
-    });
-  }
-});
+// Create checkout session endpoint already exists in api-routes.js
 
-// Checkout success endpoint (frontend expects this)
-app.post('/api/checkout-success', async (req, res) => {
-  console.log('✅ PRODUCTION: Checkout success requested');
-  try {
-    const { handleWebhook } = await import('./stripe-simple.js');
-    await handleWebhook(req, res);
-  } catch (error) {
-    console.error('❌ PRODUCTION: Checkout success failed:', error);
-    res.status(500).json({
-      error: 'Payment processing failed',
-      message: 'Unable to process payment success'
-    });
-  }
-});
+// Checkout success endpoint - using existing stripe webhook endpoint
 
 // Chat endpoint (frontend expects this) - ACTIVATED REAL AI PROCESSING
 app.post('/api/chat', async (req, res) => {
