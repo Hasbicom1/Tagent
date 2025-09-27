@@ -36,7 +36,8 @@ router.post('/stripe/verify-payment', async (req, res) => {
     }
 
     // Real Stripe verification
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     
     if (!process.env.STRIPE_SECRET_KEY) {
       console.log('⚠️ STRIPE: Using mock verification (no secret key)');
