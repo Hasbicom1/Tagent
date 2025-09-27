@@ -17,13 +17,13 @@ export function initStripe() {
   console.log('🔧 SIMPLE STRIPE: Initializing...');
   
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  const publicKey = process.env.VITE_STRIPE_PUBLIC_KEY;
+  const publicKey = process.env.VITE_STRIPE_PUBLIC_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
   // Check for required environment variables
   const missingVars = [];
   if (!secretKey) missingVars.push('STRIPE_SECRET_KEY');
-  if (!publicKey) missingVars.push('VITE_STRIPE_PUBLIC_KEY');
+  if (!publicKey) missingVars.push('VITE_STRIPE_PUBLIC_KEY or STRIPE_PUBLISHABLE_KEY');
   if (!webhookSecret) missingVars.push('STRIPE_WEBHOOK_SECRET');
   
   if (missingVars.length > 0) {
@@ -67,7 +67,7 @@ export async function createSession(req, res) {
     // Check what's missing
     const missingVars = [];
     if (!process.env.STRIPE_SECRET_KEY) missingVars.push('STRIPE_SECRET_KEY');
-    if (!process.env.VITE_STRIPE_PUBLIC_KEY) missingVars.push('VITE_STRIPE_PUBLIC_KEY');
+    if (!process.env.VITE_STRIPE_PUBLIC_KEY && !process.env.STRIPE_PUBLISHABLE_KEY) missingVars.push('VITE_STRIPE_PUBLIC_KEY or STRIPE_PUBLISHABLE_KEY');
     if (!process.env.STRIPE_WEBHOOK_SECRET) missingVars.push('STRIPE_WEBHOOK_SECRET');
     
     return res.status(501).json({
