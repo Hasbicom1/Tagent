@@ -216,59 +216,13 @@ try {
   console.warn('⚠️ PRODUCTION: API routes initialization failed (non-blocking):', error.message);
 }
 
-// STEP 10.5: Add missing API endpoints that frontend expects
-console.log('🔧 PRODUCTION: Adding missing API endpoints...');
-
-// CSRF Token endpoint (frontend expects this) - TEST ROUTE
-app.get('/api/csrf-token', (req, res) => {
-  console.log('🔐 PRODUCTION: CSRF token requested - ROUTE FOUND');
-  res.json({ 
-    csrfToken: 'test-token-123',
-    timestamp: new Date().toISOString(),
-    message: 'Route is working'
-  });
-});
+// STEP 10.5: API endpoints are now defined in api-routes.js
+console.log('✅ PRODUCTION: API endpoints defined in api-routes.js');
 
 // Create checkout session endpoint already exists in api-routes.js
 
 // Checkout success endpoint - using existing stripe webhook endpoint
 
-// Chat endpoint (frontend expects this) - ACTIVATED REAL AI PROCESSING
-app.post('/api/chat', async (req, res) => {
-  console.log('💬 PRODUCTION: Chat message requested');
-  try {
-    // Import and use the real unified AI agent
-    const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
-    const agent = new LocalUnifiedAIAgent();
-    await agent.initialize();
-    
-    const task = {
-      id: `chat_${Date.now()}`,
-      sessionId: req.body.sessionId || 'default',
-      message: req.body.message || req.body.content || 'Hello',
-      context: req.body.context
-    };
-    
-    const response = await agent.processMessage(task);
-    
-    res.json({
-      success: response.success,
-      message: response.message,
-      actions: response.actions,
-      screenshot: response.screenshot,
-      confidence: response.confidence,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ PRODUCTION: Chat processing failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Chat processing failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // Session endpoints (frontend expects these) - ACTIVATED REAL DATABASE LOOKUP
 app.get('/api/session/:sessionId', async (req, res) => {
