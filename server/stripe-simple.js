@@ -17,15 +17,30 @@ export function initStripe() {
   console.log('🔧 SIMPLE STRIPE: Initializing...');
   
   const secretKey = process.env.STRIPE_SECRET_KEY;
+  const publicKey = process.env.VITE_STRIPE_PUBLIC_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
-  if (!secretKey) {
-    console.error('❌ SIMPLE STRIPE: STRIPE_SECRET_KEY is missing');
+  // Check for required environment variables
+  const missingVars = [];
+  if (!secretKey) missingVars.push('STRIPE_SECRET_KEY');
+  if (!publicKey) missingVars.push('VITE_STRIPE_PUBLIC_KEY');
+  if (!webhookSecret) missingVars.push('STRIPE_WEBHOOK_SECRET');
+  
+  if (missingVars.length > 0) {
+    console.error('❌ SIMPLE STRIPE: Missing environment variables:', missingVars);
+    console.error('❌ SIMPLE STRIPE: Please set the following in Railway dashboard:');
+    missingVars.forEach(varName => {
+      console.error(`   - ${varName}: Your Stripe ${varName.includes('SECRET') ? 'secret' : 'public'} key`);
+    });
     return false;
   }
   
   try {
     stripe = new Stripe(secretKey);
     console.log('✅ SIMPLE STRIPE: Initialized successfully');
+    console.log('🔑 SIMPLE STRIPE: Secret key configured');
+    console.log('🔑 SIMPLE STRIPE: Public key configured');
+    console.log('🔑 SIMPLE STRIPE: Webhook secret configured');
     return true;
   } catch (error) {
     console.error('❌ SIMPLE STRIPE: Initialization failed:', error.message);
@@ -48,9 +63,18 @@ export async function createSession(req, res) {
   
   if (!isStripeReady()) {
     console.error('❌ SIMPLE STRIPE: Not initialized');
+    
+    // Check what's missing
+    const missingVars = [];
+    if (!process.env.STRIPE_SECRET_KEY) missingVars.push('STRIPE_SECRET_KEY');
+    if (!process.env.VITE_STRIPE_PUBLIC_KEY) missingVars.push('VITE_STRIPE_PUBLIC_KEY');
+    if (!process.env.STRIPE_WEBHOOK_SECRET) missingVars.push('STRIPE_WEBHOOK_SECRET');
+    
     return res.status(501).json({
       error: 'PAYMENT_GATEWAY_ERROR',
-      message: 'Payment gateway not initialized'
+      message: 'Payment gateway not initialized',
+      details: `Missing environment variables: ${missingVars.join(', ')}`,
+      solution: 'Please configure Stripe environment variables in Railway dashboard'
     });
   }
   
