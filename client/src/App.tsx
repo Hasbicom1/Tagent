@@ -17,6 +17,7 @@ import Cancel from "@/pages/cancel";
 import AgentChat from "@/pages/agent-chat";
 import BrowserChatPage from "@/pages/browser-chat";
 import InvisibleAutomationPage from "@/pages/invisible-automation";
+import AutomationSessionPage from "@/pages/automation-session";
 import VNCTestPage from "@/pages/vnc-test";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
@@ -239,6 +240,16 @@ function Router() {
             <ThemeToggle />
           </div>
           <InvisibleAutomationPage />
+        </div>
+      )} />
+      
+      {/* $1 Automation Session Route */}
+      <Route path="/automation/:sessionId" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AutomationSessionPage />
         </div>
       )} />
       

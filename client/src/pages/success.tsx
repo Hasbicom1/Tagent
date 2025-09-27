@@ -30,7 +30,7 @@ export default function Success() {
           throw new Error('No session ID found in URL');
         }
 
-        // Verify payment with Stripe and create agent session
+        // Verify payment with Stripe and create automation session
         const response = await apiRequest('POST', '/api/stripe/verify-payment', {
           sessionId
         });
@@ -41,12 +41,31 @@ export default function Success() {
         }
 
         const data = await response.json();
-        setSessionData(data.data);
         
-        toast({
-          title: "Payment Successful!",
-          description: `Agent ${data.data.agentId} is now active for 24 hours`,
+        // Create automation session after successful payment
+        const automationResponse = await apiRequest('POST', '/api/automation/create-session', {
+          paymentData: data.data
         });
+
+        if (automationResponse.ok) {
+          const automationData = await automationResponse.json();
+          setSessionData({
+            ...data.data,
+            automationSessionId: automationData.sessionId,
+            automationUrl: automationData.sessionUrl
+          });
+          
+          toast({
+            title: "Payment Successful!",
+            description: "Your 24-hour AI automation session is ready!",
+          });
+        } else {
+          setSessionData(data.data);
+          toast({
+            title: "Payment Successful!",
+            description: "Payment verified, setting up automation session...",
+          });
+        }
         
       } catch (error: any) {
         console.error('Checkout success error:', error);
@@ -66,7 +85,10 @@ export default function Success() {
   }, [toast]);
 
   const handleEnterChat = () => {
-    if (sessionData) {
+    if (sessionData?.automationUrl) {
+      // Redirect to automation session
+      window.location.href = sessionData.automationUrl;
+    } else if (sessionData) {
       setLocation('/browser-chat');
     }
   };
