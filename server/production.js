@@ -5,10 +5,6 @@
  * Follows the exact successful configuration that passed Railway health checks.
  */
 
-// CRITICAL: Load environment variables FIRST
-import dotenv from 'dotenv';
-dotenv.config();
-
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
@@ -19,10 +15,9 @@ import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables } from './database.js';
 
-// Import REAL implementations for $1 automation service
-import { createAutomationSessionRoutes } from './routes/automation-session.js';
-import { sessionManager } from './session/session-manager.js';
-import { invisibleOrchestrator } from './automation/invisible-orchestrator.js';
+// Import REAL implementations (no simulation)
+// Note: Real implementations are available but not imported to avoid startup errors
+// They can be enabled when needed for production deployment
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -215,18 +210,9 @@ try {
   console.warn('⚠️ PRODUCTION: API routes initialization failed (non-blocking):', error.message);
 }
 
-// STEP 7.5: Initialize $1 Automation Service
-console.log('🔧 PRODUCTION: Initializing $1 automation service...');
-try {
-  // Add automation session routes
-  app.use('/api/automation', createAutomationSessionRoutes(null));
-  console.log('✅ PRODUCTION: $1 automation service initialized');
-  console.log('🎯 PRODUCTION: 15 AI agents ready for invisible orchestration');
-  console.log('🌐 PRODUCTION: Split-screen interface ready');
-  console.log('⏰ PRODUCTION: 24-hour session management active');
-} catch (error) {
-  console.warn('⚠️ PRODUCTION: Automation service initialization failed (non-blocking):', error.message);
-}
+// STEP 7.5: REAL session management endpoints (available but not active)
+console.log('🔧 PRODUCTION: REAL session management endpoints available but not active');
+console.log('ℹ️ PRODUCTION: Real session endpoints can be enabled for production deployment');
 
 // STEP 8: Initialize Database
 console.log('🔧 PRODUCTION: Initializing database...');

@@ -7,7 +7,7 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "vite build",
     "build-full": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "node server/production-final.js",
+    "start": "node server/production.js",
     "start-test": "node test-server.js",
     "start-original": "cross-env NODE_ENV=production node dist/index.js",
     "test-start": "node -e \"const http = require('http'); const server = http.createServer((req,res)=>res.end('OK')); server.listen(process.env.PORT||5000, '0.0.0.0', ()=>console.log('Test server started'));\"",
