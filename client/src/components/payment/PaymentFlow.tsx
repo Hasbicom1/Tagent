@@ -37,21 +37,11 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
         }
       } catch (error) {
         console.error('Failed to create checkout session:', error);
-        
-        // Check if it's a server error with details
-        if (error.message && error.message.includes('PAYMENT_GATEWAY_ERROR')) {
-          toast({
-            title: "PAYMENT_GATEWAY_ERROR",
-            description: "Payment system not configured. Please contact support.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "LIBERATION_GATEWAY_ERROR",
-            description: "Your escape from Big Tech subscription chains hit a snag. Retry your freedom activation.",
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "LIBERATION_GATEWAY_ERROR",
+          description: "Your escape from Big Tech subscription chains hit a snag. Retry your freedom activation.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -108,10 +98,7 @@ export function PaymentFlow({ onPaymentSuccess }: PaymentFlowProps) {
         <Card className="max-w-md w-full p-8">
           <div className="text-center space-y-4">
             <div className="text-lg font-mono text-destructive">PAYMENT_GATEWAY_ERROR</div>
-            <div className="text-sm text-muted-foreground">Payment system not configured</div>
-            <div className="text-xs text-muted-foreground">
-              The payment gateway requires environment variables to be set in Railway dashboard.
-            </div>
+            <div className="text-sm text-muted-foreground">Liberation payment gateway initialization failed</div>
             <Button 
               onClick={() => window.location.reload()} 
               variant="outline"
