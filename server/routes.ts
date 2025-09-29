@@ -388,6 +388,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('⚠️  DEV MODE: Session security middleware disabled (Redis required)');
   }
   
+  // SAFE ADD: Real browser automation route with fallback
+  app.post('/api/flow/chat/:sessionId', async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      // Keep existing session validation semantics
+      const session = await storage.getSessionByAgentId(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      if (new Date() > session.expiresAt) {
+        return res.status(410).json({ error: 'Session expired' });
+      }
+
+      // Try real automation first
+      try {
+        const { realBrowserAutomation } = await import('./routes/automation-real');
+        const result = await realBrowserAutomation(req.body?.message || '');
+        return res.json({ success: true, result, real: true });
+      } catch (browserError) {
+        console.error('Browser automation failed:', (browserError as any)?.message || browserError);
+        // Fallback response to keep endpoint functional
+        return res.json({
+          success: true,
+          message: 'Session active but browser automation unavailable',
+          real: false
+        });
+      }
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || 'Internal error' });
+    }
+  });
+
   // Health check endpoints
   app.get("/api/health", async (req, res) => {
     try {
