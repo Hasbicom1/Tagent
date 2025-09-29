@@ -14,7 +14,6 @@ import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables, getDatabase } from './database.js';
-import rateLimit from 'express-rate-limit';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -821,16 +820,31 @@ function automationAuthMiddleware(req, res, next) {
   })();
 }
 
-// Per-session rate limiters (without changing global config)
-const makeSessionLimiter = (windowMs, max, message = 'Too many requests') =>
-  rateLimit({
-    windowMs,
-    max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => `${req.params.sessionId || 'global'}:${req.ip}`,
-    message: { error: message }
-  });
+// Per-session rate limiters (zero-dependency, fixed window)
+const makeSessionLimiter = (windowMs, max, message = 'Too many requests') => {
+  const buckets = new Map(); // key -> { start, count, timer }
+  return (req, res, next) => {
+    try {
+      const key = `${req.params.sessionId || 'global'}:${req.ip}`;
+      const now = Date.now();
+      let info = buckets.get(key);
+      if (!info || (now - info.start) > windowMs) {
+        if (info && info.timer) clearTimeout(info.timer);
+        info = { start: now, count: 0, timer: null };
+        info.timer = setTimeout(() => buckets.delete(key), windowMs);
+        buckets.set(key, info);
+      }
+      info.count += 1;
+      if (info.count > max) {
+        return res.status(429).json({ error: message });
+      }
+      next();
+    } catch (e) {
+      // Fail open to avoid blocking if something goes wrong
+      next();
+    }
+  };
+};
 
 const messageLimiter = makeSessionLimiter(60_000, 60, 'Too many messages per minute');
 const executeLimiter = makeSessionLimiter(60_000, 30, 'Too many automation executes per minute');
