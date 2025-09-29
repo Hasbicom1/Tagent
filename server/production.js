@@ -10,7 +10,6 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
@@ -225,10 +224,10 @@ try {
 console.log('🔧 PRODUCTION: Initializing API routes...');
 
 try {
-  // Use CommonJS-style require for compatibility with Railway expectations
-  const require = createRequire(import.meta.url);
-  const apiRoutes = require('./api-routes.js');
-  app.use('/api', apiRoutes.default || apiRoutes);
+  // Use dynamic import for ES Module compatibility
+  const routesModule = await import('./api-routes.js');
+  const apiRoutes = routesModule.default || routesModule;
+  app.use('/api', apiRoutes);
   console.log('✅ PRODUCTION: API routes initialized');
 } catch (error) {
   console.warn('⚠️ PRODUCTION: API routes initialization failed (non-blocking):', error.message);
