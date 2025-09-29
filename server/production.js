@@ -102,6 +102,34 @@ const staticPath = path.join(__dirname, '..', 'dist', 'public');
 console.log('📁 PRODUCTION: Serving static files from:', staticPath);
 app.use(express.static(staticPath));
 
+// In-memory automation engine sessions
+const activeAutomationEngines = new Map();
+
+async function getAutomationEngine(sessionId) {
+  if (activeAutomationEngines.has(sessionId)) {
+    return activeAutomationEngines.get(sessionId);
+  }
+  const { RealBrowserEngine } = await import('./automation/real-browser-engine.js');
+  const engine = new RealBrowserEngine();
+  await engine.initialize();
+  activeAutomationEngines.set(sessionId, engine);
+  return engine;
+}
+
+async function shutdownAutomationEngine(sessionId) {
+  const engine = activeAutomationEngines.get(sessionId);
+  if (engine) {
+    try {
+      await engine.close();
+    } catch (e) {
+      console.warn('⚠️ PRODUCTION: Error closing engine for session', sessionId, e.message);
+    }
+    activeAutomationEngines.delete(sessionId);
+    return true;
+  }
+  return false;
+}
+
 // STEP 6: Health endpoints setup (IMMEDIATE AVAILABILITY - proven pattern)
 app.get('/health', async (req, res) => {
   console.log('🏥 PRODUCTION: Health check requested');
@@ -457,27 +485,19 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
 app.post('/api/automation/:sessionId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Automation execute requested for:', req.params.sessionId);
   try {
-    // Import and use the real unified AI agent
-    const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
-    const agent = new LocalUnifiedAIAgent();
-    await agent.initialize();
-    
-  const task = {
-    id: `automation_${Date.now()}`,
-    sessionId: req.params.sessionId,
-    message: req.body.command || req.body.taskDescription || req.body.message || 'Execute automation task',
-    context: req.body.context
-  };
-    
-    const response = await agent.processMessage(task);
-    
+    const engine = await getAutomationEngine(req.params.sessionId);
+    const command = req.body.command || req.body.taskDescription || req.body.message || 'open https://example.com';
+    const result = await engine.executeCommand(command);
+
     res.json({
-      success: response.success,
+      success: true,
       sessionId: req.params.sessionId,
-      task: response.message,
-      actions: response.actions,
-      screenshot: response.screenshot,
-      confidence: response.confidence,
+      task: command,
+      action: result.action,
+      url: result.url,
+      title: result.title,
+      selector: result.selector,
+      screenshot: result.screenshot,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -486,6 +506,53 @@ app.post('/api/automation/:sessionId/execute', async (req, res) => {
       success: false,
       sessionId: req.params.sessionId,
       task: 'Automation execution failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Take on-demand screenshot for the session's active browser
+app.get('/api/automation/:sessionId/screenshot', async (req, res) => {
+  console.log('📸 PRODUCTION: Automation screenshot requested for:', req.params.sessionId);
+  try {
+    const engine = activeAutomationEngines.get(req.params.sessionId) || await getAutomationEngine(req.params.sessionId);
+    const result = await engine.takeScreenshot();
+    res.json({
+      success: true,
+      sessionId: req.params.sessionId,
+      screenshot: result.screenshot,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Screenshot failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId: req.params.sessionId,
+      message: 'Screenshot failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Shutdown and clean up the session's browser engine
+app.post('/api/automation/:sessionId/shutdown', async (req, res) => {
+  console.log('🛑 PRODUCTION: Automation shutdown requested for:', req.params.sessionId);
+  try {
+    const ok = await shutdownAutomationEngine(req.params.sessionId);
+    res.json({
+      success: ok,
+      sessionId: req.params.sessionId,
+      status: ok ? 'closed' : 'not_found',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Shutdown failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId: req.params.sessionId,
+      message: 'Shutdown failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
