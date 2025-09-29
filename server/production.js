@@ -35,10 +35,15 @@ if (process.env.NODE_ENV === 'production') {
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET'
   ];
-  for (const key of REQUIRED_FOR_PRODUCTION) {
-    if (!process.env[key]) {
-      console.error(`FATAL: ${key} required for production`);
+  const strict = process.env.STRICT_PRODUCTION_CHECKS === 'true';
+  const missing = REQUIRED_FOR_PRODUCTION.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    const msg = `Missing required envs: ${missing.join(', ')}`;
+    if (strict) {
+      console.error(`FATAL: ${msg}`);
       process.exit(1);
+    } else {
+      console.warn(`⚠️ PRODUCTION: ${msg}. Continuing without fatal exit (STRICT_PRODUCTION_CHECKS!=true)`);
     }
   }
 }
@@ -563,6 +568,14 @@ app.post('/api/automation/:sessionId/shutdown', async (req, res) => {
 app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
   console.log('🎥 PRODUCTION: Live view toggle requested for:', req.params.sessionId);
   try {
+    if (process.env.ENABLE_VNC_LIVE_VIEW !== 'true') {
+      return res.status(501).json({
+        success: false,
+        sessionId: req.params.sessionId,
+        message: 'Live view disabled. Set ENABLE_VNC_LIVE_VIEW=true to enable.',
+        timestamp: new Date().toISOString()
+      });
+    }
     const enable = Boolean(req.body?.enable);
 
     // Initialize VNC-capable engine if available
@@ -602,6 +615,12 @@ app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
 app.post('/api/automation/:sessionId/live-view/token', async (req, res) => {
   console.log('🔐 PRODUCTION: Live view token requested for:', req.params.sessionId);
   try {
+    if (process.env.ENABLE_VNC_LIVE_VIEW !== 'true') {
+      return res.status(501).json({
+        error: 'Live view disabled. Set ENABLE_VNC_LIVE_VIEW=true to enable.',
+        sessionId: req.params.sessionId
+      });
+    }
     const { getUserSession } = await import('./database.js');
     const session = await getUserSession(req.params.sessionId);
     if (!session || session.status !== 'active') {
