@@ -232,10 +232,11 @@ export default function AutomationSessionPage() {
     }
   };
 
-  // Format time remaining
+  // Format time remaining (from milliseconds)
   const formatTimeRemaining = (ms: number) => {
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    const safeMs = Math.max(0, ms || 0);
+    const hours = Math.floor(safeMs / (1000 * 60 * 60));
+    const minutes = Math.floor((safeMs % (1000 * 60 * 60)) / (1000 * 60));
     return `${hours}h ${minutes}m`;
   };
 
@@ -270,7 +271,7 @@ export default function AutomationSessionPage() {
             <div className="flex items-center space-x-4 text-sm text-gray-600">
               <div className="flex items-center space-x-1">
                 <Clock className="h-4 w-4" />
-                <span>{formatTimeRemaining(sessionStatus.timeRemaining)} remaining</span>
+                <span>{formatTimeRemaining(Math.max(0, new Date(sessionStatus.expiresAt).getTime() - Date.now()))} remaining</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Zap className="h-4 w-4" />

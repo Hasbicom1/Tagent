@@ -24,7 +24,8 @@ import {
   Lock,
   Search,
   Eye,
-  BarChart
+  BarChart,
+  Trash2
 } from 'lucide-react';
 
 interface Message {
@@ -167,6 +168,37 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     }
   });
 
+  // Clear chat history mutation
+  const clearChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!sessionInfo?.sessionId) {
+        throw new Error('Session is not available');
+      }
+      const response = await apiRequest('DELETE', `/api/chat/history/${sessionInfo.sessionId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to clear chat history');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate caches to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['messages', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
+      toast({
+        title: 'Chat cleared',
+        description: 'Conversation history wiped successfully.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'CLEAR_CHAT_ERROR',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
   // Execute task mutation
   const executeTaskMutation = useMutation({
     mutationFn: async (taskDescription: string) => {
@@ -191,18 +223,32 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     }
   });
 
-  // Update time remaining
+  // Update time remaining (compute from expiresAt and persist locally)
   useEffect(() => {
-    if (sessionInfo) {
-      setRealTimeRemaining(sessionInfo.timeRemaining);
-      
-      const interval = setInterval(() => {
-        setRealTimeRemaining(prev => Math.max(0, prev - 1));
-      }, 60000); // Update every minute
+    const key = `agent_session_expires_${agentId}`;
 
-      return () => clearInterval(interval);
+    if (!sessionInfo) return;
+
+    let expires = sessionInfo.expiresAt ? new Date(sessionInfo.expiresAt).getTime() : NaN;
+    if (Number.isNaN(expires)) {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        expires = parseInt(stored, 10);
+      }
+    } else {
+      // Persist canonical expiration
+      localStorage.setItem(key, String(expires));
     }
-  }, [sessionInfo]);
+
+    const minutesRemaining = Math.max(0, Math.floor((expires - Date.now()) / 60000));
+    setRealTimeRemaining(minutesRemaining);
+
+    const interval = setInterval(() => {
+      setRealTimeRemaining(prev => Math.max(0, prev - 1));
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [sessionInfo, agentId]);
 
   // Handle session errors
   useEffect(() => {
@@ -344,6 +390,29 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                   {formatTime(realTimeRemaining)}
                 </Badge>
               </div>
+
+              {/* Real Browser Review and Clear Chat */}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = `/live/agent/${agentId}`}
+                data-testid="button-real-browser-review"
+                className="font-mono"
+              >
+                <Monitor className="w-4 h-4 mr-1" />
+                REAL_BROWSER_REVIEW
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => clearChatMutation.mutate()}
+                disabled={!sessionInfo?.sessionId}
+                data-testid="button-clear-chat"
+                className="font-mono"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                CLEAR_CHAT
+              </Button>
               
               {isExecuting && (
                 <Button 
@@ -382,36 +451,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                   </Badge>
                 </div>
                 
-                {/* History View Selector */}
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant={historyView === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setHistoryView('all')}
-                    className="text-xs font-mono"
-                    data-testid="button-view-all"
-                  >
-                    ALL ({allMessages.length})
-                  </Button>
-                  <Button
-                    variant={historyView === 'chat' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setHistoryView('chat')}
-                    className="text-xs font-mono"
-                    data-testid="button-view-chat"
-                  >
-                    CHAT ({chatHistory.length})
-                  </Button>
-                  <Button
-                    variant={historyView === 'commands' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setHistoryView('commands')}
-                    className="text-xs font-mono"
-                    data-testid="button-view-commands"
-                  >
-                    COMMANDS ({commandHistory.length})
-                  </Button>
-                </div>
+                {/* History View Selector removed for minimal UI */}
               </div>
             </div>
             
@@ -471,140 +511,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             </ScrollArea>
             
             <div className="p-4 border-t border-primary/10 bg-background/50 space-y-4">
-              {/* Enhanced Command Categories */}
-              <div className="space-y-3">
-                {/* Browser Automation Commands */}
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">BROWSER_AUTOMATION</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Navigate to a website and take a screenshot for me")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-screenshot"
-                    >
-                      <Camera className="w-3 h-3 mr-1" />
-                      Screenshot
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Help me fill out this form automatically with smart field detection")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-form"
-                    >
-                      <FileText className="w-3 h-3 mr-1" />
-                      Fill Form
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Login to my account by finding and filling login forms")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-login"
-                    >
-                      <Lock className="w-3 h-3 mr-1" />
-                      Login
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Content Analysis Commands */}
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">CONTENT_ANALYSIS</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Summarize the main content of this page in clear, concise bullet points")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-summarize"
-                    >
-                      <FileText className="w-3 h-3 mr-1" />
-                      Summarize
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Translate the text on this page to English and explain key concepts")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-translate"
-                    >
-                      <Command className="w-3 h-3 mr-1" />
-                      Translate
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Analyze this content for key insights, patterns, and important information")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-analyze"
-                    >
-                      <BarChart className="w-3 h-3 mr-1" />
-                      Analyze
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Intelligence Operations */}
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">INTELLIGENCE_OPS</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Research this topic thoroughly and provide comprehensive findings with sources")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-research"
-                    >
-                      <Search className="w-3 h-3 mr-1" />
-                      Research
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Monitor this page for changes and notify me of any updates")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-monitor"
-                    >
-                      <Eye className="w-3 h-3 mr-1" />
-                      Monitor
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentMessage("Extract and organize all important data from this page into structured format")}
-                      className="text-xs font-mono"
-                      data-testid="button-quick-extract"
-                    >
-                      <BarChart className="w-3 h-3 mr-1" />
-                      Extract
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Command Input */}
-              {/* PRECISION ENHANCEMENT: Precision Mode Toggle */}
-              <div className="flex items-center gap-4 mb-3 px-2">
-                <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-primary" />
-                  <label htmlFor="precision-mode" className="text-sm font-mono text-muted-foreground">
-                    Precision Mode
-                  </label>
-                  <input
-                    id="precision-mode"
-                    type="checkbox"
-                    checked={precisionMode}
-                    onChange={(e) => setPrecisionMode(e.target.checked)}
-                    className="rounded border-primary/30 bg-background"
-                  />
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
-                  {precisionMode ? '🎯 Page analysis + precise clicks enabled' : '⚡ Fast mode - direct actions'}
-                </div>
-              </div>
+              {/* Minimal command input only */}
 
               <div className="flex gap-3">
                 <span className="text-primary font-mono text-sm pt-3">$</span>
@@ -617,10 +524,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       handleSendMessage();
                     }
                   }}
-                  placeholder={precisionMode 
-                    ? "Type commands - AI will analyze page first for precision..." 
-                    : "Type natural language or slash commands (/summarize, /translate, /analyze)..."
-                  }
+                  placeholder={"Type messages or commands for the agent..."}
                   disabled={isExecuting}
                   className="flex-1 font-mono bg-background/50 border-primary/20"
                   data-testid="input-command-line"
@@ -633,8 +537,6 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                 >
                   {sendMessageMutation.isPending ? (
                     <Activity className="w-4 h-4 animate-spin" />
-                  ) : precisionMode ? (
-                    <Eye className="w-4 h-4" />
                   ) : (
                     <Send className="w-4 h-4" />
                   )}

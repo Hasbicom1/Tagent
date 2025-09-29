@@ -155,6 +155,16 @@ function AgentAccess() {
 
   useEffect(() => {
     if (agentId) {
+      const storageKey = `agent_session_expires_${agentId}`;
+
+      // Use persisted expiresAt if available to avoid reset on navigation
+      const persisted = localStorage.getItem(storageKey);
+      if (persisted) {
+        const expiresTs = parseInt(persisted, 10);
+        const remaining = Math.max(0, Math.floor((expiresTs - Date.now()) / 1000 / 60));
+        setTimeRemaining(remaining);
+      }
+
       // Get session info to calculate time remaining
       const fetchSessionInfo = async () => {
         try {
@@ -162,6 +172,11 @@ function AgentAccess() {
           const data = await response.json();
           const remaining = Math.max(0, Math.floor((new Date(data.expiresAt).getTime() - Date.now()) / 1000 / 60));
           setTimeRemaining(remaining);
+
+          // Persist canonical expiresAt for cross-page continuity
+          if (data.expiresAt) {
+            localStorage.setItem(storageKey, String(new Date(data.expiresAt).getTime()));
+          }
         } catch (error) {
           console.error('Error fetching session info:', error);
         }
