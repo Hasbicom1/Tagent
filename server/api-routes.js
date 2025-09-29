@@ -121,6 +121,83 @@ router.post('/stripe/verify-payment', async (req, res) => {
   }
 });
 
+// Checkout success endpoint used by legacy frontend (returns flat fields)
+router.post('/checkout-success', async (req, res) => {
+  try {
+    console.log('✅ API: Checkout success requested');
+    const { sessionId: checkoutSessionId } = req.body;
+
+    if (!checkoutSessionId) {
+      return res.status(400).json({
+        error: 'Session ID is required',
+        status: 'error'
+      });
+    }
+
+    // Verify payment with Stripe
+    const { default: Stripe } = await import('stripe');
+    const secret = process.env.STRIPE_SECRET_KEY;
+    if (!secret) {
+      return res.status(500).json({
+        error: 'Stripe not configured - payments disabled'
+      });
+    }
+    const stripe = new Stripe(secret);
+
+    console.log('🔍 STRIPE: Verifying checkout session:', checkoutSessionId);
+    const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({
+        error: 'Payment not completed',
+        status: 'error',
+        details: 'Session payment status is not paid'
+      });
+    }
+
+    // Create 24-hour automation session (flat response expected by frontend)
+    const automationSessionId = 'automation_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const sessionData = {
+      sessionId: automationSessionId,
+      agentId: automationSessionId,
+      expiresAt,
+      status: 'active',
+      paymentVerified: true,
+      amountPaid: (session.amount_total || 100) / 100,
+      customerEmail: session.customer_details?.email || null,
+      stripeCustomerId: session.customer || null
+    };
+
+    try {
+      const storedSession = await createUserSession(sessionData);
+      console.log('✅ DATABASE: Automation session stored with ID:', storedSession.id);
+      return res.status(200).json({
+        sessionId: automationSessionId,
+        agentId: automationSessionId,
+        expiresAt: expiresAt.toISOString(),
+        databaseId: storedSession.id
+      });
+    } catch (dbError) {
+      console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
+      // Return success anyway so frontend can proceed
+      return res.status(200).json({
+        sessionId: automationSessionId,
+        agentId: automationSessionId,
+        expiresAt: expiresAt.toISOString(),
+        warning: 'Session not persisted to database'
+      });
+    }
+  } catch (error) {
+    console.error('❌ API: Checkout success handling failed:', error);
+    return res.status(500).json({
+      error: 'Checkout success handling failed',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
 // Agent session validation endpoint
 router.get('/agent/:agentId/status', async (req, res) => {
   try {
