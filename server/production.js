@@ -462,12 +462,12 @@ app.post('/api/automation/:sessionId/execute', async (req, res) => {
     const agent = new LocalUnifiedAIAgent();
     await agent.initialize();
     
-    const task = {
-      id: `automation_${Date.now()}`,
-      sessionId: req.params.sessionId,
-      message: req.body.taskDescription || req.body.message || 'Execute automation task',
-      context: req.body.context
-    };
+  const task = {
+    id: `automation_${Date.now()}`,
+    sessionId: req.params.sessionId,
+    message: req.body.command || req.body.taskDescription || req.body.message || 'Execute automation task',
+    context: req.body.context
+  };
     
     const response = await agent.processMessage(task);
     

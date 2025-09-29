@@ -157,9 +157,23 @@ export default function AutomationSessionPage() {
       try {
         const response = await fetch(`/api/automation/${sessionId}/status`);
         const data = await response.json();
-        
-        if (data.success) {
+        // Support both dev route shape ({ success, session }) and production.js shape
+        if (data.success && data.session) {
           setSessionStatus(data.session);
+        } else if (data.status && (data.expiresAt || data.expires_at)) {
+          const expiresAt = data.expiresAt || data.expires_at;
+          const expiresMs = new Date(expiresAt).getTime() - Date.now();
+          setSessionStatus({
+            id: sessionId,
+            status: data.status,
+            expiresAt,
+            timeRemaining: Math.max(0, expiresMs),
+            usage: {
+              commandsExecuted: data.usage?.commandsExecuted ?? 0,
+              browserActions: data.usage?.browserActions ?? 0,
+              screenshots: data.usage?.screenshots ?? 0,
+            },
+          });
         }
       } catch (error) {
         console.error('❌ Failed to load session status:', error);
