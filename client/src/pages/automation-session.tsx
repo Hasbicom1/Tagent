@@ -201,7 +201,22 @@ export default function AutomationSessionPage() {
 
       const data = await response.json();
       
-      if (!data.success) {
+      if (data.success) {
+        // Fallback: if no realtime events are emitted, reflect API response in UI
+        if (data.screenshot) {
+          setCurrentScreenshot(data.screenshot);
+        }
+
+        addMessage({
+          id: Date.now().toString(),
+          type: 'agent',
+          content: data.task || 'Automation executed successfully',
+          timestamp: new Date().toISOString(),
+          agent: data.agent || 'AI Agent',
+          status: 'completed'
+        });
+        setIsLoading(false);
+      } else {
         addMessage({
           id: Date.now().toString(),
           type: 'system',
