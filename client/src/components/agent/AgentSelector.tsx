@@ -48,127 +48,30 @@ export function AgentSelector({ onAgentSelect, selectedAgent, disabled = false }
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Mock agents data - in real implementation, this would come from the API
-  const mockAgents: Agent[] = [
-    {
-      id: 'playwright-vision',
-      name: 'Playwright Vision',
-      description: 'Computer vision automation using Playwright with screenshot analysis',
-      category: 'vision',
-      strengths: ['screenshot analysis', 'visual element detection', 'image recognition', 'form filling'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 1
-    },
-    {
-      id: 'playwright-smart',
-      name: 'Playwright Smart',
-      description: 'Intelligent Playwright automation with AI-powered element selection',
-      category: 'automation',
-      strengths: ['smart element selection', 'form automation', 'navigation', 'data extraction'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 1
-    },
-    {
-      id: 'puppeteer-ai',
-      name: 'Puppeteer AI',
-      description: 'Puppeteer with AI-powered task planning and execution',
-      category: 'automation',
-      strengths: ['headless automation', 'PDF generation', 'screenshot capture', 'performance monitoring'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 2
-    },
-    {
-      id: 'selenium-ai',
-      name: 'Selenium AI',
-      description: 'Selenium WebDriver with AI-enhanced automation capabilities',
-      category: 'automation',
-      strengths: ['cross-browser testing', 'web application testing', 'form automation', 'data scraping'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 3
-    },
-    {
-      id: 'rule-based-planner',
-      name: 'Rule-Based Planner',
-      description: 'Intelligent task planning using rule-based AI without external APIs',
-      category: 'planning',
-      strengths: ['task decomposition', 'step planning', 'workflow optimization', 'error handling'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 1
-    },
-    {
-      id: 'pattern-recognition',
-      name: 'Pattern Recognition',
-      description: 'Pattern-based automation using machine learning algorithms',
-      category: 'planning',
-      strengths: ['pattern matching', 'behavior prediction', 'adaptive automation', 'learning from examples'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 2
-    },
-    {
-      id: 'cheerio-extractor',
-      name: 'Cheerio Extractor',
-      description: 'Fast HTML parsing and data extraction using Cheerio',
-      category: 'extraction',
-      strengths: ['HTML parsing', 'data extraction', 'content analysis', 'text processing'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 1
-    },
-    {
-      id: 'puppeteer-extractor',
-      name: 'Puppeteer Extractor',
-      description: 'Advanced data extraction using Puppeteer with JavaScript execution',
-      category: 'extraction',
-      strengths: ['dynamic content extraction', 'JavaScript execution', 'API data extraction', 'complex data structures'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 2
-    },
-    {
-      id: 'smart-navigator',
-      name: 'Smart Navigator',
-      description: 'Intelligent web navigation with adaptive strategies',
-      category: 'navigation',
-      strengths: ['smart navigation', 'link following', 'form submission', 'redirect handling'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 1
-    },
-    {
-      id: 'spa-handler',
-      name: 'SPA Handler',
-      description: 'Single Page Application automation with dynamic content handling',
-      category: 'navigation',
-      strengths: ['SPA automation', 'dynamic content', 'AJAX handling', 'state management'],
-      isLocal: true,
-      requiresSetup: false,
-      isAvailable: true,
-      priority: 2
-    }
-  ];
-
   useEffect(() => {
-    // Simulate loading agents
     const loadAgents = async () => {
-      setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-      setAgents(mockAgents);
-      setLoading(false);
+      try {
+        setLoading(true);
+        const res = await fetch('/api/agents');
+        if (!res.ok) throw new Error(`Failed to load agents: ${res.status}`);
+        const data = await res.json();
+        const apiAgents = (data.agents || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description || a.name,
+          category: (a.category || 'automation') as Agent['category'],
+          strengths: a.capabilities || [],
+          isLocal: a.isLocal ?? true,
+          requiresSetup: a.requiresSetup ?? false,
+          isAvailable: a.status === 'active' || a.isAvailable || true,
+          priority: a.priority || 1
+        })) as Agent[];
+        setAgents(apiAgents);
+      } catch (e) {
+        setAgents([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadAgents();

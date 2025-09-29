@@ -159,8 +159,33 @@ export function BrowserChatInterface({
     setIsLoading(true);
 
     try {
-      // Simulate agent response with browser automation
-      await simulateAgentResponse(inputValue);
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentSessionId, message: inputValue })
+      });
+      if (!res.ok) {
+        throw new Error(`Chat request failed: ${res.status}`);
+      }
+      const data = await res.json();
+      const result = data.result || {};
+
+      addMessage({
+        id: `msg_${Date.now()}`,
+        type: 'agent',
+        content: result.response || result.message || 'Response received.',
+        timestamp: new Date(),
+        metadata: {
+          taskId: result.taskId,
+          agentId: 'unified-ai',
+          screenshot: result.screenshot,
+          actions: result.actions
+        }
+      });
+
+      if (result.screenshot) {
+        setCurrentScreenshot(result.screenshot);
+      }
     } catch (error) {
       console.error('Failed to process message:', error);
       addMessage({
@@ -172,83 +197,6 @@ export function BrowserChatInterface({
     } finally {
       setIsLoading(false);
     }
-  };
-
-  /**
-   * Simulate agent response with browser automation
-   */
-  const simulateAgentResponse = async (instruction: string) => {
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Generate response based on instruction
-    let response = '';
-    let screenshot = '';
-    let actions: any[] = [];
-
-    if (instruction.toLowerCase().includes('navigate') || instruction.toLowerCase().includes('go to')) {
-      response = 'Navigating to the requested URL...';
-      actions = [{ type: 'navigate', target: 'https://example.com' }];
-      screenshot = generateMockScreenshot('navigation');
-    } else if (instruction.toLowerCase().includes('click')) {
-      response = 'Clicking the specified element...';
-      actions = [{ type: 'click', target: 'button' }];
-      screenshot = generateMockScreenshot('click');
-    } else if (instruction.toLowerCase().includes('type') || instruction.toLowerCase().includes('fill')) {
-      response = 'Filling the form fields...';
-      actions = [{ type: 'type', target: 'input', value: 'test@example.com' }];
-      screenshot = generateMockScreenshot('form');
-    } else if (instruction.toLowerCase().includes('extract') || instruction.toLowerCase().includes('data')) {
-      response = 'Extracting data from the page...';
-      actions = [{ type: 'extract', target: 'page data' }];
-      screenshot = generateMockScreenshot('extraction');
-    } else {
-      response = 'I understand your request. Let me help you with that task.';
-      actions = [{ type: 'analyze', target: 'page' }];
-      screenshot = generateMockScreenshot('analysis');
-    }
-
-    // Add agent response
-    addMessage({
-      id: `msg_${Date.now()}`,
-      type: 'agent',
-      content: response,
-      timestamp: new Date(),
-      metadata: {
-        taskId: `task_${Date.now()}`,
-        agentId: 'browser-chat-agent',
-        screenshot,
-        actions
-      }
-    });
-
-    // Update browser session
-    if (browserSession) {
-      setBrowserSession(prev => prev ? {
-        ...prev,
-        screenshots: [...(prev?.screenshots || []), screenshot],
-        lastActivity: new Date()
-      } : null);
-    }
-
-    // Update current screenshot
-    setCurrentScreenshot(screenshot);
-  };
-
-  /**
-   * Generate mock screenshot
-   */
-  const generateMockScreenshot = (type: string): string => {
-    // In a real implementation, this would be an actual screenshot
-    const mockScreenshots = {
-      navigation: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TmF2aWdhdGlvbiBQYWdlPC90ZXh0Pjwvc3ZnPg==',
-      click: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Q2xpY2sgQWN0aW9uPC90ZXh0Pjwvc3ZnPg==',
-      form: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Rm9ybSBGaWxsaW5nPC90ZXh0Pjwvc3ZnPg==',
-      extraction: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RGF0YSBFeHRyYWN0aW9uPC90ZXh0Pjwvc3ZnPg==',
-      analysis: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+UGFnZSBBbmFseXNpczwvdGV4dD48L3N2Zz4='
-    };
-    
-    return mockScreenshots[type as keyof typeof mockScreenshots] || mockScreenshots.analysis;
   };
 
   /**
@@ -278,17 +226,27 @@ export function BrowserChatInterface({
   /**
    * Take screenshot
    */
-  const takeScreenshot = () => {
-    if (browserSession) {
-      const screenshot = generateMockScreenshot('screenshot');
-      setCurrentScreenshot(screenshot);
-      
+  const takeScreenshot = async () => {
+    try {
+      const res = await fetch(`/api/browser/${currentSessionId}/screenshot`);
+      if (!res.ok) throw new Error('Screenshot failed');
+      const data = await res.json();
+      if (data.screenshot) {
+        setCurrentScreenshot(data.screenshot);
+        addMessage({
+          id: `msg_${Date.now()}`,
+          type: 'system',
+          content: 'Screenshot captured',
+          timestamp: new Date(),
+          metadata: { screenshot: data.screenshot }
+        });
+      }
+    } catch (e) {
       addMessage({
         id: `msg_${Date.now()}`,
         type: 'system',
-        content: 'Screenshot captured',
-        timestamp: new Date(),
-        metadata: { screenshot }
+        content: 'Failed to capture screenshot',
+        timestamp: new Date()
       });
     }
   };

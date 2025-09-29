@@ -18,13 +18,7 @@ const initializeUnifiedAgent = async () => {
       logger.info('✅ Agent routes initialized with unified AI agent');
     } catch (error) {
       logger.error('❌ Failed to initialize unified AI agent:', error);
-      // Fallback to mock
-      localAgentManager = {
-        getAvailableAgents: () => [{ id: 'unified-ai', name: 'AI Assistant', type: 'unified', capabilities: ['chat', 'automation'], status: 'active' }],
-        getAgent: (id: string) => ({ id: 'unified-ai', name: 'AI Assistant', type: 'unified', capabilities: ['chat', 'automation'], status: 'active' }),
-        executeTask: (task: any, agentId?: string) => ({ success: false, error: 'Unified AI agent not available' }),
-        healthCheck: () => false
-      };
+      throw new Error('Agent system not initialized - cannot proceed');
     }
   }
   return localAgentManager;
