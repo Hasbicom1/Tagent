@@ -249,8 +249,18 @@ app.get('/api/test-route', (req, res) => {
 // STEP 4.9: Stripe webhook endpoint BEFORE body parsers (raw body required)
 // This ensures req.body is a Buffer for Stripe signature verification
 // Apply payment limiter before raw body to avoid interfering with Stripe signature parsing
-app.post('/api/stripe/webhook', paymentLimiter, express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/stripe/webhook', paymentLimiter, express.raw({ type: '*/*' }), async (req, res) => {
   console.log('🔔 PRODUCTION: Stripe webhook received (raw body)');
+  const sig = req.get('Stripe-Signature') || req.get('stripe-signature');
+  const contentType = req.get('content-type');
+  const isBuffer = Buffer.isBuffer(req.body);
+  const bodyLength = isBuffer ? req.body.length : (typeof req.body === 'string' ? req.body.length : 0);
+  console.log('🔎 PRODUCTION: Webhook diagnostics', {
+    hasSignature: !!sig,
+    contentType,
+    bodyIsBuffer: isBuffer,
+    bodyLength
+  });
   try {
     const { handleWebhook } = await import('./stripe-simple.js');
     await handleWebhook(req, res);

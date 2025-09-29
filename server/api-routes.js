@@ -650,22 +650,9 @@ router.post('/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
-// Stripe webhook endpoint
-router.post('/stripe/webhook', async (req, res) => {
-  console.log('🔔 API: Stripe webhook received');
-  
-  try {
-    const { handleWebhook } = await import('./stripe-simple.js');
-    await handleWebhook(req, res);
-  } catch (error) {
-    console.error('❌ API: Stripe webhook failed:', error);
-    res.status(500).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error.message
-    });
-  }
-});
+// NOTE: Stripe webhook is handled in server/production.js with express.raw()
+// to preserve the exact payload for signature verification. Duplicate route
+// removed here to avoid conflicts and ensure a single, correct handler.
 
 // Basic error handling for API routes
 router.use((err, req, res, next) => {
