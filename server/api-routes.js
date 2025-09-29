@@ -22,6 +22,17 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Agents service status endpoint (required by external checks)
+router.get('/agents/status', (req, res) => {
+  console.log('📊 API: Agents service status requested');
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'agents',
+    message: 'Agents API operational'
+  });
+});
+
 // Real Stripe payment verification endpoint
 router.post('/stripe/verify-payment', async (req, res) => {
   try {
