@@ -13,7 +13,8 @@ import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
-import { initializeDatabase, createTables } from './database.js';
+import { initializeDatabase, createTables, getDatabase } from './database.js';
+import rateLimit from 'express-rate-limit';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -331,7 +332,7 @@ app.get('/api/session/:sessionId', async (req, res) => {
   }
 });
 
-app.post('/api/session/:sessionId/message', async (req, res) => {
+app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => {
   console.log('💬 PRODUCTION: Session message requested for:', req.params.sessionId);
   try {
     // Import and use the real unified AI agent
@@ -487,7 +488,7 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
   }
 });
 
-app.post('/api/automation/:sessionId/execute', async (req, res) => {
+app.post('/api/automation/:sessionId/execute', automationAuthMiddleware, executeLimiter, async (req, res) => {
   console.log('⚡ PRODUCTION: Automation execute requested for:', req.params.sessionId);
   try {
     const engine = await getAutomationEngine(req.params.sessionId);
@@ -518,7 +519,7 @@ app.post('/api/automation/:sessionId/execute', async (req, res) => {
 });
 
 // Take on-demand screenshot for the session's active browser
-app.get('/api/automation/:sessionId/screenshot', async (req, res) => {
+app.get('/api/automation/:sessionId/screenshot', automationAuthMiddleware, screenshotLimiter, async (req, res) => {
   console.log('📸 PRODUCTION: Automation screenshot requested for:', req.params.sessionId);
   try {
     const engine = activeAutomationEngines.get(req.params.sessionId) || await getAutomationEngine(req.params.sessionId);
@@ -790,3 +791,95 @@ process.on('SIGINT', () => {
 });
 
 console.log('🚀 PRODUCTION: Application setup complete');
+// Optional auth middleware for automation routes (gated by env)
+const requireAutomationAuth = process.env.REQUIRE_AUTH_FOR_AUTOMATION === 'true';
+function automationAuthMiddleware(req, res, next) {
+  if (!requireAutomationAuth) return next();
+  (async () => {
+    try {
+      const auth = req.headers.authorization || '';
+      const token = auth.startsWith('Bearer ')
+        ? auth.slice(7)
+        : null;
+      if (!token) {
+        return res.status(401).json({ error: 'Missing Bearer token' });
+      }
+      const jwtModule = await import('jsonwebtoken');
+      const secret = process.env.JWT_SECRET || process.env.SECRET_KEY || 'onedollaragent-dev-secret';
+      const decoded = (jwtModule.default || jwtModule).verify(token, secret);
+      if (!decoded || decoded.sessionId !== req.params.sessionId) {
+        return res.status(403).json({ error: 'Invalid token sessionId' });
+      }
+      if (!['vnc_access', 'automation_access'].includes(decoded.type)) {
+        return res.status(403).json({ error: 'Invalid token type' });
+      }
+      req.sessionAuth = decoded;
+      next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Token validation failed', message: err.message });
+    }
+  })();
+}
+
+// Per-session rate limiters (without changing global config)
+const makeSessionLimiter = (windowMs, max, message = 'Too many requests') =>
+  rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${req.params.sessionId || 'global'}:${req.ip}`,
+    message: { error: message }
+  });
+
+const messageLimiter = makeSessionLimiter(60_000, 60, 'Too many messages per minute');
+const executeLimiter = makeSessionLimiter(60_000, 30, 'Too many automation executes per minute');
+const screenshotLimiter = makeSessionLimiter(10_000, 5, 'Too many screenshots');
+// Detailed health endpoint
+app.get('/api/health/details', async (req, res) => {
+  try {
+    let redisStatus = 'disconnected';
+    let redisLatencyMs = null;
+    try {
+      const start = Date.now();
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        redisStatus = 'connected';
+        redisLatencyMs = Date.now() - start;
+      }
+    } catch (e) {
+      redisStatus = 'disconnected';
+    }
+
+    let dbStatus = 'disconnected';
+    let dbTimeMs = null;
+    try {
+      const pool = getDatabase();
+      if (pool) {
+        const start = Date.now();
+        const r = await pool.query('SELECT 1');
+        if (r && r.rowCount >= 0) {
+          dbStatus = 'connected';
+          dbTimeMs = Date.now() - start;
+        }
+      }
+    } catch (e) {
+      dbStatus = 'disconnected';
+    }
+
+    const stripeStatus = isStripeReady() ? 'connected' : 'disconnected';
+
+    res.status(200).json({
+      status: (redisStatus === 'connected' && dbStatus === 'connected') ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      redis: { status: redisStatus, latencyMs: redisLatencyMs },
+      db: { status: dbStatus, queryTimeMs: dbTimeMs },
+      stripe: { status: stripeStatus },
+      environment: process.env.NODE_ENV || 'development',
+      port: port
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'unhealthy', error: error.message });
+  }
+});
