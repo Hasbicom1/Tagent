@@ -433,11 +433,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: 'Session expired' });
       }
 
-      // Try real automation first
+      // Try real automation first with invisible orchestrator
       try {
-        const { realBrowserAutomation } = await import('./routes/automation-real');
-        const result = await realBrowserAutomation(req.body?.message || '');
-        return res.json({ success: true, result, real: true });
+        const { default: InvisibleAgentOrchestrator } = await import('./agents/invisible-agent-orchestrator');
+        const orchestrator = new InvisibleAgentOrchestrator({ invisibleMode: true, coordinationStrategy: 'adaptive' });
+        await orchestrator.initialize();
+
+        const instruction = req.body?.message || '';
+        const taskId = `task_${Date.now()}`;
+        const execution = await orchestrator.executeTask({
+          id: taskId,
+          sessionId: session.id,
+          instruction,
+          context: {}
+        } as any);
+
+        // Additionally attempt a real browser screenshot for live view
+        let screenshot: string | undefined = undefined;
+        let currentUrl: string | undefined = undefined;
+        try {
+          const { realBrowserAutomation } = await import('./routes/automation-real');
+          const r = await realBrowserAutomation(instruction);
+          screenshot = r.screenshot;
+          currentUrl = r.url;
+        } catch {}
+
+        return res.json({ 
+          success: true, 
+          message: execution.success ? (execution.result?.message || 'Task executed') : 'Task attempted',
+          agentsUsed: execution.result?.agents || [],
+          result: { screenshot, url: currentUrl, actions: execution.result?.coordination?.steps || [] },
+          real: true 
+        });
       } catch (browserError) {
         console.error('Browser automation failed:', (browserError as any)?.message || browserError);
         // Fallback response to keep endpoint functional
@@ -728,6 +755,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error processing checkout success:", error);
       res.status(500).json({ error: "LIBERATION_PAYMENT_PROCESSING_FAILED: " + error.message });
+    }
+  });
+
+  // GET variant for checkout success that redirects to split-screen chat
+  app.get("/api/checkout-success", async (req, res) => {
+    try {
+      const stripeSessionId = (req.query.session_id as string) || (req.query.sessionId as string);
+
+      if (!stripeSessionId) {
+        return res.redirect('/payment-failed');
+      }
+
+      // If Stripe is not configured (dev mode), create a dev session and redirect
+      if (!stripe) {
+        const agentId = `DEV-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        try {
+          await storage.createSession({
+            agentId,
+            checkoutSessionId: `dev-${stripeSessionId}`,
+            stripePaymentIntentId: `dev-${agentId}`,
+            expiresAt,
+            isActive: true
+          });
+        } catch {
+          // best-effort in dev
+        }
+        return res.redirect(`/agent?id=${encodeURIComponent(agentId)}`);
+      }
+
+      // Validate Stripe payment
+      const stripeSession = await stripe.checkout.sessions.retrieve(stripeSessionId);
+      if (stripeSession.payment_status !== 'paid') {
+        return res.redirect('/payment-failed');
+      }
+
+      // Idempotent activation using existing helper when possible
+      const paymentIntentId = stripeSession.payment_intent as string;
+      let agentIdCreated = '';
+      try {
+        const activationResult = await activateSessionIdempotent(
+          (rateLimiter as any)?._redis || null,
+          paymentIntentId,
+          async () => {
+            const agentId = `PHOENIX-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            const session = await storage.createSession({
+              agentId,
+              checkoutSessionId: stripeSessionId,
+              stripePaymentIntentId: paymentIntentId,
+              expiresAt,
+              isActive: true
+            });
+            agentIdCreated = session.agentId;
+            return session;
+          }
+        );
+
+        if (!activationResult.success && activationResult.message === 'SESSION_ALREADY_ACTIVATED') {
+          // Look up existing session by checkoutSessionId
+          try {
+            const existing = await storage.getSessionByCheckoutSessionId(stripeSessionId as any);
+            agentIdCreated = existing?.agentId || agentIdCreated;
+          } catch {
+            // fallthrough
+          }
+        } else if (activationResult.success) {
+          agentIdCreated = activationResult.result.agentId;
+        }
+      } catch (e) {
+        // Fallback create without idempotency if helper not available
+        const agentId = `PHOENIX-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await storage.createSession({
+          agentId,
+          checkoutSessionId: stripeSessionId,
+          stripePaymentIntentId: paymentIntentId,
+          expiresAt,
+          isActive: true
+        } as any);
+        agentIdCreated = agentId;
+      }
+
+      if (!agentIdCreated) {
+        return res.redirect('/payment-failed');
+      }
+
+      // Redirect to existing split-screen chat interface using agent id
+      return res.redirect(`/agent?id=${encodeURIComponent(agentIdCreated)}`);
+    } catch (error) {
+      console.error('Checkout success (GET) error:', error);
+      return res.redirect('/payment-failed');
     }
   });
 

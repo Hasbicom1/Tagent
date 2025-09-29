@@ -232,6 +232,8 @@ function Router() {
           <BrowserChatPage />
         </div>
       )} />
+
+      {/* Removed duplicate automation-chat route to avoid duplication */}
       
       {/* Invisible Automation Route */}
       <Route path="/invisible-automation" component={() => (

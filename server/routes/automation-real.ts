@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import InvisibleAgentOrchestrator from '../agents/invisible-agent-orchestrator';
 
 function extractUrl(instruction: string): string | null {
   const match = instruction.match(/https?:\/\/[^\s]+/i);
@@ -10,6 +11,13 @@ export async function realBrowserAutomation(instruction: string): Promise<{
   screenshot: string;
   url: string;
 }> {
+  const orchestrator = new InvisibleAgentOrchestrator({ invisibleMode: true, coordinationStrategy: 'adaptive' });
+  try {
+    await orchestrator.initialize();
+  } catch (e) {
+    // continue to direct Playwright if orchestrator fails
+  }
+
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
