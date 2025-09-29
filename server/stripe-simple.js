@@ -114,7 +114,8 @@ export async function handleWebhook(req, res) {
     });
   }
   
-  const sig = req.get('stripe-signature');
+  // Header is case-insensitive; prefer canonical name
+  const sig = req.get('Stripe-Signature') || req.get('stripe-signature');
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
   if (!webhookSecret) {
@@ -125,8 +126,16 @@ export async function handleWebhook(req, res) {
     });
   }
   
+  // Diagnostic: verify raw body presence
+  const isBuffer = Buffer.isBuffer(req.body);
+  if (!isBuffer) {
+    console.error('❌ SIMPLE STRIPE: Raw body not a Buffer. Ensure express.raw() is used before any JSON parsers.');
+  }
+
   try {
-    const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    // Stripe expects the exact raw payload (Buffer or string)
+    const rawPayload = isBuffer ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}), 'utf8');
+    const event = stripe.webhooks.constructEvent(rawPayload, sig, webhookSecret);
     console.log('✅ SIMPLE STRIPE: Webhook verified:', event.type);
     
     return res.json({
@@ -136,6 +145,9 @@ export async function handleWebhook(req, res) {
     
   } catch (error) {
     console.error('❌ SIMPLE STRIPE: Webhook failed:', error.message);
+    console.error('   Hint: Verify STRIPE_WEBHOOK_SECRET matches your configured endpoint (whsec_...).');
+    console.error('   Signature header present:', !!sig);
+    console.error('   Raw body is Buffer:', isBuffer);
     return res.status(400).json({
       error: 'WEBHOOK_ERROR',
       message: 'Webhook verification failed',

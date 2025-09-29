@@ -8,6 +8,7 @@
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
@@ -61,6 +62,19 @@ const host = '0.0.0.0';
 
 // STEP 3: Create Express app
 const app = express();
+// Trust proxy for correct HTTPS detection behind Railway/NGINX
+app.set('trust proxy', 1);
+
+// Rate limit metrics (basic counters for observability)
+const rateLimitMetrics = {
+  global429: 0,
+  payment429: 0,
+  session429: {
+    message: 0,
+    execute: 0,
+    screenshot: 0,
+  },
+};
 
 // STEP 4: CORS configuration (Railway-compatible)
 app.use(cors({
@@ -73,6 +87,159 @@ app.use(cors({
   credentials: true
 }));
 
+// STEP 4.2: Security headers (Helmet) for production hardening
+app.use(helmet({
+  hsts: process.env.NODE_ENV === 'production' ? {
+    maxAge: 15552000, // 180 days
+    includeSubDomains: true,
+    preload: false
+  } : false,
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://js.stripe.com'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+      connectSrc: ["'self'", 'wss:', 'https:', 'http:', 'https://api.stripe.com', 'https://api.openai.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      frameSrc: ['https://checkout.stripe.com', 'https://js.stripe.com'],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    }
+  } : false,
+  frameguard: { action: 'deny' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  noSniff: true,
+}));
+
+// STEP 4.3: Optional HTTPS enforcement behind proxy
+if (process.env.FORCE_HTTPS === 'true') {
+  app.use((req, res, next) => {
+    const proto = req.headers['x-forwarded-proto'];
+    if (proto && proto !== 'https') {
+      const hostHeader = req.headers['host'];
+      const url = `https://${hostHeader}${req.url}`;
+      return res.redirect(301, url);
+    }
+    next();
+  });
+}
+
+// STEP 4.4: Global Redis-backed rate limiting (applies to all requests)
+// Configurable via env: GLOBAL_RATE_LIMIT_WINDOW_MS, GLOBAL_RATE_LIMIT_MAX
+const GLOBAL_RATE_LIMIT_WINDOW_MS = parseInt(process.env.GLOBAL_RATE_LIMIT_WINDOW_MS || '60000', 10);
+const GLOBAL_RATE_LIMIT_MAX = parseInt(process.env.GLOBAL_RATE_LIMIT_MAX || '500', 10);
+
+function createRedisGlobalLimiter(windowMs, max) {
+  let redisClientPromise;
+  const getClient = async () => {
+    if (!redisClientPromise) {
+      // Lazily initialize Redis client; fail-open if unavailable
+      redisClientPromise = getRedis().catch(() => null);
+    }
+    return redisClientPromise;
+  };
+
+  return async (req, res, next) => {
+    try {
+      const redis = await getClient();
+      if (!redis) return next();
+
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const key = `rl:global:${ip}`;
+
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, Math.ceil(windowMs / 1000));
+      }
+
+      const ttlSeconds = await redis.ttl(key);
+      res.setHeader('X-RateLimit-Limit', String(max));
+      res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - count)));
+      if (ttlSeconds && ttlSeconds > 0) {
+        res.setHeader('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + ttlSeconds));
+      }
+
+        if (count > max) {
+          if (ttlSeconds && ttlSeconds > 0) {
+            res.setHeader('Retry-After', String(ttlSeconds));
+          }
+          rateLimitMetrics.global429++;
+          return res.status(429).json({
+            error: 'GLOBAL_RATE_LIMIT_EXCEEDED',
+            limit: max,
+            windowMs,
+            retryAfterSeconds: ttlSeconds || Math.ceil(windowMs / 1000),
+          });
+        }
+
+      return next();
+    } catch (err) {
+      // Fail-open on unexpected errors to avoid breaking production traffic
+      return next();
+    }
+  };
+}
+
+const globalLimiter = createRedisGlobalLimiter(GLOBAL_RATE_LIMIT_WINDOW_MS, GLOBAL_RATE_LIMIT_MAX);
+app.use(globalLimiter);
+
+// STEP 4.5: Payment-specific Redis limiter for Stripe webhooks
+const PAYMENT_RATE_LIMIT_WINDOW_MS = parseInt(process.env.PAYMENT_RATE_LIMIT_WINDOW_MS || '60000', 10);
+const PAYMENT_RATE_LIMIT_MAX = parseInt(process.env.PAYMENT_RATE_LIMIT_MAX || '100', 10);
+
+function createRedisPaymentLimiter(windowMs, max) {
+  let redisClientPromise;
+  const getClient = async () => {
+    if (!redisClientPromise) {
+      redisClientPromise = getRedis().catch(() => null);
+    }
+    return redisClientPromise;
+  };
+
+  return async (req, res, next) => {
+    try {
+      const redis = await getClient();
+      if (!redis) return next();
+
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const key = `rl:payment:${ip}`;
+
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, Math.ceil(windowMs / 1000));
+      }
+
+      const ttlSeconds = await redis.ttl(key);
+      res.setHeader('X-RateLimit-Limit', String(max));
+      res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - count)));
+      if (ttlSeconds && ttlSeconds > 0) {
+        res.setHeader('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + ttlSeconds));
+      }
+
+      if (count > max) {
+        if (ttlSeconds && ttlSeconds > 0) {
+          res.setHeader('Retry-After', String(ttlSeconds));
+        }
+        rateLimitMetrics.payment429++;
+        return res.status(429).json({
+          error: 'PAYMENT_RATE_LIMIT_EXCEEDED',
+          limit: max,
+          windowMs,
+          retryAfterSeconds: ttlSeconds || Math.ceil(windowMs / 1000),
+        });
+      }
+
+      return next();
+    } catch (err) {
+      return next();
+    }
+  };
+}
+
+const paymentLimiter = createRedisPaymentLimiter(PAYMENT_RATE_LIMIT_WINDOW_MS, PAYMENT_RATE_LIMIT_MAX);
+
 // TEST ROUTE - Add immediately after CORS
 app.get('/api/test-route', (req, res) => {
   console.log('🧪 TEST: Route found and working');
@@ -81,7 +248,8 @@ app.get('/api/test-route', (req, res) => {
 
 // STEP 4.9: Stripe webhook endpoint BEFORE body parsers (raw body required)
 // This ensures req.body is a Buffer for Stripe signature verification
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// Apply payment limiter before raw body to avoid interfering with Stripe signature parsing
+app.post('/api/stripe/webhook', paymentLimiter, express.raw({ type: 'application/json' }), async (req, res) => {
   console.log('🔔 PRODUCTION: Stripe webhook received (raw body)');
   try {
     const { handleWebhook } = await import('./stripe-simple.js');
@@ -164,7 +332,12 @@ app.get('/health', async (req, res) => {
       environment: process.env.NODE_ENV || 'development',
       port: port,
       railway: true,
-      endpoints: ['/health', '/', '/api/health', '/api/stripe/status']
+      endpoints: ['/health', '/', '/api/health', '/api/stripe/status'],
+      rateLimit429: {
+        global: rateLimitMetrics.global429,
+        payment: rateLimitMetrics.payment429,
+        session: rateLimitMetrics.session429,
+      }
     });
     
     console.log('🏥 PRODUCTION: Health check response sent');
@@ -217,6 +390,11 @@ app.get('/api/health', async (req, res) => {
         redis: redisStatus,
         stripe: stripeStatus,
         server: 'listening'
+      },
+      rateLimit429: {
+        global: rateLimitMetrics.global429,
+        payment: rateLimitMetrics.payment429,
+        session: rateLimitMetrics.session429,
       }
     });
     
@@ -846,9 +1024,66 @@ const makeSessionLimiter = (windowMs, max, message = 'Too many requests') => {
   };
 };
 
-const messageLimiter = makeSessionLimiter(60_000, 60, 'Too many messages per minute');
-const executeLimiter = makeSessionLimiter(60_000, 30, 'Too many automation executes per minute');
-const screenshotLimiter = makeSessionLimiter(10_000, 5, 'Too many screenshots');
+// STEP 17: Environment-driven rate limits (tunable without code changes)
+const MESSAGE_LIMIT_WINDOW = parseInt(process.env.MESSAGE_LIMIT_WINDOW_MS || '60000', 10);
+const MESSAGE_LIMIT_MAX = parseInt(process.env.MESSAGE_LIMIT_MAX || '60', 10);
+const EXECUTE_LIMIT_WINDOW = parseInt(process.env.EXECUTE_LIMIT_WINDOW_MS || '60000', 10);
+const EXECUTE_LIMIT_MAX = parseInt(process.env.EXECUTE_LIMIT_MAX || '30', 10);
+const SCREENSHOT_LIMIT_WINDOW = parseInt(process.env.SCREENSHOT_LIMIT_WINDOW_MS || '10000', 10);
+const SCREENSHOT_LIMIT_MAX = parseInt(process.env.SCREENSHOT_LIMIT_MAX || '5', 10);
+
+// Optional Redis-backed session limiter per route with fail-open
+function createRedisSessionLimiter(windowMs, max, metricKey) {
+  let redisClientPromise;
+  const getClient = async () => {
+    if (!redisClientPromise) {
+      redisClientPromise = getRedis().catch(() => null);
+    }
+    return redisClientPromise;
+  };
+  return async (req, res, next) => {
+    try {
+      const redis = await getClient();
+      if (!redis) return next();
+      const { sessionId } = req.params || {};
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const key = `rl:session:${sessionId || 'unknown'}:${metricKey}:${ip}`;
+      const count = await redis.incr(key);
+      if (count === 1) await redis.expire(key, Math.ceil(windowMs / 1000));
+      const ttlSeconds = await redis.ttl(key);
+      res.setHeader('X-RateLimit-Limit', String(max));
+      res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - count)));
+      if (ttlSeconds && ttlSeconds > 0) res.setHeader('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + ttlSeconds));
+      if (count > max) {
+        if (ttlSeconds && ttlSeconds > 0) res.setHeader('Retry-After', String(ttlSeconds));
+        if (metricKey === 'message') rateLimitMetrics.session429.message++;
+        else if (metricKey === 'execute') rateLimitMetrics.session429.execute++;
+        else if (metricKey === 'screenshot') rateLimitMetrics.session429.screenshot++;
+        return res.status(429).json({
+          error: 'SESSION_RATE_LIMIT_EXCEEDED',
+          route: metricKey,
+          limit: max,
+          windowMs,
+          retryAfterSeconds: ttlSeconds || Math.ceil(windowMs / 1000),
+        });
+      }
+      return next();
+    } catch (_) {
+      return next();
+    }
+  };
+}
+
+const USE_REDIS_SESSION_LIMITER = process.env.USE_REDIS_SESSION_LIMITER === 'true';
+const messageLimiter = USE_REDIS_SESSION_LIMITER
+  ? createRedisSessionLimiter(MESSAGE_LIMIT_WINDOW, MESSAGE_LIMIT_MAX, 'message')
+  : makeSessionLimiter(MESSAGE_LIMIT_WINDOW, MESSAGE_LIMIT_MAX, 'Too many messages per minute');
+const executeLimiter = USE_REDIS_SESSION_LIMITER
+  ? createRedisSessionLimiter(EXECUTE_LIMIT_WINDOW, EXECUTE_LIMIT_MAX, 'execute')
+  : makeSessionLimiter(EXECUTE_LIMIT_WINDOW, EXECUTE_LIMIT_MAX, 'Too many automation executes per minute');
+const screenshotLimiter = USE_REDIS_SESSION_LIMITER
+  ? createRedisSessionLimiter(SCREENSHOT_LIMIT_WINDOW, SCREENSHOT_LIMIT_MAX, 'screenshot')
+  : makeSessionLimiter(SCREENSHOT_LIMIT_WINDOW, SCREENSHOT_LIMIT_MAX, 'Too many screenshots');
 // Detailed health endpoint
 app.get('/api/health/details', async (req, res) => {
   try {

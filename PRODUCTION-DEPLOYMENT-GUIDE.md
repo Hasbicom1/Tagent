@@ -6,6 +6,7 @@
 ✅ **DNS configured** - www.onedollaragent.ai accessible  
 ✅ **Production entry point created** - server/production.js  
 ✅ **Proven patterns preserved** - All working configurations maintained  
+✅ **Consolidated entry point** - Use `server/production.js` exclusively
 
 ## 🔧 **PRODUCTION ENTRY POINT CREATED**
 
@@ -23,11 +24,26 @@
 {
   "scripts": {
     "start": "node server/production.js",           // ← PRODUCTION
-    "start-test": "node test-server.js",            // ← ROLLBACK
-    "start-original": "cross-env NODE_ENV=production node dist/index.js"  // ← BACKUP
+    "start-test": "node test-server.js"             // ← ROLLBACK (deprecated)
+    // Deprecated: legacy entries kept for reference only
+    // "start-original": "cross-env NODE_ENV=production node dist/index.js"
   }
 }
 ```
+
+## 🧭 Consolidation Guidance
+
+- Single production entry: `server/production.js`. Prefer this for all deploys.
+- Legacy servers (`server/production-final.js`, `server/real-automation-server.js`) are deprecated.
+- Keep legacy files only for reference; do not use them in production.
+- Railway should point to `node server/production.js` as the start command.
+
+### Rate Limiting (Global)
+- Environment flags:
+  - `GLOBAL_RATE_LIMIT_WINDOW_MS` (default `60000`)
+  - `GLOBAL_RATE_LIMIT_MAX` (default `500`)
+- Applies globally across all routes via Redis. Fails open if Redis unavailable.
+
 
 ## 🚀 **DEPLOYMENT INSTRUCTIONS**
 
