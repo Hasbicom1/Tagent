@@ -477,8 +477,9 @@ router.get('/session/:sessionId', async (req, res) => {
 router.post('/session/:sessionId/message', async (req, res) => {
   console.log('💬 API: Session message requested:', req.params.sessionId);
   try {
-    const { message } = req.body;
-    if (!message) {
+    const { message, content } = req.body;
+    const userMessage = message || content;
+    if (!userMessage || (typeof userMessage === 'string' && userMessage.trim() === '')) {
       return res.status(400).json({
         error: 'Message is required',
         status: 'error'
@@ -493,7 +494,7 @@ router.post('/session/:sessionId/message', async (req, res) => {
     const task = {
       id: `session_${Date.now()}`,
       sessionId: req.params.sessionId,
-      message: message,
+      message: userMessage,
       context: req.body.context
     };
     
