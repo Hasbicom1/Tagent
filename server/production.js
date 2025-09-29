@@ -14,7 +14,6 @@ import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables } from './database.js';
-import { DEFAULT_SECURITY_CONFIG, validateJWTToken } from './security.ts';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -623,7 +622,9 @@ app.post('/api/automation/:sessionId/live-view/token', async (req, res) => {
       aud: 'vnc-client'
     };
 
-    const jwt = await (await import('jsonwebtoken')).default.sign(payload, DEFAULT_SECURITY_CONFIG.jwtSecret);
+    const jwtModule = await import('jsonwebtoken');
+    const secret = process.env.JWT_SECRET || process.env.SECRET_KEY || 'onedollaragent-dev-secret';
+    const jwt = (jwtModule.default || jwtModule).sign(payload, secret);
     res.json({
       sessionId: req.params.sessionId,
       token: jwt,
