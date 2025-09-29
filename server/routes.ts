@@ -388,6 +388,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('⚠️  DEV MODE: Session security middleware disabled (Redis required)');
   }
   
+  // SAFE ADD: Create simple session for flow testing (dev-friendly)
+  app.post('/api/flow/create-session', async (req: Request, res: Response) => {
+    try {
+      const agentId = `flow_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      let sessionRecord: any = null;
+      try {
+        sessionRecord = await storage.createSession({
+          agentId,
+          checkoutSessionId: `dev-checkout-${agentId}`,
+          stripePaymentIntentId: `dev-payment-${agentId}`,
+          expiresAt,
+          isActive: true
+        });
+      } catch (e) {
+        // If storage not available, fallback to ephemeral response
+      }
+
+      res.json({
+        success: true,
+        session: {
+          sessionId: agentId,
+          agentId,
+          expiresAt: expiresAt.toISOString(),
+          databaseId: sessionRecord?.id
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Failed to create session' });
+    }
+  });
+
   // SAFE ADD: Real browser automation route with fallback
   app.post('/api/flow/chat/:sessionId', async (req: Request, res: Response) => {
     try {
