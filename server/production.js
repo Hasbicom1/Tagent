@@ -74,6 +74,25 @@ app.get('/api/test-route', (req, res) => {
   res.json({ message: 'Test route is working', timestamp: new Date().toISOString() });
 });
 
+// STEP 4.9: Stripe webhook endpoint BEFORE body parsers (raw body required)
+// This ensures req.body is a Buffer for Stripe signature verification
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  console.log('🔔 PRODUCTION: Stripe webhook received (raw body)');
+  try {
+    const { handleWebhook } = await import('./stripe-simple.js');
+    await handleWebhook(req, res);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('❌ PRODUCTION: Stripe webhook handling failed:', message);
+    return res.status(400).json({
+      error: 'WEBHOOK_ERROR',
+      message: 'Webhook verification failed',
+      details: message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // STEP 5: Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
