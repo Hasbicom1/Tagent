@@ -16,6 +16,7 @@ import Success from "@/pages/success";
 import Cancel from "@/pages/cancel";
 import AgentChat from "@/pages/agent-chat";
 import BrowserChatPage from "@/pages/browser-chat";
+import AutomationChat from "@/pages/automation-chat";
 import InvisibleAutomationPage from "@/pages/invisible-automation";
 import AutomationSessionPage from "@/pages/automation-session";
 import VNCTestPage from "@/pages/vnc-test";
@@ -230,6 +231,16 @@ function Router() {
             <ThemeToggle />
           </div>
           <BrowserChatPage />
+        </div>
+      )} />
+
+      {/* Split-screen Automation Chat Route */}
+      <Route path="/automation-chat" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AutomationChat />
         </div>
       )} />
       
