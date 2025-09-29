@@ -181,9 +181,6 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       setIsExecuting(true);
       setBrowserView('active');
       setExecutionLog(['INITIALIZING BROWSER ENGINE...']);
-      
-      // Simulate execution monitoring
-      simulateExecution();
     },
     onError: (error: any) => {
       toast({
@@ -218,25 +215,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     }
   }, [sessionError, toast]);
 
-  const simulateExecution = () => {
-    const steps = [
-      'LOADING NEURAL NETWORKS...',
-      'ESTABLISHING SECURE SESSION...',
-      'ANALYZING TARGET ENVIRONMENT...',
-      'EXECUTING AUTOMATION SEQUENCE...',
-      'PROCESSING RESULTS...',
-      'TASK COMPLETED SUCCESSFULLY'
-    ];
-
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setExecutionLog(prev => [...prev, step]);
-        if (index === steps.length - 1) {
-          setTimeout(() => setIsExecuting(false), 1000);
-        }
-      }, (index + 1) * 1500);
-    });
-  };
+  // Removed simulated execution. Expect real-time updates via WebSocket task events.
 
   // Input normalization: convert slash commands to natural language
   const normalizeInput = (input: string): string => {

@@ -37,29 +37,10 @@ router.post('/stripe/verify-payment', async (req, res) => {
 
     // Real Stripe verification
     const { default: Stripe } = await import('stripe');
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    
     if (!process.env.STRIPE_SECRET_KEY) {
-      console.log('⚠️ STRIPE: Using mock verification (no secret key)');
-      // Fallback to mock for development
-      const agentId = `agent_${Date.now()}`;
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      
-      const sessionData = {
-        sessionId,
-        agentId,
-        expiresAt,
-        status: 'active',
-        paymentVerified: true,
-        mockMode: true
-      };
-
-      return res.status(200).json({
-        success: true,
-        message: 'Payment verified successfully (mock mode)',
-        data: sessionData
-      });
+      return res.status(500).json({ error: 'Stripe not configured - payments disabled' });
     }
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     // Real Stripe API verification
     console.log('🔍 STRIPE: Verifying session with Stripe API:', sessionId);

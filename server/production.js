@@ -28,6 +28,21 @@ console.log('🚀 PRODUCTION: Environment:', process.env.NODE_ENV);
 console.log('🚀 PRODUCTION: Port:', process.env.PORT || '8080');
 console.log('🚀 PRODUCTION: Railway Environment:', process.env.RAILWAY_ENVIRONMENT);
 
+// FAIL-FAST: Mandatory production environment variables
+if (process.env.NODE_ENV === 'production') {
+  const REQUIRED_FOR_PRODUCTION = [
+    'DATABASE_URL',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET'
+  ];
+  for (const key of REQUIRED_FOR_PRODUCTION) {
+    if (!process.env[key]) {
+      console.error(`FATAL: ${key} required for production`);
+      process.exit(1);
+    }
+  }
+}
+
 // STEP 1: Environment variable validation
 const requiredEnvVars = ['NODE_ENV', 'PORT'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);

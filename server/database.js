@@ -16,8 +16,7 @@ export function initializeDatabase() {
     
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
-      console.log('⚠️ DATABASE: No DATABASE_URL found, using mock database');
-      return null;
+      throw new Error('DATABASE_URL required for production');
     }
 
     pool = new Pool({

@@ -173,8 +173,31 @@ export function InvisibleAutomationInterface({
     setTaskQueue(prev => prev + 1);
 
     try {
-      // Simulate invisible agent processing
-      await simulateInvisibleProcessing(inputValue);
+      // REAL: Send message to backend agent session endpoint
+      const res = await fetch(`/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentSessionId, message: inputValue })
+      });
+      if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
+      const data = await res.json();
+      const result = data.result || {};
+
+      addMessage({
+        id: `msg_${Date.now()}`,
+        type: 'agent',
+        content: result.response || result.message || 'Processed.',
+        timestamp: new Date(),
+        metadata: { status: 'completed', actions: result.actions, agentId: 'unified-ai', screenshot: result.screenshot }
+      });
+
+      if (result.actions) {
+        for (const action of result.actions) {
+          addBrowserAction({ sessionId: currentSessionId, actionType: action.type, message: action.message || action.type, timestamp: new Date() });
+        }
+      }
+
+      if (result.screenshot) setCurrentScreenshot(result.screenshot);
     } catch (error) {
       console.error('Failed to process message:', error);
       addMessage({
@@ -189,51 +212,6 @@ export function InvisibleAutomationInterface({
       setIsProcessing(false);
       setTaskQueue(prev => Math.max(0, prev - 1));
     }
-  };
-
-  /**
-   * Simulate invisible agent processing
-   */
-  const simulateInvisibleProcessing = async (instruction: string) => {
-    // Step 1: Agent selection (invisible)
-    const selectedAgent = selectInvisibleAgent(instruction);
-    
-    addMessage({
-      id: `msg_${Date.now()}`,
-      type: 'agent',
-      content: `🤖 ${selectedAgent} is analyzing your request...`,
-      timestamp: new Date(),
-      metadata: { agentId: selectedAgent, status: 'processing' }
-    });
-
-    // Step 2: Real browser actions (user can see)
-    const actions = parseInstruction(instruction);
-    
-    for (const action of actions) {
-      // Simulate real browser action
-      await simulateRealBrowserAction(action);
-      
-      // Add browser action to timeline
-      addBrowserAction({
-        sessionId: currentSessionId,
-        actionType: action.type,
-        message: action.message,
-        timestamp: new Date()
-      });
-    }
-
-    // Step 3: Completion
-    addMessage({
-      id: `msg_${Date.now()}`,
-      type: 'agent',
-      content: `✅ Task completed successfully using ${selectedAgent}`,
-      timestamp: new Date(),
-      metadata: { 
-        agentId: selectedAgent, 
-        status: 'completed',
-        actions: actions
-      }
-    });
   };
 
   /**
@@ -316,29 +294,6 @@ export function InvisibleAutomationInterface({
   /**
    * Simulate real browser action
    */
-  const simulateRealBrowserAction = async (action: any): Promise<void> => {
-    // Add realistic delay
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-    
-    // Update screenshot
-    const screenshot = generateMockScreenshot(action.type);
-    setCurrentScreenshot(screenshot);
-  };
-
-  /**
-   * Generate mock screenshot
-   */
-  const generateMockScreenshot = (type: string): string => {
-    const mockScreenshots = {
-      navigate: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TmF2aWdhdGlvbiBQYWdlPC90ZXh0Pjwvc3ZnPg==',
-      click: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Q2xpY2sgQWN0aW9uPC90ZXh0Pjwvc3ZnPg==',
-      type: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Rm9ybSBGaWxsaW5nPC90ZXh0Pjwvc3ZnPg==',
-      scroll: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2Nyb2xsaW5nPC90ZXh0Pjwvc3ZnPg==',
-      wait: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+V2FpdGluZzwvdGV4dD48L3N2Zz4='
-    };
-    
-    return mockScreenshots[type as keyof typeof mockScreenshots] || mockScreenshots.navigate;
-  };
 
   /**
    * Handle key press
