@@ -14,6 +14,7 @@ import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables } from './database.js';
+import { DEFAULT_SECURITY_CONFIG, validateJWTToken } from './security.ts';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -553,6 +554,123 @@ app.post('/api/automation/:sessionId/shutdown', async (req, res) => {
       success: false,
       sessionId: req.params.sessionId,
       message: 'Shutdown failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Live view toggle: start/stop VNC/WebSocket streaming using worker VNC manager
+app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
+  console.log('🎥 PRODUCTION: Live view toggle requested for:', req.params.sessionId);
+  try {
+    const enable = Boolean(req.body?.enable);
+
+    // Initialize VNC-capable engine if available
+    const { BrowserEngineWithVNC } = await import('../worker/browser-engine-vnc.ts');
+    const vncEngine = new BrowserEngineWithVNC({}, { enableLiveView: true });
+    await vncEngine.initialize();
+
+    const sessionId = req.params.sessionId;
+    const toggled = await vncEngine.toggleLiveView(sessionId, enable);
+    const details = vncEngine.getLiveViewDetails(sessionId);
+
+    res.json({
+      success: toggled,
+      sessionId,
+      enable,
+      liveView: details ? {
+        webSocketURL: details.webSocketURL,
+        isActive: details.isLiveViewActive,
+        vncPort: details.vncSession?.vncPort,
+        displayNumber: details.vncSession?.displayNumber
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Live view toggle failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId: req.params.sessionId,
+      message: 'Live view toggle failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Issue per-session JWT for live view (WebSocket/VNC auth)
+app.post('/api/automation/:sessionId/live-view/token', async (req, res) => {
+  console.log('🔐 PRODUCTION: Live view token requested for:', req.params.sessionId);
+  try {
+    const { getUserSession } = await import('./database.js');
+    const session = await getUserSession(req.params.sessionId);
+    if (!session || session.status !== 'active') {
+      return res.status(404).json({
+        error: 'Session not found or inactive',
+        sessionId: req.params.sessionId
+      });
+    }
+
+    const exp = Math.floor(new Date(session.expires_at).getTime() / 1000);
+    const payload = {
+      type: 'vnc_access',
+      sessionId: req.params.sessionId,
+      agentId: session.agent_id || session.agentId || req.params.sessionId,
+      iat: Math.floor(Date.now() / 1000),
+      exp,
+      iss: 'onedollaragent',
+      aud: 'vnc-client'
+    };
+
+    const jwt = await (await import('jsonwebtoken')).default.sign(payload, DEFAULT_SECURITY_CONFIG.jwtSecret);
+    res.json({
+      sessionId: req.params.sessionId,
+      token: jwt,
+      expiresAt: new Date(session.expires_at).toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Live view token generation failed:', error);
+    res.status(500).json({
+      error: 'Token generation failed',
+      sessionId: req.params.sessionId,
+      message: error.message
+    });
+  }
+});
+
+// Throttled screenshot endpoint per session (basic in-memory rate limiting)
+const screenshotRate = new Map();
+app.get('/api/automation/:sessionId/screenshot-throttled', async (req, res) => {
+  const sessionId = req.params.sessionId;
+  const now = Date.now();
+  const last = screenshotRate.get(sessionId) || 0;
+  // Allow one screenshot per 2 seconds
+  if (now - last < 2000) {
+    return res.status(429).json({
+      success: false,
+      error: 'RATE_LIMITED',
+      message: 'Screenshot rate limit exceeded',
+      retryAfterMs: 2000 - (now - last)
+    });
+  }
+  screenshotRate.set(sessionId, now);
+  console.log('📸 PRODUCTION: Throttled screenshot requested for:', sessionId);
+  try {
+    const engine = activeAutomationEngines.get(sessionId) || await getAutomationEngine(sessionId);
+    const result = await engine.takeScreenshot();
+    res.json({
+      success: true,
+      sessionId,
+      screenshot: result.screenshot,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Throttled screenshot failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId,
+      message: 'Screenshot failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
