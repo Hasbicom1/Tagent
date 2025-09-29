@@ -578,8 +578,8 @@ app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
     }
     const enable = Boolean(req.body?.enable);
 
-    // Initialize VNC-capable engine if available
-    const { BrowserEngineWithVNC } = await import('../worker/browser-engine-vnc.ts');
+    // Initialize VNC-capable engine if available (compiled JS via esbuild)
+    const { BrowserEngineWithVNC } = await import('../dist/worker/browser-engine-vnc.js');
     const vncEngine = new BrowserEngineWithVNC({}, { enableLiveView: true });
     await vncEngine.initialize();
 
