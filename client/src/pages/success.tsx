@@ -24,57 +24,62 @@ export default function Success() {
       try {
         // Get session_id from URL params
         const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session_id');
+        const checkoutSessionId = urlParams.get('session_id');
         
-        if (!sessionId) {
+        if (!checkoutSessionId) {
           throw new Error('No session ID found in URL');
         }
 
-        // Verify payment with Stripe and create automation session
-        const response = await apiRequest('POST', '/api/stripe/verify-payment', {
-          sessionId
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Payment verification failed');
+        // Prevent duplicate creation on refresh: reuse existing mapping
+        const localKey = `activated_agent_for_checkout_${checkoutSessionId}`;
+        const existingAgentId = localStorage.getItem(localKey);
+        if (existingAgentId) {
+          // Fast-path redirect to persistent agent session
+          window.location.href = `/agent?id=${existingAgentId}`;
+          return;
         }
 
-        const data = await response.json();
+        // Get CSRF token first (backend expects it for POST /api/checkout-success)
+        const csrfResponse = await apiRequest('GET', '/api/csrf-token');
+        const { csrfToken } = await csrfResponse.json();
         
-        // Create automation session after successful payment
-        const automationResponse = await apiRequest('POST', '/api/automation/create-session', {
-          paymentData: data.data
+        // Idempotent activation: backend guarantees one agent per Stripe checkout
+        const activateResponse = await apiRequest('POST', '/api/checkout-success', {
+          sessionId: checkoutSessionId,
+          csrfToken
         });
 
-        if (automationResponse.ok) {
-          const automationData = await automationResponse.json();
-          setSessionData({
-            ...data.data,
-            automationSessionId: automationData.sessionId,
-            automationUrl: automationData.sessionUrl
-          });
-          
-          toast({
-            title: "Payment Successful!",
-            description: "Your 24-hour AI automation session is ready!",
-          });
-        } else {
-          setSessionData(data.data);
-          toast({
-            title: "Payment Successful!",
-            description: "Payment verified, setting up automation session...",
-          });
+        if (!activateResponse.ok) {
+          const error = await activateResponse.json();
+          throw new Error(error.error || 'Session activation failed');
         }
+
+        const data = await activateResponse.json();
+        const agentId = data.agentId || data.sessionId;
+        const expiresAt = data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // Persist mapping to prevent new session creation on any subsequent refreshes
+        if (agentId) {
+          localStorage.setItem(localKey, agentId);
+        }
+
+        setSessionData({
+          sessionId: data.sessionId || checkoutSessionId,
+          agentId,
+          expiresAt
+        });
         
-      } catch (error: any) {
-        console.error('Checkout success error:', error);
-        setError(error.message);
+        // Redirect immediately to the agent chat interface
+        window.location.href = `/agent?id=${agentId}`;
+
+      } catch (error) {
+        console.error('Checkout success error:', (error as Error).message);
+        setError((error as Error).message);
         
         toast({
-          title: "Session Activation Failed",
-          description: error.message,
-          variant: "destructive",
+          title: 'Session Activation Failed',
+          description: (error as Error).message,
+          variant: 'destructive',
         });
       } finally {
         setIsProcessing(false);
