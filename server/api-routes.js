@@ -155,9 +155,12 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
-    // Check if a session already exists for this checkout in our primary storage
+    // Determine deterministic automation agent/session id derived from Stripe checkout session id
+    const automationSessionId = 'automation_' + checkoutSessionId;
+
+    // Check if a session already exists for this checkout in our primary storage (by agentId)
     try {
-      const existing = await getUserSession(session.id);
+      const existing = await getUserSession(automationSessionId);
       if (existing) {
         return res.status(200).json({
           sessionId: existing.session_id,
@@ -170,7 +173,6 @@ router.post('/checkout-success', async (req, res) => {
     } catch (_) {}
 
     // Create 24-hour automation session (flat response expected by frontend)
-    const automationSessionId = 'automation_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const sessionData = {
