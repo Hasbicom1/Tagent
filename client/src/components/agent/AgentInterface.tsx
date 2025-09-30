@@ -58,7 +58,11 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [isExecuting, setIsExecuting] = useState(false);
   const [browserView, setBrowserView] = useState<string | null>(null);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
-  const [realTimeRemaining, setRealTimeRemaining] = useState(initialTimeRemaining);
+  const [realTimeRemaining, setRealTimeRemaining] = useState<string>(() => {
+    const hours = Math.floor(initialTimeRemaining / 60);
+    const mins = initialTimeRemaining % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00`;
+  });
   const [historyView, setHistoryView] = useState<'all' | 'chat' | 'commands'>('all');
   const [precisionMode, setPrecisionMode] = useState(true); // PRECISION ENHANCEMENT: Enable by default
   const { toast } = useToast();
@@ -223,7 +227,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     }
   });
 
-  // Update time remaining (compute from expiresAt and persist locally)
+  // Update time remaining every second (HH:MM:SS from expiresAt)
   useEffect(() => {
     const key = `agent_session_expires_${agentId}`;
 
@@ -240,14 +244,25 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       localStorage.setItem(key, String(expires));
     }
 
-    const minutesRemaining = Number.isFinite(expires)
-      ? Math.max(0, Math.floor((expires - Date.now()) / 60000))
-      : 0;
-    setRealTimeRemaining(minutesRemaining);
+    const computeFormatted = () => {
+      if (!Number.isFinite(expires)) {
+        return 'EXPIRED';
+      }
+      const remainingMs = Math.max(0, expires - Date.now());
+      const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+      const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
+      return remainingMs > 0
+        ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        : 'EXPIRED';
+    };
+
+    // Initial set
+    setRealTimeRemaining(computeFormatted());
 
     const interval = setInterval(() => {
-      setRealTimeRemaining(prev => Math.max(0, prev - 1));
-    }, 60000); // Update every minute
+      setRealTimeRemaining(computeFormatted());
+    }, 1000); // Update every second
 
     return () => clearInterval(interval);
   }, [sessionInfo, agentId]);
@@ -315,12 +330,13 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     executeTaskMutation.mutate(taskDescription);
   };
 
+  // Deprecated: formatting now handled in state (HH:MM:SS)
   const formatTime = (minutes: number) => {
     const safe = Number.isFinite(minutes) ? minutes : 0;
     const clamped = Math.max(0, safe);
     const hours = Math.floor(clamped / 60);
     const mins = clamped % 60;
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00`;
   };
 
   // Show loading state while fetching session
@@ -389,9 +405,9 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             <div className="flex items-center gap-6">
               <div className="text-right space-y-1">
                 <div className="text-sm text-muted-foreground font-mono">SESSION_TIME</div>
-                <Badge variant={realTimeRemaining > 60 ? 'default' : 'destructive'} className="text-sm font-mono">
+                <Badge variant={'default'} className="text-sm font-mono">
                   <Clock className="w-4 h-4 mr-1" />
-                  {formatTime(realTimeRemaining)}
+                  {realTimeRemaining}
                 </Badge>
               </div>
 
