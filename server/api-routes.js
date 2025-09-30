@@ -122,6 +122,7 @@ router.post('/stripe/verify-payment', async (req, res) => {
 });
 
 // Checkout success endpoint used by legacy frontend (returns flat fields)
+// Idempotent checkout success: always return the same agent/session for a given Stripe checkout session
 router.post('/checkout-success', async (req, res) => {
   try {
     console.log('✅ API: Checkout success requested');
@@ -154,6 +155,20 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
+    // Check if a session already exists for this checkout in our primary storage
+    try {
+      const existing = await getUserSession(session.id);
+      if (existing) {
+        return res.status(200).json({
+          sessionId: existing.session_id,
+          agentId: existing.agent_id,
+          expiresAt: new Date(existing.expires_at).toISOString(),
+          databaseId: existing.id,
+          reused: true
+        });
+      }
+    } catch (_) {}
+
     // Create 24-hour automation session (flat response expected by frontend)
     const automationSessionId = 'automation_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -180,7 +195,6 @@ router.post('/checkout-success', async (req, res) => {
       });
     } catch (dbError) {
       console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
-      // Return success anyway so frontend can proceed
       return res.status(200).json({
         sessionId: automationSessionId,
         agentId: automationSessionId,

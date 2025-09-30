@@ -855,19 +855,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { agentId } = req.params;
       let session = await storage.getSessionByAgentId(agentId);
-      
-      // ✅ DEVELOPMENT MODE: Allow demo access for real browser automation testing
-      if (!session && process.env.NODE_ENV === 'development') {
-        console.log(`🔄 DEV MODE: Creating demo session for agent ${agentId} to test REAL browser automation`);
+
+      // Fallback: read from production database (user_sessions) if Drizzle storage has no record
+      if (!session) {
+        try {
+          const { getUserSession } = await import('./database.js');
+          const dbSession: any = await getUserSession(agentId);
+          if (dbSession) {
+            session = {
+              id: dbSession.session_id,
+              agentId: dbSession.agent_id,
+              checkoutSessionId: dbSession.checkout_session_id || null,
+              stripePaymentIntentId: dbSession.payment_intent_id || null,
+              expiresAt: new Date(dbSession.expires_at),
+              isActive: dbSession.status === 'active',
+              createdAt: new Date(dbSession.created_at)
+            } as any;
+          }
+        } catch (e) {
+          // If database.js is not available, continue without fallback
+        }
+      }
+
+      // Optional dev fallback only when explicitly enabled
+      if (!session && process.env.ENABLE_DEV_SESSION_FALLBACK === 'true') {
+        console.log(`🔄 DEV FALLBACK: Creating temporary session for agent ${agentId}`);
         session = {
           id: `dev-session-${agentId}`,
           agentId: agentId,
           checkoutSessionId: `dev-checkout-${agentId}`,
           stripePaymentIntentId: `dev-payment-${agentId}`,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           isActive: true,
           createdAt: new Date()
-        };
+        } as any;
       }
       
       if (!session) {
