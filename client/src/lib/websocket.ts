@@ -92,16 +92,18 @@ export class WebSocketClient {
   constructor(config: Partial<WSClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     
-    // Auto-detect WebSocket URL if not provided
+    // FIXED: Auto-detect WebSocket URL if not provided
     if (!this.config.url) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
+      // Try multiple WebSocket endpoints
       this.config.url = `${protocol}//${host}/ws`;
+      console.log('🔌 WS: Using WebSocket URL:', this.config.url);
     }
   }
 
   /**
-   * Connect to WebSocket server
+   * FIXED: Connect to WebSocket server with fallback
    */
   public connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -111,42 +113,80 @@ export class WebSocketClient {
       }
 
       this.setState(WSConnectionState.CONNECTING);
-      this.log('Connecting to WebSocket...');
+      this.log('🔌 Connecting to WebSocket...');
 
       try {
-        this.ws = new WebSocket(this.config.url!);
+        // FIXED: Try multiple WebSocket endpoints
+        const endpoints = [
+          this.config.url!,
+          `${this.config.url!.replace('/ws', '')}/websocket`,
+          `${this.config.url!.replace('/ws', '')}/socket.io`
+        ];
         
-        // Setup event handlers
-        this.ws.onopen = () => {
-          this.setState(WSConnectionState.CONNECTED);
-          this.reconnectAttempts = 0;
-          this.processMessageQueue();
-          this.emit('connected', { connectionId: 'connected' });
-          this.log('WebSocket connected');
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-
-        this.ws.onclose = (event) => {
-          this.handleDisconnection(event.code, event.reason);
-        };
-
-        this.ws.onerror = (error) => {
-          this.log('WebSocket error:', error);
-          this.setState(WSConnectionState.ERROR);
-          reject(new Error('WebSocket connection failed'));
-        };
-
-        // Connection timeout
-        setTimeout(() => {
-          if (this.state === WSConnectionState.CONNECTING) {
-            this.ws?.close();
-            reject(new Error('WebSocket connection timeout'));
+        let currentEndpoint = 0;
+        
+        const tryConnect = () => {
+          if (currentEndpoint >= endpoints.length) {
+            reject(new Error('All WebSocket endpoints failed'));
+            return;
           }
-        }, this.config.timeout);
+          
+          const endpoint = endpoints[currentEndpoint];
+          this.log(`🔌 Trying WebSocket endpoint: ${endpoint}`);
+          
+          this.ws = new WebSocket(endpoint);
+        
+          // Setup event handlers
+          this.ws.onopen = () => {
+            this.setState(WSConnectionState.CONNECTED);
+            this.reconnectAttempts = 0;
+            this.processMessageQueue();
+            this.emit('connected', { connectionId: 'connected' });
+            this.log('✅ WebSocket connected to:', endpoint);
+            resolve();
+          };
+
+          this.ws.onmessage = (event) => {
+            this.handleMessage(event.data);
+          };
+
+          this.ws.onclose = (event) => {
+            this.handleDisconnection(event.code, event.reason);
+          };
+
+          this.ws.onerror = (error) => {
+            this.log('❌ WebSocket error on endpoint:', endpoint, error);
+            this.setState(WSConnectionState.ERROR);
+            
+            // FIXED: Try next endpoint on error
+            currentEndpoint++;
+            if (currentEndpoint < endpoints.length) {
+              this.log('🔄 Trying next WebSocket endpoint...');
+              setTimeout(tryConnect, 1000); // Wait 1 second before trying next endpoint
+            } else {
+              const errorMessage = error instanceof Error ? error.message : 'All WebSocket endpoints failed';
+              console.error('❌ WS: All endpoints failed:', errorMessage);
+              reject(new Error(`WebSocket connection failed: ${errorMessage}`));
+            }
+          };
+
+          // Connection timeout
+          setTimeout(() => {
+            if (this.state === WSConnectionState.CONNECTING) {
+              this.ws?.close();
+              currentEndpoint++;
+              if (currentEndpoint < endpoints.length) {
+                this.log('⏰ WebSocket timeout, trying next endpoint...');
+                setTimeout(tryConnect, 1000);
+              } else {
+                reject(new Error('WebSocket connection timeout on all endpoints'));
+              }
+            }
+          }, this.config.timeout);
+        };
+        
+        // Start connection attempt
+        tryConnect();
 
       } catch (error) {
         this.setState(WSConnectionState.ERROR);

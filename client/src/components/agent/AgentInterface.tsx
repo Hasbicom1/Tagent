@@ -67,36 +67,85 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [precisionMode, setPrecisionMode] = useState(true); // PRECISION ENHANCEMENT: Enable by default
   const { toast } = useToast();
 
-  // Fetch session info
+  // FIXED: Fetch session info with proper expiry validation
   const { data: sessionInfo, error: sessionError } = useQuery({
     queryKey: ['session', agentId],
     queryFn: async () => {
+      console.log('🔍 SESSION: Fetching session info for agent:', agentId);
       const response = await apiRequest('GET', `/api/session/${agentId}`);
+      
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Agent session data retrieval failed');
+        console.error('❌ SESSION: Session fetch failed:', error);
+        
+        // Handle specific error cases
+        if (response.status === 404) {
+          throw new Error('Session not found');
+        } else if (response.status === 410) {
+          throw new Error('Session expired');
+        } else {
+          throw new Error(error.error || 'Agent session data retrieval failed');
+        }
       }
-      return response.json() as Promise<SessionInfo>;
+      
+      const sessionData = await response.json();
+      console.log('✅ SESSION: Session data loaded:', sessionData);
+      
+      // FIXED: Validate session status
+      if (sessionData.status === 'expired') {
+        console.log('❌ SESSION: Session is expired');
+        throw new Error('Session expired');
+      }
+      
+      return sessionData as Promise<SessionInfo>;
     },
     refetchInterval: 30000, // Refetch every 30 seconds
+    retry: (failureCount, error) => {
+      // Don't retry on session expiry
+      if (error.message.includes('expired') || error.message.includes('not found')) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
 
-  // Fetch all messages (backward compatibility and default view)
+  // FIXED: Fetch all messages with proper session validation
   const { data: allMessages = [], refetch: refetchMessages } = useQuery({
     queryKey: ['messages', agentId],
     queryFn: async () => {
+      console.log('🔍 MESSAGES: Fetching messages for agent:', agentId);
       const response = await apiRequest('GET', `/api/session/${agentId}/messages`);
+      
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Neural conversation history access denied');
+        console.error('❌ MESSAGES: Message fetch failed:', error);
+        
+        // Handle specific error cases
+        if (response.status === 404) {
+          throw new Error('Session not found');
+        } else if (response.status === 410) {
+          throw new Error('Session expired');
+        } else {
+          throw new Error(error.error || 'Neural conversation history access denied');
+        }
       }
+      
       const data = await response.json();
+      console.log('✅ MESSAGES: Messages loaded:', data.length, 'messages');
+      
       return data.map((msg: any) => ({
         ...msg,
         timestamp: new Date(msg.timestamp)
       })) as Message[];
     },
-    enabled: !!sessionInfo,
+    enabled: !!sessionInfo && !sessionError,
+    retry: (failureCount, error) => {
+      // Don't retry on session expiry
+      if (error.message.includes('expired') || error.message.includes('not found')) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
 
   // Fetch chat history only
@@ -233,50 +282,91 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
 
     if (!sessionInfo) return;
 
-    let expires = sessionInfo.expiresAt ? new Date(sessionInfo.expiresAt).getTime() : NaN;
-    if (Number.isNaN(expires)) {
+    // FIXED: Properly handle session expiration time
+    let expires: number;
+    
+    if (sessionInfo.expiresAt) {
+      // Parse the expiresAt string properly
+      const expiresDate = new Date(sessionInfo.expiresAt);
+      expires = expiresDate.getTime();
+      
+      // Validate the date
+      if (isNaN(expires) || expires <= 0) {
+        console.error('Invalid expiresAt date:', sessionInfo.expiresAt);
+        setRealTimeRemaining('EXPIRED');
+        return;
+      }
+      
+      // Store canonical expiration time
+      localStorage.setItem(key, String(expires));
+    } else {
+      // Fallback to stored value
       const stored = localStorage.getItem(key);
       if (stored) {
         expires = parseInt(stored, 10);
+        if (isNaN(expires) || expires <= 0) {
+          setRealTimeRemaining('EXPIRED');
+          return;
+        }
+      } else {
+        setRealTimeRemaining('EXPIRED');
+        return;
       }
-    } else {
-      // Persist canonical expiration
-      localStorage.setItem(key, String(expires));
     }
 
     const computeFormatted = () => {
-      if (!Number.isFinite(expires)) {
+      const now = Date.now();
+      const remainingMs = Math.max(0, expires - now);
+      
+      if (remainingMs <= 0) {
         return 'EXPIRED';
       }
-      const remainingMs = Math.max(0, expires - Date.now());
+      
       const hours = Math.floor(remainingMs / (1000 * 60 * 60));
       const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
-      return remainingMs > 0
-        ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-        : 'EXPIRED';
+      
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     };
 
     // Initial set
     setRealTimeRemaining(computeFormatted());
 
     const interval = setInterval(() => {
-      setRealTimeRemaining(computeFormatted());
+      const newTime = computeFormatted();
+      setRealTimeRemaining(newTime);
+      
+      // If session expired, clear localStorage and show error
+      if (newTime === 'EXPIRED') {
+        localStorage.removeItem(key);
+        toast({
+          title: "SESSION_EXPIRED",
+          description: "Your 24-hour session has ended. Please purchase a new session.",
+          variant: "destructive",
+        });
+      }
     }, 1000); // Update every second
 
     return () => clearInterval(interval);
-  }, [sessionInfo, agentId]);
+  }, [sessionInfo, agentId, toast]);
 
-  // Handle session errors
+  // FIXED: Handle session errors with proper validation
   useEffect(() => {
     if (sessionError) {
+      console.error('❌ SESSION: Session error detected:', sessionError);
       toast({
-        title: "SESSION_PROTOCOL_BREACH",
-        description: "Your liberation session has expired. Restart your escape from Big Tech chains.",
+        title: "SESSION_EXPIRED",
+        description: "Your 24-hour session has expired. Please purchase a new session to continue.",
         variant: "destructive",
       });
+      
+      // Clear session data and redirect
+      setTimeout(() => {
+        localStorage.removeItem(`agent_session_expires_${agentId}`);
+        window.location.href = '/';
+      }, 3000);
     }
-  }, [sessionError, toast]);
+  }, [sessionError, toast, agentId]);
 
   // Removed simulated execution. Expect real-time updates via WebSocket task events.
 

@@ -909,68 +909,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all messages for a session (backward compatibility)
+  // FIXED: Get all messages for a session with proper error handling
   app.get("/api/session/:agentId/messages", async (req, res) => {
     try {
       const { agentId } = req.params;
+      console.log('🔍 API: Fetching messages for agent:', agentId);
+      
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session) {
+        console.log('❌ API: Session not found for agent:', agentId);
         return res.status(404).json({ error: "Session not found" });
       }
 
-      if (new Date() > session.expiresAt) {
+      // Check if session is expired
+      const now = new Date();
+      const expiresAt = new Date(session.expiresAt);
+      
+      if (now > expiresAt) {
+        console.log('❌ API: Session expired for agent:', agentId, 'expiresAt:', expiresAt);
         return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
+      console.log('✅ API: Session found, fetching messages for session:', session.id);
       const messages = await storage.getSessionMessages(session.id);
+      
+      console.log('✅ API: Retrieved', messages.length, 'messages for session:', session.id);
       res.json(messages);
     } catch (error: any) {
-      console.error("Error getting messages:", error);
+      console.error("❌ API: Error getting messages:", error);
       res.status(500).json({ error: "NEURAL_ARCHIVE_ACCESS_DENIED: " + error.message });
     }
   });
 
-  // Get chat history only (non-command messages)
+  // FIXED: Get chat history only (non-command messages) with proper error handling
   app.get("/api/session/:agentId/chat-history", async (req, res) => {
     try {
       const { agentId } = req.params;
+      console.log('🔍 API: Fetching chat history for agent:', agentId);
+      
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session) {
+        console.log('❌ API: Session not found for agent:', agentId);
         return res.status(404).json({ error: "Session not found" });
       }
 
-      if (new Date() > session.expiresAt) {
+      // Check if session is expired
+      const now = new Date();
+      const expiresAt = new Date(session.expiresAt);
+      
+      if (now > expiresAt) {
+        console.log('❌ API: Session expired for agent:', agentId, 'expiresAt:', expiresAt);
         return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
+      console.log('✅ API: Session found, fetching chat history for session:', session.id);
       const chatHistory = await storage.getSessionChatHistory(session.id);
+      
+      console.log('✅ API: Retrieved', chatHistory.length, 'chat messages for session:', session.id);
       res.json(chatHistory);
     } catch (error: any) {
-      console.error("Error getting chat history:", error);
+      console.error("❌ API: Error getting chat history:", error);
       res.status(500).json({ error: "CHAT_LOG_RETRIEVAL_FAILED: " + error.message });
     }
   });
 
-  // Get command history only (command execution messages)
+  // FIXED: Get command history only (command execution messages) with proper error handling
   app.get("/api/session/:agentId/command-history", async (req, res) => {
     try {
       const { agentId } = req.params;
+      console.log('🔍 API: Fetching command history for agent:', agentId);
+      
       const session = await storage.getSessionByAgentId(agentId);
       
       if (!session) {
+        console.log('❌ API: Session not found for agent:', agentId);
         return res.status(404).json({ error: "Session not found" });
       }
 
-      if (new Date() > session.expiresAt) {
+      // Check if session is expired
+      const now = new Date();
+      const expiresAt = new Date(session.expiresAt);
+      
+      if (now > expiresAt) {
+        console.log('❌ API: Session expired for agent:', agentId, 'expiresAt:', expiresAt);
         return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
+      console.log('✅ API: Session found, fetching command history for session:', session.id);
       const commandHistory = await storage.getSessionCommandHistory(session.id);
+      
+      console.log('✅ API: Retrieved', commandHistory.length, 'command messages for session:', session.id);
       res.json(commandHistory);
     } catch (error: any) {
-      console.error("Error getting command history:", error);
+      console.error("❌ API: Error getting command history:", error);
       res.status(500).json({ error: "COMMAND_LOG_ACCESS_DENIED: " + error.message });
     }
   });

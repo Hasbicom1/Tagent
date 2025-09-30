@@ -487,17 +487,18 @@ console.log('✅ PRODUCTION: API endpoints defined in api-routes.js');
 // Checkout success endpoint - using existing stripe webhook endpoint
 
 
-// Session endpoints (frontend expects these) - ACTIVATED REAL DATABASE LOOKUP
+// FIXED: Session endpoints with proper expiry validation
 app.get('/api/session/:sessionId', async (req, res) => {
   console.log('📋 PRODUCTION: Session status requested for:', req.params.sessionId);
   try {
     // Import database functions
-    const { getUserSession } = await import('./database.js');
+    const { getUserSession, updateSessionStatus } = await import('./database.js');
     
     // Get real session from database
     const session = await getUserSession(req.params.sessionId);
     
     if (!session) {
+      console.log('❌ PRODUCTION: Session not found:', req.params.sessionId);
       return res.status(404).json({
         sessionId: req.params.sessionId,
         status: 'not_found',
@@ -506,10 +507,40 @@ app.get('/api/session/:sessionId', async (req, res) => {
       });
     }
     
+    // FIXED: Check if session is actually expired
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('❌ PRODUCTION: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
+      
+      // Update session status to expired in database
+      try {
+        await updateSessionStatus(req.params.sessionId, 'expired');
+        console.log('✅ PRODUCTION: Session status updated to expired');
+      } catch (updateError) {
+        console.warn('⚠️ PRODUCTION: Failed to update session status:', updateError.message);
+      }
+      
+      return res.status(410).json({
+        sessionId: req.params.sessionId,
+        status: 'expired',
+        message: 'Session has expired',
+        expiresAt: session.expires_at,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Calculate time remaining in minutes
+    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
+    
+    console.log('✅ PRODUCTION: Session is active, time remaining:', timeRemaining, 'minutes');
+    
     res.json({
       sessionId: req.params.sessionId,
-      status: session.status,
+      status: 'active',
       expiresAt: session.expires_at,
+      timeRemaining: timeRemaining,
       paymentVerified: session.payment_verified,
       timestamp: new Date().toISOString()
     });

@@ -461,5 +461,17 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Use DatabaseStorage for persistent PostgreSQL storage
-export const storage = new DatabaseStorage();
+// FIXED: Use fallback storage system that works with existing database
+let storage: IStorage;
+
+try {
+  // Try to use database storage first
+  storage = new DatabaseStorage();
+  console.log('✅ STORAGE: Database storage initialized');
+} catch (error) {
+  console.warn('⚠️ STORAGE: Database storage failed, using memory storage:', error);
+  // Fallback to memory storage if database fails
+  storage = new MemStorage();
+}
+
+export { storage };
