@@ -76,6 +76,12 @@ const rateLimitMetrics = {
   },
 };
 
+// Initialize session limiters with no-op to avoid temporal dead zone
+const noopLimiter = (req, res, next) => next();
+let messageLimiter = noopLimiter;
+let executeLimiter = noopLimiter;
+let screenshotLimiter = noopLimiter;
+
 // STEP 4: CORS configuration (Railway-compatible)
 app.use(cors({
   origin: [
@@ -1085,13 +1091,13 @@ function createRedisSessionLimiter(windowMs, max, metricKey) {
 }
 
 const USE_REDIS_SESSION_LIMITER = process.env.USE_REDIS_SESSION_LIMITER === 'true';
-const messageLimiter = USE_REDIS_SESSION_LIMITER
+messageLimiter = USE_REDIS_SESSION_LIMITER
   ? createRedisSessionLimiter(MESSAGE_LIMIT_WINDOW, MESSAGE_LIMIT_MAX, 'message')
   : makeSessionLimiter(MESSAGE_LIMIT_WINDOW, MESSAGE_LIMIT_MAX, 'Too many messages per minute');
-const executeLimiter = USE_REDIS_SESSION_LIMITER
+executeLimiter = USE_REDIS_SESSION_LIMITER
   ? createRedisSessionLimiter(EXECUTE_LIMIT_WINDOW, EXECUTE_LIMIT_MAX, 'execute')
   : makeSessionLimiter(EXECUTE_LIMIT_WINDOW, EXECUTE_LIMIT_MAX, 'Too many automation executes per minute');
-const screenshotLimiter = USE_REDIS_SESSION_LIMITER
+screenshotLimiter = USE_REDIS_SESSION_LIMITER
   ? createRedisSessionLimiter(SCREENSHOT_LIMIT_WINDOW, SCREENSHOT_LIMIT_MAX, 'screenshot')
   : makeSessionLimiter(SCREENSHOT_LIMIT_WINDOW, SCREENSHOT_LIMIT_MAX, 'Too many screenshots');
 // Detailed health endpoint
