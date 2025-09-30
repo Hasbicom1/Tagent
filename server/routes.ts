@@ -936,7 +936,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { agentId } = req.params;
       console.log('🔍 API: Fetching messages for agent:', agentId);
       
-      const session = await storage.getSessionByAgentId(agentId);
+      let session = await storage.getSessionByAgentId(agentId);
+      if (!session) {
+        try {
+          const { getUserSession } = await import('./database.js');
+          const dbSession: any = await getUserSession(agentId);
+          if (dbSession) {
+            // Materialize a Drizzle-compatible session so messages/history can persist
+            const mapped = {
+              agentId: dbSession.agent_id,
+              checkoutSessionId: dbSession.checkout_session_id || null,
+              stripePaymentIntentId: dbSession.payment_intent_id || null,
+              expiresAt: new Date(dbSession.expires_at),
+              isActive: dbSession.status === 'active'
+            } as any;
+            try {
+              session = await storage.createSession(mapped);
+            } catch (_) {
+              // If insert fails (e.g., duplicate), try to fetch again
+              session = await storage.getSessionByAgentId(agentId);
+            }
+          }
+        } catch (_) {}
+      }
       
       if (!session) {
         console.log('❌ API: Session not found for agent:', agentId);
@@ -969,7 +991,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { agentId } = req.params;
       console.log('🔍 API: Fetching chat history for agent:', agentId);
       
-      const session = await storage.getSessionByAgentId(agentId);
+      let session = await storage.getSessionByAgentId(agentId);
+      if (!session) {
+        try {
+          const { getUserSession } = await import('./database.js');
+          const dbSession: any = await getUserSession(agentId);
+          if (dbSession) {
+            const mapped = {
+              agentId: dbSession.agent_id,
+              checkoutSessionId: dbSession.checkout_session_id || null,
+              stripePaymentIntentId: dbSession.payment_intent_id || null,
+              expiresAt: new Date(dbSession.expires_at),
+              isActive: dbSession.status === 'active'
+            } as any;
+            try {
+              session = await storage.createSession(mapped);
+            } catch (_) {
+              session = await storage.getSessionByAgentId(agentId);
+            }
+          }
+        } catch (_) {}
+      }
       
       if (!session) {
         console.log('❌ API: Session not found for agent:', agentId);
@@ -1002,7 +1044,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { agentId } = req.params;
       console.log('🔍 API: Fetching command history for agent:', agentId);
       
-      const session = await storage.getSessionByAgentId(agentId);
+      let session = await storage.getSessionByAgentId(agentId);
+      if (!session) {
+        try {
+          const { getUserSession } = await import('./database.js');
+          const dbSession: any = await getUserSession(agentId);
+          if (dbSession) {
+            const mapped = {
+              agentId: dbSession.agent_id,
+              checkoutSessionId: dbSession.checkout_session_id || null,
+              stripePaymentIntentId: dbSession.payment_intent_id || null,
+              expiresAt: new Date(dbSession.expires_at),
+              isActive: dbSession.status === 'active'
+            } as any;
+            try {
+              session = await storage.createSession(mapped);
+            } catch (_) {
+              session = await storage.getSessionByAgentId(agentId);
+            }
+          }
+        } catch (_) {}
+      }
       
       if (!session) {
         console.log('❌ API: Session not found for agent:', agentId);
