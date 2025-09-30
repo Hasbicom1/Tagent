@@ -170,12 +170,12 @@ function AgentAccess() {
         try {
           const response = await fetch(`/api/session/${agentId}`);
           const data = await response.json();
-          const remaining = Math.max(0, Math.floor((new Date(data.expiresAt).getTime() - Date.now()) / 1000 / 60));
-          setTimeRemaining(remaining);
-
-          // Persist canonical expiresAt for cross-page continuity
-          if (data.expiresAt) {
-            localStorage.setItem(storageKey, String(new Date(data.expiresAt).getTime()));
+          const expTs = data?.expiresAt ? new Date(data.expiresAt).getTime() : NaN;
+          if (Number.isFinite(expTs)) {
+            const remaining = Math.max(0, Math.floor((expTs - Date.now()) / 1000 / 60));
+            setTimeRemaining(remaining);
+            // Persist canonical expiresAt for cross-page continuity
+            localStorage.setItem(storageKey, String(expTs));
           }
         } catch (error) {
           console.error('Error fetching session info:', error);

@@ -197,8 +197,10 @@ export function BrowserInterface({ sessionId }: BrowserInterfaceProps) {
   };
 
   const formatTime = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const safe = Number.isFinite(minutes) ? minutes : 0;
+    const clamped = Math.max(0, safe);
+    const hours = Math.floor(clamped / 60);
+    const mins = clamped % 60;
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
   };
 

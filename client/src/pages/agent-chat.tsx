@@ -208,14 +208,22 @@ export default function AgentChat() {
   };
 
   const formatTimeRemaining = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const safe = Number.isFinite(minutes) ? minutes : 0;
+    const clamped = Math.max(0, safe);
+    const hours = Math.floor(clamped / 60);
+    const mins = clamped % 60;
     
     if (hours > 0) {
       return `${hours}h ${mins}m`;
     } else {
       return `${mins}m`;
     }
+  };
+
+  const computeMinutesRemaining = (expiresAt: string): number => {
+    const ts = expiresAt ? new Date(expiresAt).getTime() : NaN;
+    if (!Number.isFinite(ts)) return 0;
+    return Math.max(0, Math.floor((ts - Date.now()) / 60000));
   };
 
   const toggleLiveViewFullscreen = () => {
@@ -317,8 +325,8 @@ export default function AgentChat() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
             <Clock className="w-4 h-4" />
-            <span data-testid="text-session-time">
-              {formatTimeRemaining(sessionInfo.timeRemaining)}
+              <span data-testid="text-session-time">
+              {formatTimeRemaining(computeMinutesRemaining(sessionInfo.expiresAt))}
             </span>
           </div>
           
