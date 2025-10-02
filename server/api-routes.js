@@ -11,6 +11,14 @@ import { getBrowserSession, createBrowserSession, removeBrowserSession } from '.
 
 const router = express.Router();
 
+// Lightweight in-memory message store (production fallback)
+// Keyed by agentId; persists user and agent messages for chat views
+const inMemoryMessages = new Map();
+function getMessageBucket(agentId) {
+  if (!inMemoryMessages.has(agentId)) inMemoryMessages.set(agentId, []);
+  return inMemoryMessages.get(agentId);
+}
+
 // Basic API health check
 router.get('/health', (req, res) => {
   console.log('🔍 API: Health check requested');
@@ -516,6 +524,16 @@ router.post('/session/:sessionId/message', async (req, res) => {
     
     const result = await agent.processTask(task);
     
+    // Persist chat to in-memory history keyed by agentId (deterministic id)
+    try {
+      const agentId = req.params.sessionId; // deterministic: automation_<stripe_session_id>
+      const bucket = getMessageBucket(agentId);
+      bucket.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString(), messageType: 'chat' });
+      bucket.push({ role: 'agent', content: result.message || '', timestamp: new Date().toISOString(), messageType: 'chat' });
+    } catch (e) {
+      console.warn('⚠️  API: Failed to persist chat to memory:', e?.message);
+    }
+
     res.json({
       success: true,
       message: 'Session message processed',
@@ -528,6 +546,66 @@ router.post('/session/:sessionId/message', async (req, res) => {
       error: 'Session message processing failed',
       details: error.message
     });
+  }
+});
+
+// Chat history endpoints (expected by frontend)
+router.get('/session/:agentId/messages', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const session = await getUserSession(agentId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const now = new Date();
+    const expires = new Date(session.expires_at);
+    if (now > expires) {
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    const bucket = getMessageBucket(agentId);
+    res.json(bucket);
+  } catch (error) {
+    console.error('❌ API: Get messages failed:', error);
+    res.status(500).json({ error: 'NEURAL_ARCHIVE_ACCESS_DENIED: ' + (error?.message || 'unknown') });
+  }
+});
+
+router.get('/session/:agentId/chat-history', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const session = await getUserSession(agentId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const now = new Date();
+    const expires = new Date(session.expires_at);
+    if (now > expires) {
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    const bucket = getMessageBucket(agentId).filter(m => m.messageType !== 'command');
+    res.json(bucket);
+  } catch (error) {
+    console.error('❌ API: Get chat history failed:', error);
+    res.status(500).json({ error: 'CHAT_LOG_RETRIEVAL_FAILED: ' + (error?.message || 'unknown') });
+  }
+});
+
+router.get('/session/:agentId/command-history', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const session = await getUserSession(agentId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const now = new Date();
+    const expires = new Date(session.expires_at);
+    if (now > expires) {
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    const bucket = getMessageBucket(agentId).filter(m => m.messageType === 'command');
+    res.json(bucket);
+  } catch (error) {
+    console.error('❌ API: Get command history failed:', error);
+    res.status(500).json({ error: 'COMMAND_LOG_RETRIEVAL_FAILED: ' + (error?.message || 'unknown') });
   }
 });
 
