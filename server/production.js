@@ -561,9 +561,46 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
   try {
     const userText = req.body.message || req.body.content || 'Hello';
 
-    // Helper to call DeepSeek or OpenAI
-    const callLLM = async (prompt) => {
+    // Build lightweight conversation history from in-memory bucket for better replies
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    const existing = global.__chatBuckets.get(req.params.sessionId) || [];
+    const historyMessages = existing.map(m => ({
+      role: m.role === 'agent' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
+    // Helper to call Groq (free), DeepSeek, or OpenAI in that priority order
+    const callLLM = async (prompt, history) => {
       try {
+        // 1) Groq free tier
+        if (process.env.GROQ_API_KEY) {
+          const groqMessages = [
+            { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
+            ...(Array.isArray(history) ? history : []),
+            { role: 'user', content: prompt }
+          ];
+          const grResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: process.env.GROQ_MODEL || 'llama-3.1-70b-versatile',
+              messages: groqMessages,
+              temperature: 0.7,
+              max_tokens: 500
+            })
+          });
+          if (!grResp.ok) {
+            console.warn('⚠️  Groq API error:', grResp.status, await grResp.text());
+          } else {
+            const data = await grResp.json();
+            const text = data?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+          }
+        }
+
         if (process.env.DEEPSEEK_API_KEY) {
           const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
             method: 'POST',
@@ -611,7 +648,7 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       return `Acknowledged: ${prompt}`; // last-resort fallback
     };
 
-    const aiText = await callLLM(userText);
+    const aiText = await callLLM(userText, historyMessages);
 
     // Persist to in-process chat buckets used by history routes
     try {
