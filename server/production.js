@@ -559,27 +559,75 @@ app.get('/api/session/:sessionId', async (req, res) => {
 app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => {
   console.log('💬 PRODUCTION: Session message requested for:', req.params.sessionId);
   try {
-    // Import and use the real unified AI agent
-    const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
-    const agent = new LocalUnifiedAIAgent();
-    await agent.initialize();
-    
-    const task = {
-      id: `session_${Date.now()}`,
-      sessionId: req.params.sessionId,
-      message: req.body.message || req.body.content || 'Hello',
-      context: req.body.context
+    const userText = req.body.message || req.body.content || 'Hello';
+
+    // Helper to call DeepSeek or OpenAI
+    const callLLM = async (prompt) => {
+      try {
+        if (process.env.DEEPSEEK_API_KEY) {
+          const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+              messages: [
+                { role: 'system', content: 'You are a helpful web automation agent.' },
+                { role: 'user', content: prompt }
+              ]
+            })
+          });
+          const data = await dsResp.json();
+          const text = data?.choices?.[0]?.message?.content?.trim();
+          if (text) return text;
+          console.warn('⚠️  DeepSeek empty response, falling back');
+        }
+
+        if (process.env.OPENAI_API_KEY) {
+          const oaResp = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: 'You are a helpful web automation agent.' },
+                { role: 'user', content: prompt }
+              ]
+            })
+          });
+          const data = await oaResp.json();
+          const text = data?.choices?.[0]?.message?.content?.trim();
+          if (text) return text;
+          console.warn('⚠️  OpenAI empty response, falling back');
+        }
+      } catch (e) {
+        console.warn('⚠️  LLM call failed, using acknowledgement fallback:', e?.message);
+      }
+      return `Acknowledged: ${prompt}`; // last-resort fallback
     };
-    
-    const response = await agent.processMessage(task);
-    
+
+    const aiText = await callLLM(userText);
+
+    // Persist to in-process chat buckets used by history routes
+    try {
+      global.__chatBuckets = global.__chatBuckets || new Map();
+      const bucket = global.__chatBuckets.get(req.params.sessionId) || [];
+      bucket.push({ role: 'user', content: userText, timestamp: new Date().toISOString(), messageType: 'chat' });
+      bucket.push({ role: 'agent', content: aiText, timestamp: new Date().toISOString(), messageType: 'chat' });
+      global.__chatBuckets.set(req.params.sessionId, bucket);
+    } catch (e) {
+      console.warn('⚠️  Failed to persist chat in memory:', e?.message);
+    }
+
     res.json({
-      success: response.success,
+      success: true,
       sessionId: req.params.sessionId,
-      message: response.message,
-      actions: response.actions,
-      screenshot: response.screenshot,
-      confidence: response.confidence,
+      message: aiText,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
