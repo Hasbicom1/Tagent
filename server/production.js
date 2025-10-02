@@ -29,6 +29,13 @@ console.log('🚀 PRODUCTION: Environment:', process.env.NODE_ENV);
 console.log('🚀 PRODUCTION: Port:', process.env.PORT || '8080');
 console.log('🚀 PRODUCTION: Railway Environment:', process.env.RAILWAY_ENVIRONMENT);
 
+// AI provider configuration visibility (for debugging only)
+console.log('=== AI Configuration ===');
+console.log('Groq:', process.env.GROQ_API_KEY ? '✅ Configured' : '❌ Missing');
+console.log('DeepSeek:', process.env.DEEPSEEK_API_KEY ? '✅ Configured' : '⚠️  Not set');
+console.log('OpenAI:', process.env.OPENAI_API_KEY ? '✅ Configured' : '⚠️  Not set');
+console.log('=======================');
+
 // FAIL-FAST: Mandatory production environment variables
 if (process.env.NODE_ENV === 'production') {
   const REQUIRED_FOR_PRODUCTION = [
@@ -574,6 +581,7 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       try {
         // 1) Groq free tier
         if (process.env.GROQ_API_KEY) {
+          console.log('🤖 AI: Calling Groq (free tier)');
           const groqMessages = [
             { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
             ...(Array.isArray(history) ? history : []),
@@ -598,10 +606,12 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
             const data = await grResp.json();
             const text = data?.choices?.[0]?.message?.content?.trim();
             if (text) return text;
+            console.warn('⚠️  Groq returned empty content, will try next provider');
           }
         }
 
         if (process.env.DEEPSEEK_API_KEY) {
+          console.log('🤖 AI: Calling DeepSeek');
           const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
             method: 'POST',
             headers: {
@@ -619,10 +629,11 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
           const data = await dsResp.json();
           const text = data?.choices?.[0]?.message?.content?.trim();
           if (text) return text;
-          console.warn('⚠️  DeepSeek empty response, falling back');
+          console.warn('⚠️  DeepSeek empty response, will try OpenAI');
         }
 
         if (process.env.OPENAI_API_KEY) {
+          console.log('🤖 AI: Calling OpenAI');
           const oaResp = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -640,7 +651,7 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
           const data = await oaResp.json();
           const text = data?.choices?.[0]?.message?.content?.trim();
           if (text) return text;
-          console.warn('⚠️  OpenAI empty response, falling back');
+          console.warn('⚠️  OpenAI empty response, will fallback to acknowledgement');
         }
       } catch (e) {
         console.warn('⚠️  LLM call failed, using acknowledgement fallback:', e?.message);
@@ -648,7 +659,11 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       return `Acknowledged: ${prompt}`; // last-resort fallback
     };
 
-    const aiText = await callLLM(userText, historyMessages);
+    console.log('🤖 AI: Trying Groq...');
+    let aiText = await callLLM(userText, historyMessages);
+    if (aiText && aiText.startsWith('Acknowledged:') && process.env.DEEPSEEK_API_KEY) {
+      console.log('🤖 AI: Groq fallback triggered, trying DeepSeek...');
+    }
 
     // Persist to in-process chat buckets used by history routes
     try {
