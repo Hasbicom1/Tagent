@@ -7,6 +7,8 @@
 
 import http from 'http';
 import express from 'express';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -35,6 +37,23 @@ console.log('Groq:', process.env.GROQ_API_KEY ? '✅ Configured' : '❌ Missing'
 console.log('DeepSeek:', process.env.DEEPSEEK_API_KEY ? '✅ Configured' : '⚠️  Not set');
 console.log('OpenAI:', process.env.OPENAI_API_KEY ? '✅ Configured' : '⚠️  Not set');
 console.log('=======================');
+
+// Initialize optional Ollama client via Railway private networking
+let ollamaClient = null;
+try {
+  const { Ollama } = require('ollama');
+  ollamaClient = new Ollama({ host: 'http://ollama-ai.railway.internal:11434' });
+  (async () => {
+    try {
+      await ollamaClient.list();
+      console.log('✅ Ollama connected successfully (ollama-ai.railway.internal:11434)');
+    } catch (e) {
+      console.warn('⚠️  Ollama connection not available yet:', e?.message);
+    }
+  })();
+} catch (e) {
+  console.warn('⚠️  Ollama client not installed or not resolvable in this environment');
+}
 
 // FAIL-FAST: Mandatory production environment variables
 if (process.env.NODE_ENV === 'production') {
@@ -576,9 +595,29 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       content: m.content
     }));
 
-    // Helper to call Groq (free), DeepSeek, or OpenAI in that priority order
+    // Helper to call Ollama (self-hosted) → Groq (free) → DeepSeek → OpenAI in that priority order
     const callLLM = async (prompt, history) => {
       try {
+        if (ollamaClient) {
+          try {
+            console.log('🤖 AI: Calling Ollama (self-hosted)');
+            const messages = [
+              { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
+              ...(Array.isArray(history) ? history : []),
+              { role: 'user', content: prompt }
+            ];
+            const resp = await ollamaClient.chat({
+              model: process.env.OLLAMA_MODEL || 'llama3.2:3b',
+              messages,
+              options: { temperature: 0.7, num_predict: 500, top_p: 0.9 }
+            });
+            const text = resp?.message?.content?.trim();
+            if (text) return text;
+            console.warn('⚠️  Ollama empty response, will try next provider');
+          } catch (e) {
+            console.warn('⚠️  Ollama call failed:', e?.message);
+          }
+        }
         // 1) Groq free tier
         if (process.env.GROQ_API_KEY) {
           console.log('🤖 AI: Calling Groq (free tier)');
@@ -675,7 +714,7 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
     } catch (e) {
       console.warn('⚠️  Failed to persist chat in memory:', e?.message);
     }
-
+    
     res.json({
       success: true,
       sessionId: req.params.sessionId,
