@@ -836,6 +836,69 @@ app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
   }
 });
 
+// ===== Chat history endpoints required by frontend =====
+console.log('🛠️ PRODUCTION: Registering chat history routes');
+
+app.get('/api/session/:agentId/messages', async (req, res) => {
+  try {
+    const agentId = req.params.agentId;
+    const { getUserSession } = await import('./database.js');
+    const session = await getUserSession(agentId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (new Date() > new Date(session.expires_at)) {
+      const { updateSessionStatus } = await import('./database.js');
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    if (!global.__chatBuckets.has(agentId)) global.__chatBuckets.set(agentId, []);
+    res.json(global.__chatBuckets.get(agentId));
+  } catch (e) {
+    console.error('❌ PRODUCTION: messages endpoint failed:', e);
+    res.status(500).json({ error: 'NEURAL_ARCHIVE_ACCESS_DENIED: ' + (e?.message || 'unknown') });
+  }
+});
+
+app.get('/api/session/:agentId/chat-history', async (req, res) => {
+  try {
+    const agentId = req.params.agentId;
+    const { getUserSession } = await import('./database.js');
+    const session = await getUserSession(agentId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (new Date() > new Date(session.expires_at)) {
+      const { updateSessionStatus } = await import('./database.js');
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    const all = (global.__chatBuckets.get(agentId) || []).filter(m => m.messageType !== 'command');
+    res.json(all);
+  } catch (e) {
+    console.error('❌ PRODUCTION: chat-history endpoint failed:', e);
+    res.status(500).json({ error: 'CHAT_LOG_RETRIEVAL_FAILED: ' + (e?.message || 'unknown') });
+  }
+});
+
+app.get('/api/session/:agentId/command-history', async (req, res) => {
+  try {
+    const agentId = req.params.agentId;
+    const { getUserSession } = await import('./database.js');
+    const session = await getUserSession(agentId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (new Date() > new Date(session.expires_at)) {
+      const { updateSessionStatus } = await import('./database.js');
+      await updateSessionStatus(agentId, 'expired');
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    const commands = (global.__chatBuckets.get(agentId) || []).filter(m => m.messageType === 'command');
+    res.json(commands);
+  } catch (e) {
+    console.error('❌ PRODUCTION: command-history endpoint failed:', e);
+    res.status(500).json({ error: 'COMMAND_LOG_RETRIEVAL_FAILED: ' + (e?.message || 'unknown') });
+  }
+});
+
 // Issue per-session JWT for live view (WebSocket/VNC auth)
 app.post('/api/automation/:sessionId/live-view/token', async (req, res) => {
   console.log('🔐 PRODUCTION: Live view token requested for:', req.params.sessionId);
