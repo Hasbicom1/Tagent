@@ -1,9 +1,9 @@
 FROM ollama/ollama:latest
 
-# Download model during build (not runtime)
+# Download tinyllama model during build for faster cold starts
 RUN ollama serve & \
     sleep 10 && \
-    ollama pull llama3.2:3b && \
+    ollama pull tinyllama:latest && \
     pkill ollama
 
 EXPOSE 11434

@@ -67,6 +67,31 @@
           }
         }
       }
+    },
+    {
+      "name": "ollama-ai",
+      "source": ".",
+      "build": {
+        "builder": "docker",
+        "dockerfilePath": "ollama-service/Dockerfile",
+        "context": "."
+      },
+      "deploy": {
+        "startCommand": "",
+        "healthcheckPath": "/api/tags",
+        "healthcheckTimeout": 600,
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 3
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "PORT": "11434",
+            "OLLAMA_INTERNAL_URL": "http://ollama-ai.railway.internal:11434",
+            "OLLAMA_MODEL": "tinyllama"
+          }
+        }
+      }
     }
   ],
   "plugins": [

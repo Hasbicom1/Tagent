@@ -46,6 +46,7 @@ console.log('🤖 AI CONFIGURATION');
 console.log('Using: LocalAI (OpenAI-compatible)');
 console.log('Endpoint:', process.env.LOCALAI_INTERNAL_URL || 'http://localai.railway.internal:11434');
 console.log('Model map default: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf');
+console.log('Primary chat provider: Ollama (fallback to LocalAI)');
 console.log('=================================');
 
 // Initialize optional Ollama client via Railway private networking
@@ -605,21 +606,45 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       content: m.content
     }));
 
-    // Use LocalAI adapter (OpenAI-compatible) for free on-Railway inference
-    const start = Date.now();
-    console.log('🤖 AI: Calling LocalAI /chat/completions');
-    const completion = await ai.createChatCompletion({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
-        ...historyMessages,
-        { role: 'user', content: userText }
-      ],
-      temperature: 0.7,
-      max_tokens: 500
-    });
-    const aiText = completion?.choices?.[0]?.message?.content?.trim() || `Acknowledged: ${userText}`;
-    console.log('🤖 AI: LocalAI responded in', (Date.now() - start), 'ms');
+    // Prefer Ollama tinyllama; fallback to LocalAI if unreachable
+    let aiText = null;
+    const systemPrompt = 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.';
+    const ollamaMessages = [
+      { role: 'system', content: systemPrompt },
+      ...historyMessages,
+      { role: 'user', content: userText }
+    ];
+    if (ollamaClient) {
+      try {
+        const t0 = Date.now();
+        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama', ')');
+        const resp = await ollamaClient.chat({
+          model: process.env.OLLAMA_MODEL || 'tinyllama',
+          messages: ollamaMessages,
+          options: { temperature: 0.7, num_predict: 400, top_p: 0.9 }
+        });
+        aiText = resp?.message?.content?.trim() || null;
+        console.log('🤖 AI: Ollama responded in', (Date.now() - t0), 'ms');
+      } catch (e) {
+        console.warn('⚠️  Ollama call failed, will fallback to LocalAI:', e?.message);
+      }
+    }
+    if (!aiText) {
+      const start = Date.now();
+      console.log('🤖 AI: Fallback → LocalAI /chat/completions');
+      const completion = await ai.createChatCompletion({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...historyMessages,
+          { role: 'user', content: userText }
+        ],
+        temperature: 0.7,
+        max_tokens: 500
+      });
+      aiText = completion?.choices?.[0]?.message?.content?.trim() || `Acknowledged: ${userText}`;
+      console.log('🤖 AI: LocalAI responded in', (Date.now() - start), 'ms');
+    }
 
     // Persist to in-process chat buckets used by history routes
     try {
