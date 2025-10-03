@@ -17,6 +17,7 @@ import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables, getDatabase } from './database.js';
+import FreeAIService from '../services/FreeAIService.js';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -37,6 +38,15 @@ console.log('Groq:', process.env.GROQ_API_KEY ? '✅ Configured' : '❌ Missing'
 console.log('DeepSeek:', process.env.DEEPSEEK_API_KEY ? '✅ Configured' : '⚠️  Not set');
 console.log('OpenAI:', process.env.OPENAI_API_KEY ? '✅ Configured' : '⚠️  Not set');
 console.log('=======================');
+
+// Initialize LocalAI (OpenAI-compatible) adapter
+const ai = new FreeAIService();
+console.log('=================================');
+console.log('🤖 AI CONFIGURATION');
+console.log('Using: LocalAI (OpenAI-compatible)');
+console.log('Endpoint:', process.env.LOCALAI_INTERNAL_URL || 'http://localai.railway.internal:11434');
+console.log('Model map default: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf');
+console.log('=================================');
 
 // Initialize optional Ollama client via Railway private networking
 let ollamaClient = null;
@@ -595,114 +605,21 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
       content: m.content
     }));
 
-    // Helper to call Ollama (self-hosted) → Groq (free) → DeepSeek → OpenAI in that priority order
-    const callLLM = async (prompt, history) => {
-      try {
-        if (ollamaClient) {
-          try {
-            console.log('🤖 AI: Calling Ollama (self-hosted)');
-            const messages = [
-              { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
-              ...(Array.isArray(history) ? history : []),
-              { role: 'user', content: prompt }
-            ];
-            const resp = await ollamaClient.chat({
-              model: process.env.OLLAMA_MODEL || 'llama3.2:3b',
-              messages,
-              options: { temperature: 0.7, num_predict: 500, top_p: 0.9 }
-            });
-            const text = resp?.message?.content?.trim();
-            if (text) return text;
-            console.warn('⚠️  Ollama empty response, will try next provider');
-          } catch (e) {
-            console.warn('⚠️  Ollama call failed:', e?.message);
-          }
-        }
-        // 1) Groq free tier
-        if (process.env.GROQ_API_KEY) {
-          console.log('🤖 AI: Calling Groq (free tier)');
-          const groqMessages = [
-            { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
-            ...(Array.isArray(history) ? history : []),
-            { role: 'user', content: prompt }
-          ];
-          const grResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-            },
-            body: JSON.stringify({
-              model: process.env.GROQ_MODEL || 'llama-3.1-70b-versatile',
-              messages: groqMessages,
-              temperature: 0.7,
-              max_tokens: 500
-            })
-          });
-          if (!grResp.ok) {
-            console.warn('⚠️  Groq API error:', grResp.status, await grResp.text());
-          } else {
-            const data = await grResp.json();
-            const text = data?.choices?.[0]?.message?.content?.trim();
-            if (text) return text;
-            console.warn('⚠️  Groq returned empty content, will try next provider');
-          }
-        }
-
-        if (process.env.DEEPSEEK_API_KEY) {
-          console.log('🤖 AI: Calling DeepSeek');
-          const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-            },
-            body: JSON.stringify({
-              model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-              messages: [
-                { role: 'system', content: 'You are a helpful web automation agent.' },
-                { role: 'user', content: prompt }
-              ]
-            })
-          });
-          const data = await dsResp.json();
-          const text = data?.choices?.[0]?.message?.content?.trim();
-          if (text) return text;
-          console.warn('⚠️  DeepSeek empty response, will try OpenAI');
-        }
-
-        if (process.env.OPENAI_API_KEY) {
-          console.log('🤖 AI: Calling OpenAI');
-          const oaResp = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-            },
-            body: JSON.stringify({
-              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: 'You are a helpful web automation agent.' },
-                { role: 'user', content: prompt }
-              ]
-            })
-          });
-          const data = await oaResp.json();
-          const text = data?.choices?.[0]?.message?.content?.trim();
-          if (text) return text;
-          console.warn('⚠️  OpenAI empty response, will fallback to acknowledgement');
-        }
-      } catch (e) {
-        console.warn('⚠️  LLM call failed, using acknowledgement fallback:', e?.message);
-      }
-      return `Acknowledged: ${prompt}`; // last-resort fallback
-    };
-
-    console.log('🤖 AI: Trying Groq...');
-    let aiText = await callLLM(userText, historyMessages);
-    if (aiText && aiText.startsWith('Acknowledged:') && process.env.DEEPSEEK_API_KEY) {
-      console.log('🤖 AI: Groq fallback triggered, trying DeepSeek...');
-    }
+    // Use LocalAI adapter (OpenAI-compatible) for free on-Railway inference
+    const start = Date.now();
+    console.log('🤖 AI: Calling LocalAI /chat/completions');
+    const completion = await ai.createChatCompletion({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.' },
+        ...historyMessages,
+        { role: 'user', content: userText }
+      ],
+      temperature: 0.7,
+      max_tokens: 500
+    });
+    const aiText = completion?.choices?.[0]?.message?.content?.trim() || `Acknowledged: ${userText}`;
+    console.log('🤖 AI: LocalAI responded in', (Date.now() - start), 'ms');
 
     // Persist to in-process chat buckets used by history routes
     try {
