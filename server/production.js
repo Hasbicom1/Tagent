@@ -53,53 +53,17 @@ console.log('=================================');
 let ollamaClient = null;
 try {
   const { Ollama } = require('ollama');
-  const preferEnv = (process.env.OLLAMA_INTERNAL_URL || process.env.OLLAMA_BASE_URL || '').trim();
-  const candidates = Array.from(new Set([
-    preferEnv,
-    'http://localai.railway.internal:11434',
-    'http://ollama-ai.railway.internal:11434',
-    'http://open-webui.railway.internal:11434'
-  ].filter(Boolean)));
-
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const checkHost = async (host) => {
-    try {
-      const res = await fetch(host + '/api/version', { method: 'GET', headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(3000) });
-      if (res.ok) return true;
-    } catch (_) {}
-    return false;
-  };
-
+  ollamaClient = new Ollama({ host: 'http://ollama-ai.railway.internal:11434' });
   (async () => {
     try {
-      console.log('🛰️  OLLAMA: Probing candidates (via /api/version):', candidates);
-      let chosen = null;
-      const maxAttempts = 6;
-      for (let attempt = 1; attempt <= maxAttempts && !chosen; attempt++) {
-        for (const host of candidates) {
-          const ok = await checkHost(host);
-          if (ok) { chosen = host; break; }
-        }
-        if (!chosen) {
-          console.warn(`⚠️  OLLAMA: Attempt ${attempt}/${maxAttempts} failed; retrying in 2s...`);
-          await sleep(2000);
-        }
-      }
-      if (chosen) {
-        ollamaClient = new Ollama({ host: chosen });
-        console.log('✅ OLLAMA: Connected at', chosen);
-      } else {
-        console.warn('⚠️  OLLAMA: Unable to reach any candidate host. Will use LocalAI fallback.');
-      }
-    } catch (error) {
-      console.error('❌ OLLAMA: Probe failed with error:', error?.message || error);
-      console.warn('⚠️  OLLAMA: Will use LocalAI fallback for all chat requests');
+      await ollamaClient.list();
+      console.log('✅ Ollama connected successfully (ollama-ai.railway.internal:11434)');
+    } catch (e) {
+      console.warn('⚠️  Ollama connection not available yet:', e?.message);
     }
-  })().catch(err => {
-    console.error('❌ OLLAMA: Async probe threw unhandled error:', err);
-  });
+  })();
 } catch (e) {
-  console.warn('⚠️  OLLAMA: Client not installed or not resolvable in this environment');
+  console.warn('⚠️  Ollama client not installed or not resolvable in this environment');
 }
 
 // FAIL-FAST: Mandatory production environment variables
@@ -1192,27 +1156,6 @@ process.on('SIGINT', () => {
     console.log('✅ PRODUCTION: Server closed');
     process.exit(0);
   });
-});
-
-// STEP 16.5: Critical production error handlers (prevents silent crashes)
-process.on('uncaughtException', (error) => {
-  console.error('🚨 PRODUCTION: Uncaught Exception:', error);
-  console.error('Stack:', error.stack);
-  console.error('Process will attempt to continue, but may be unstable');
-  // Don't exit immediately; let Railway health check detect if we're truly broken
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('🚨 PRODUCTION: Unhandled Promise Rejection at:', promise);
-  console.error('Reason:', reason);
-  // Log but don't crash - some promises may fail gracefully
-});
-
-// STEP 16.6: Add request timeout safety (prevents hanging requests from keeping workers busy)
-server.setTimeout(120000); // 2 minute timeout for long-running requests
-server.on('timeout', (socket) => {
-  console.warn('⚠️  PRODUCTION: Request timeout - forcefully closing socket');
-  socket.destroy();
 });
 
 console.log('🚀 PRODUCTION: Application setup complete');
