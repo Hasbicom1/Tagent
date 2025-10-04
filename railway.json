@@ -57,7 +57,7 @@
       },
       "deploy": {
         "startCommand": "ollama serve",
-        "healthcheckPath": "/api/version",
+        "healthcheckPath": "/",
         "healthcheckTimeout": 600,
         "restartPolicyType": "ON_FAILURE",
         "restartPolicyMaxRetries": 3
@@ -65,7 +65,7 @@
       "environments": {
         "production": {
           "variables": {
-            "PORT": "11434",
+            "PORT": "8080",
             "OLLAMA_HOST": "0.0.0.0:11434",
             "OLLAMA_ORIGINS": "*",
             "OLLAMA_INTERNAL_URL": "http://localai.railway.internal:11434",
