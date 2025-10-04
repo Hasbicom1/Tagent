@@ -66,6 +66,8 @@
         "production": {
           "variables": {
             "PORT": "11434",
+            "OLLAMA_HOST": "0.0.0.0:11434",
+            "OLLAMA_ORIGINS": "*",
             "OLLAMA_INTERNAL_URL": "http://localai.railway.internal:11434",
             "OLLAMA_MODEL": "tinyllama"
           }
