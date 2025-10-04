@@ -57,7 +57,7 @@
       },
       "deploy": {
         "startCommand": "ollama serve",
-        "healthcheckPath": "/api/tags",
+        "healthcheckPath": "/api/version",
         "healthcheckTimeout": 600,
         "restartPolicyType": "ON_FAILURE",
         "restartPolicyMaxRetries": 3
