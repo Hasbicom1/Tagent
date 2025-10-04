@@ -1,0 +1,12 @@
+[phases.setup]
+aptPkgs = ['curl']
+
+[phases.install]
+cmds = ['npm ci --production']
+
+[phases.build]
+cmds = ['npm run build']
+
+[start]
+cmd = 'npm run start'
+
