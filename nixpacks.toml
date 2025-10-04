@@ -1,5 +1,5 @@
 [phases.setup]
-aptPkgs = ['curl']
+apt_packages = ["curl"]
 
 [phases.install]
 cmds = ['npm ci --production']
