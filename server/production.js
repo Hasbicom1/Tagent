@@ -71,26 +71,33 @@ try {
   };
 
   (async () => {
-    console.log('🛰️  OLLAMA: Probing candidates (via /api/version):', candidates);
-    let chosen = null;
-    const maxAttempts = 6;
-    for (let attempt = 1; attempt <= maxAttempts && !chosen; attempt++) {
-      for (const host of candidates) {
-        const ok = await checkHost(host);
-        if (ok) { chosen = host; break; }
+    try {
+      console.log('🛰️  OLLAMA: Probing candidates (via /api/version):', candidates);
+      let chosen = null;
+      const maxAttempts = 6;
+      for (let attempt = 1; attempt <= maxAttempts && !chosen; attempt++) {
+        for (const host of candidates) {
+          const ok = await checkHost(host);
+          if (ok) { chosen = host; break; }
+        }
+        if (!chosen) {
+          console.warn(`⚠️  OLLAMA: Attempt ${attempt}/${maxAttempts} failed; retrying in 2s...`);
+          await sleep(2000);
+        }
       }
-      if (!chosen) {
-        console.warn(`⚠️  OLLAMA: Attempt ${attempt}/${maxAttempts} failed; retrying in 2s...`);
-        await sleep(2000);
+      if (chosen) {
+        ollamaClient = new Ollama({ host: chosen });
+        console.log('✅ OLLAMA: Connected at', chosen);
+      } else {
+        console.warn('⚠️  OLLAMA: Unable to reach any candidate host. Will use LocalAI fallback.');
       }
+    } catch (error) {
+      console.error('❌ OLLAMA: Probe failed with error:', error?.message || error);
+      console.warn('⚠️  OLLAMA: Will use LocalAI fallback for all chat requests');
     }
-    if (chosen) {
-      ollamaClient = new Ollama({ host: chosen });
-      console.log('✅ OLLAMA: Connected at', chosen);
-    } else {
-      console.warn('⚠️  OLLAMA: Unable to reach any candidate host. Will use LocalAI fallback.');
-    }
-  })();
+  })().catch(err => {
+    console.error('❌ OLLAMA: Async probe threw unhandled error:', err);
+  });
 } catch (e) {
   console.warn('⚠️  OLLAMA: Client not installed or not resolvable in this environment');
 }
@@ -1185,6 +1192,27 @@ process.on('SIGINT', () => {
     console.log('✅ PRODUCTION: Server closed');
     process.exit(0);
   });
+});
+
+// STEP 16.5: Critical production error handlers (prevents silent crashes)
+process.on('uncaughtException', (error) => {
+  console.error('🚨 PRODUCTION: Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  console.error('Process will attempt to continue, but may be unstable');
+  // Don't exit immediately; let Railway health check detect if we're truly broken
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 PRODUCTION: Unhandled Promise Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Log but don't crash - some promises may fail gracefully
+});
+
+// STEP 16.6: Add request timeout safety (prevents hanging requests from keeping workers busy)
+server.setTimeout(120000); // 2 minute timeout for long-running requests
+server.on('timeout', (socket) => {
+  console.warn('⚠️  PRODUCTION: Request timeout - forcefully closing socket');
+  socket.destroy();
 });
 
 console.log('🚀 PRODUCTION: Application setup complete');
