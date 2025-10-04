@@ -53,18 +53,42 @@ console.log('=================================');
 let ollamaClient = null;
 try {
   const { Ollama } = require('ollama');
-  const defaultOllamaUrl = 'http://localai.railway.internal:11434';
-  const envOllamaUrl = process.env.OLLAMA_INTERNAL_URL || process.env.OLLAMA_BASE_URL;
-  const ollamaHost = envOllamaUrl || defaultOllamaUrl;
-  console.log('🛰️  OLLAMA: Host configured as ->', ollamaHost);
-  ollamaClient = new Ollama({ host: ollamaHost });
-  (async () => {
+  const preferEnv = (process.env.OLLAMA_INTERNAL_URL || process.env.OLLAMA_BASE_URL || '').trim();
+  const candidates = Array.from(new Set([
+    preferEnv,
+    'http://localai.railway.internal:11434',
+    'http://ollama-ai.railway.internal:11434',
+    'http://open-webui.railway.internal:11434'
+  ].filter(Boolean)));
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const checkHost = async (host) => {
     try {
-      console.log('🛰️  OLLAMA: Probing connection with /api/tags ...');
-      await ollamaClient.list();
-      console.log('✅ OLLAMA: Connected successfully at', ollamaHost);
-    } catch (e) {
-      console.warn('⚠️  OLLAMA: Initial probe failed:', e?.message);
+      const res = await fetch(host + '/api/version', { method: 'GET', headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(3000) });
+      if (res.ok) return true;
+    } catch (_) {}
+    return false;
+  };
+
+  (async () => {
+    console.log('🛰️  OLLAMA: Probing candidates (via /api/version):', candidates);
+    let chosen = null;
+    const maxAttempts = 6;
+    for (let attempt = 1; attempt <= maxAttempts && !chosen; attempt++) {
+      for (const host of candidates) {
+        const ok = await checkHost(host);
+        if (ok) { chosen = host; break; }
+      }
+      if (!chosen) {
+        console.warn(`⚠️  OLLAMA: Attempt ${attempt}/${maxAttempts} failed; retrying in 2s...`);
+        await sleep(2000);
+      }
+    }
+    if (chosen) {
+      ollamaClient = new Ollama({ host: chosen });
+      console.log('✅ OLLAMA: Connected at', chosen);
+    } else {
+      console.warn('⚠️  OLLAMA: Unable to reach any candidate host. Will use LocalAI fallback.');
     }
   })();
 } catch (e) {
