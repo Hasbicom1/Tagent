@@ -53,17 +53,22 @@ console.log('=================================');
 let ollamaClient = null;
 try {
   const { Ollama } = require('ollama');
-  ollamaClient = new Ollama({ host: 'http://ollama-ai.railway.internal:11434' });
+  const defaultOllamaUrl = 'http://localai.railway.internal:11434';
+  const envOllamaUrl = process.env.OLLAMA_INTERNAL_URL || process.env.OLLAMA_BASE_URL;
+  const ollamaHost = envOllamaUrl || defaultOllamaUrl;
+  console.log('🛰️  OLLAMA: Host configured as ->', ollamaHost);
+  ollamaClient = new Ollama({ host: ollamaHost });
   (async () => {
     try {
+      console.log('🛰️  OLLAMA: Probing connection with /api/tags ...');
       await ollamaClient.list();
-      console.log('✅ Ollama connected successfully (ollama-ai.railway.internal:11434)');
+      console.log('✅ OLLAMA: Connected successfully at', ollamaHost);
     } catch (e) {
-      console.warn('⚠️  Ollama connection not available yet:', e?.message);
+      console.warn('⚠️  OLLAMA: Initial probe failed:', e?.message);
     }
   })();
 } catch (e) {
-  console.warn('⚠️  Ollama client not installed or not resolvable in this environment');
+  console.warn('⚠️  OLLAMA: Client not installed or not resolvable in this environment');
 }
 
 // FAIL-FAST: Mandatory production environment variables
