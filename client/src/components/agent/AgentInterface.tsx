@@ -225,13 +225,22 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         throw err;
       }
     },
-    onSuccess: () => {
-      console.log('✅ onSuccess called');
-      // Invalidate all history caches to prevent stale data
+    onSuccess: (data) => {
+      console.log('✅ onSuccess called with data:', data);
+      
+      // Immediately add the messages to the UI by refetching
       refetchMessages();
       queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
       queryClient.invalidateQueries({ queryKey: ['command-history', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['messages', agentId] });
+      
       setCurrentMessage('');
+      
+      // Force a refetch after a short delay to ensure backend has stored the messages
+      setTimeout(() => {
+        console.log('🔄 Force refetching messages after 500ms');
+        refetchMessages();
+      }, 500);
     },
     onError: (error: any) => {
       console.error('❌ onError called:', error);
