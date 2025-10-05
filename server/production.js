@@ -560,10 +560,31 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       aiText = `I understand you said: "${userText}". I'm here to help, but I'm having trouble connecting to my AI service right now. Please try again in a moment.`;
     }
 
-    // Store both user and AI messages in chat bucket
+    // Store both user and AI messages in chat bucket with ALL required frontend fields
+    const timestamp = new Date().toISOString();
     const newHistory = [
-      { role: 'user', content: userText, timestamp: new Date().toISOString(), messageType: 'chat' },
-      { role: 'agent', content: aiText, timestamp: new Date().toISOString(), messageType: 'chat' }
+      { 
+        id: `msg_${Date.now()}_user`,
+        sessionId: req.params.sessionId,
+        role: 'user', 
+        content: userText, 
+        timestamp: timestamp, 
+        messageType: 'chat',
+        inputMethod: 'typing',
+        hasExecutableTask: null,
+        taskDescription: null
+      },
+      { 
+        id: `msg_${Date.now()}_agent`,
+        sessionId: req.params.sessionId,
+        role: 'agent', 
+        content: aiText, 
+        timestamp: timestamp, 
+        messageType: 'chat',
+        inputMethod: 'typing',
+        hasExecutableTask: null,
+        taskDescription: null
+      }
     ];
     if (!global.__chatBuckets.has(req.params.sessionId)) {
       global.__chatBuckets.set(req.params.sessionId, []);
