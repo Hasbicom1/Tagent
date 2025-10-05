@@ -198,14 +198,21 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
+      console.log('🚀 mutationFn called with content:', content);
+      console.log('🚀 Sending POST to:', `/api/session/${agentId}/message`);
       const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
+      console.log('🚀 Response status:', response.status);
       if (!response.ok) {
         const error = await response.json();
+        console.error('❌ Response error:', error);
         throw new Error(error.error || 'Neural link transmission failed - message not delivered');
       }
-      return response.json();
+      const data = await response.json();
+      console.log('✅ Response data:', data);
+      return data;
     },
     onSuccess: () => {
+      console.log('✅ onSuccess called');
       // Invalidate all history caches to prevent stale data
       refetchMessages();
       queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
@@ -213,6 +220,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
       setCurrentMessage('');
     },
     onError: (error: any) => {
+      console.error('❌ onError called:', error);
       toast({
         title: "NEURAL_TRANSMISSION_ERROR",
         description: error.message,
@@ -408,10 +416,18 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   };
 
   const handleSendMessage = () => {
-    if (!currentMessage.trim() || sendMessageMutation.isPending) return;
+    console.log('🔵 handleSendMessage called, currentMessage:', currentMessage);
+    console.log('🔵 sendMessageMutation.isPending:', sendMessageMutation.isPending);
+    
+    if (!currentMessage.trim() || sendMessageMutation.isPending) {
+      console.log('⚠️ Message blocked: empty or pending');
+      return;
+    }
     
     // Normalize input to convert slash commands to natural language
     const normalizedMessage = normalizeInput(currentMessage);
+    console.log('🔵 Normalized message:', normalizedMessage);
+    console.log('🔵 Calling sendMessageMutation.mutate()');
     sendMessageMutation.mutate(normalizedMessage);
   };
 
