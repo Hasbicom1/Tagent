@@ -524,18 +524,53 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       content: m.content
     }));
 
-    // Prefer Ollama tinyllama; fallback to LocalAI if unreachable
+    // Prefer Groq (fast, free); fallback to Ollama if Groq unavailable
     let aiText = null;
     const systemPrompt = 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.';
-    const ollamaMessages = [
-      { role: 'system', content: systemPrompt },
-      ...historyMessages,
-      { role: 'user', content: userText }
-    ];
-    if (ollamaClient) {
+    
+    // Try Groq first (instant, free, 14k requests/day)
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const t0 = Date.now();
+        console.log('🤖 AI: Calling Groq (llama-3.1-70b-versatile)');
+        const groqMessages = [
+          { role: 'system', content: systemPrompt },
+          ...historyMessages,
+          { role: 'user', content: userText }
+        ];
+        const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-70b-versatile',
+            messages: groqMessages,
+            temperature: 0.7,
+            max_tokens: 400
+          })
+        });
+        if (groqResp.ok) {
+          const groqData = await groqResp.json();
+          aiText = groqData?.choices?.[0]?.message?.content?.trim() || null;
+          console.log('🤖 AI: Groq responded in', (Date.now() - t0), 'ms');
+        }
+      } catch (e) {
+        console.warn('⚠️  Groq call failed, will try Ollama:', e?.message);
+      }
+    }
+    
+    // Fallback to Ollama if Groq didn't respond
+    if (!aiText && ollamaClient) {
       try {
         const t0 = Date.now();
         console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama:latest', ')');
+        const ollamaMessages = [
+          { role: 'system', content: systemPrompt },
+          ...historyMessages,
+          { role: 'user', content: userText }
+        ];
         const resp = await ollamaClient.chat({
           model: process.env.OLLAMA_MODEL || 'tinyllama:latest',
           messages: ollamaMessages,
@@ -544,13 +579,13 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
         aiText = resp?.message?.content?.trim() || null;
         console.log('🤖 AI: Ollama responded in', (Date.now() - t0), 'ms');
       } catch (e) {
-        console.warn('⚠️  Ollama call failed, will fallback to LocalAI:', e?.message);
+        console.warn('⚠️  Ollama call failed:', e?.message);
       }
     }
 
-    // If Ollama didn't respond, return a fallback message
+    // Last resort fallback message
     if (!aiText) {
-      console.warn('⚠️  Ollama unavailable, using fallback response');
+      console.warn('⚠️  All AI services unavailable, using fallback response');
       aiText = "I'm currently experiencing connectivity issues. Please try again in a moment.";
     }
 
