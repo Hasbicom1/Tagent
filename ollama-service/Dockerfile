@@ -8,6 +8,7 @@ RUN ollama serve & \
 
 EXPOSE 11434
 
+# Start Ollama server
 CMD ["ollama", "serve"]
 
 
