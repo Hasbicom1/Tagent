@@ -7,12 +7,13 @@ import { RealAIEngine } from '../ai/real-ai-engine.js';
  * Stream actual browser automation to frontend
  */
 export class RealTimeAutomationSocket {
-  constructor(server) {
+  constructor(server, options = {}) {
     this.io = new Server(server, {
       cors: {
         origin: "*",
         methods: ["GET", "POST"]
-      }
+      },
+      ...options
     });
     
     this.browserEngine = new RealBrowserEngine();

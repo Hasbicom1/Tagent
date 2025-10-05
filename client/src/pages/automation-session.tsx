@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { realtime } from '@/lib/socket';
 import { useRoute } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,44 +47,30 @@ export default function AutomationSessionPage() {
   const [isConnected, setIsConnected] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  // Socket.IO is used for realtime events; VNC remains raw WS elsewhere
 
-  // Initialize WebSocket connection
+  // Initialize Socket.IO connection for automation events
   useEffect(() => {
     if (!sessionId) return;
+    realtime.connect('/ws/socket.io/', { sessionId });
+    realtime.join(`session:${sessionId}`);
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log('🔌 WebSocket connected');
+    const onStatus = (payload: any) => {
       setIsConnected(true);
     };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        handleWebSocketMessage(data);
-      } catch (error) {
-        console.error('❌ WebSocket message error:', error);
-      }
+    const onUpdate = (payload: any) => {
+      handleWebSocketMessage(payload);
     };
 
-    ws.onclose = () => {
-      console.log('🔌 WebSocket disconnected');
-      setIsConnected(false);
-    };
-
-    ws.onerror = (error) => {
-      console.error('❌ WebSocket error:', error);
-      setIsConnected(false);
-    };
+    realtime.on('automationStatus', onStatus);
+    realtime.on('automationUpdate', onUpdate);
 
     return () => {
-      ws.close();
+      realtime.off('automationStatus', onStatus);
+      realtime.off('automationUpdate', onUpdate);
+      realtime.leave(`session:${sessionId}`);
+      realtime.disconnect();
+      setIsConnected(false);
     };
   }, [sessionId]);
 

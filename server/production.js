@@ -6,6 +6,8 @@
  */
 
 import http from 'http';
+// Socket.IO realtime automation (events only; not used for VNC streaming)
+import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -1152,6 +1154,17 @@ app.get('*', (req, res) => {
 
 // STEP 13: Create HTTP server
 const server = http.createServer(app);
+
+// Initialize Socket.IO for realtime automation events (not VNC)
+try {
+  const ioOptions = { path: '/ws/socket.io/' };
+  const realtime = new RealTimeAutomationSocket(server, ioOptions);
+  // Optional: basic join/leave handlers via simple events
+  // These are implemented inside RealTimeAutomationSocket using this.io
+  console.log('🔗 Realtime (Socket.IO) initialized at path /ws/socket.io/');
+} catch (e) {
+  console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
+}
 
 // STEP 14: Server listening (proven pattern)
 server.listen(port, host, () => {
