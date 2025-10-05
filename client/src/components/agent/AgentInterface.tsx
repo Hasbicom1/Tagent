@@ -66,6 +66,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [historyView, setHistoryView] = useState<'all' | 'chat' | 'commands'>('all');
   const [precisionMode, setPrecisionMode] = useState(true); // PRECISION ENHANCEMENT: Enable by default
   const { toast } = useToast();
+  const [isSending, setIsSending] = useState(false);
 
   // FIXED: Fetch session info with proper expiry validation
   const { data: sessionInfo, error: sessionError } = useQuery({
@@ -266,19 +267,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         console.warn('⚠️ Failed to optimistically update cache:', (e as any)?.message);
       }
       
-      // Invalidate and refetch to sync with server truth
+      // Single refetch to sync with server
       refetchMessages();
-      queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['command-history', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['messages', agentId] });
       
       setCurrentMessage('');
-      
-      // Force a refetch after a short delay to ensure backend has stored the messages
-      setTimeout(() => {
-        console.log('🔄 Force refetching messages after 500ms');
-        refetchMessages();
-      }, 500);
     },
     onError: (error: any) => {
       console.error('❌ onError called:', error);
@@ -479,26 +471,20 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     return input;
   };
 
-  const handleSendMessage = () => {
-    console.log('🔵 handleSendMessage called, currentMessage:', currentMessage);
-    console.log('🔵 sendMessageMutation.isPending:', sendMessageMutation.isPending);
-    
-    if (!currentMessage.trim()) {
-      console.log('⚠️ Message blocked: empty');
-      return;
-    }
-    
-    // If mutation is stuck pending, reset it
-    if (sendMessageMutation.isPending) {
-      console.log('⚠️ Mutation stuck in pending state, resetting...');
-      sendMessageMutation.reset();
-    }
-    
-    // Normalize input to convert slash commands to natural language
+  const handleSendMessage = async () => {
+    if (!currentMessage.trim()) return;
+    if (isSending || sendMessageMutation.isPending) return;
+
     const normalizedMessage = normalizeInput(currentMessage);
-    console.log('🔵 Normalized message:', normalizedMessage);
-    console.log('🔵 Calling sendMessageMutation.mutate()');
-    sendMessageMutation.mutate(normalizedMessage);
+    setIsSending(true);
+    try {
+      await sendMessageMutation.mutateAsync(normalizedMessage);
+    } catch (err) {
+      // handled by onError
+    } finally {
+      // short cooldown to prevent accidental double-submits
+      setTimeout(() => setIsSending(false), 800);
+    }
   };
 
   const handleExecuteTask = (taskDescription: string) => {
@@ -727,11 +713,11 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                 />
                 <Button 
                   onClick={handleSendMessage}
-                  disabled={!currentMessage.trim() || sendMessageMutation.isPending}
+                  disabled={!currentMessage.trim() || isSending || sendMessageMutation.isPending}
                   data-testid="button-send-command"
                   className="font-mono"
                 >
-                  {sendMessageMutation.isPending ? (
+                  {sendMessageMutation.isPending || isSending ? (
                     <Activity className="w-4 h-4 animate-spin" />
                   ) : (
                     <Send className="w-4 h-4" />
