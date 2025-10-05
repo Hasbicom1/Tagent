@@ -3,7 +3,7 @@
 
 export default class FreeAIService {
   constructor() {
-    const internal = process.env.LOCALAI_INTERNAL_URL || 'http://localai.railway.internal:11434';
+    const internal = process.env.OLLAMA_INTERNAL_URL || 'http://ollama-ai.railway.internal:11434';
     // Normalize base to include /v1
     this.baseUrl = internal.endsWith('/v1') ? internal : `${internal}/v1`;
     // Default model mapping

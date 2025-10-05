@@ -43,23 +43,26 @@ console.log('=======================');
 
 // Initialize LocalAI (OpenAI-compatible) adapter
 const ai = new FreeAIService();
+
+// Get Ollama URL from environment variable
+const ollamaUrl = process.env.OLLAMA_INTERNAL_URL || 'http://ollama-ai.railway.internal:11434';
+
 console.log('=================================');
 console.log('🤖 AI CONFIGURATION');
-console.log('Using: LocalAI (OpenAI-compatible)');
-console.log('Endpoint:', process.env.LOCALAI_INTERNAL_URL || 'http://localai.railway.internal:11434');
-console.log('Model map default: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf');
-console.log('Primary chat provider: Ollama (fallback to LocalAI)');
+console.log('Using: Ollama (self-hosted)');
+console.log('Endpoint:', ollamaUrl);
+console.log('Model: tinyllama:latest');
 console.log('=================================');
 
 // Initialize optional Ollama client via Railway private networking
 let ollamaClient = null;
 try {
   const { Ollama } = require('ollama');
-  ollamaClient = new Ollama({ host: 'http://ollama-ai.railway.internal:11434' });
+  ollamaClient = new Ollama({ host: ollamaUrl });
   (async () => {
     try {
       await ollamaClient.list();
-      console.log('✅ Ollama connected successfully (ollama-ai.railway.internal:11434)');
+      console.log(`✅ Ollama connected successfully (${ollamaUrl})`);
     } catch (e) {
       console.warn('⚠️  Ollama connection not available yet:', e?.message);
     }
