@@ -228,7 +228,45 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     onSuccess: (data) => {
       console.log('✅ onSuccess called with data:', data);
       
-      // Immediately add the messages to the UI by refetching
+      // Optimistically append messages to cache so UI updates instantly
+      try {
+        const now = new Date();
+        const userMessageText = (data && typeof data === 'object' ? (data as any).userMessage : undefined) || currentMessage;
+        const agentMessageText = (data && typeof data === 'object' ? (data as any).agentMessage : undefined) || '';
+
+        const userMsg = {
+          id: `tmp_${Date.now()}_user`,
+          sessionId: agentId,
+          role: 'user' as const,
+          content: userMessageText,
+          messageType: 'chat' as const,
+          inputMethod: 'typing' as const,
+          timestamp: now,
+          hasExecutableTask: null,
+          taskDescription: null,
+        };
+
+        const agentMsg = {
+          id: `tmp_${Date.now()}_agent`,
+          sessionId: agentId,
+          role: 'agent' as const,
+          content: agentMessageText,
+          messageType: 'chat' as const,
+          inputMethod: 'typing' as const,
+          timestamp: now,
+          hasExecutableTask: null,
+          taskDescription: null,
+        };
+
+        queryClient.setQueryData<any[]>(['messages', agentId], (old) => {
+          const existing = Array.isArray(old) ? old : [];
+          return [...existing, userMsg, agentMsg];
+        });
+      } catch (e) {
+        console.warn('⚠️ Failed to optimistically update cache:', (e as any)?.message);
+      }
+      
+      // Invalidate and refetch to sync with server truth
       refetchMessages();
       queryClient.invalidateQueries({ queryKey: ['chat-history', agentId] });
       queryClient.invalidateQueries({ queryKey: ['command-history', agentId] });
