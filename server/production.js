@@ -545,16 +545,10 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       }
     }
 
-    // Fallback to LocalAI if Ollama didn't respond
-    if (!aiText && freeAI) {
-      try {
-        const t0 = Date.now();
-        console.log('🤖 AI: Calling LocalAI fallback');
-        aiText = await freeAI.generate(userText, { max_tokens: 400 });
-        console.log('🤖 AI: LocalAI fallback responded in', (Date.now() - t0), 'ms');
-      } catch (e2) {
-        console.warn('⚠️  LocalAI fallback also failed:', e2?.message);
-      }
+    // If Ollama didn't respond, return a fallback message
+    if (!aiText) {
+      console.warn('⚠️  Ollama unavailable, using fallback response');
+      aiText = "I'm currently experiencing connectivity issues. Please try again in a moment.";
     }
 
     // Last resort fallback
