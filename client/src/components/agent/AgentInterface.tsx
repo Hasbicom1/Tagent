@@ -200,16 +200,30 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     mutationFn: async (content: string) => {
       console.log('🚀 mutationFn called with content:', content);
       console.log('🚀 Sending POST to:', `/api/session/${agentId}/message`);
-      const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
-      console.log('🚀 Response status:', response.status);
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('❌ Response error:', error);
-        throw new Error(error.error || 'Neural link transmission failed - message not delivered');
+      
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      try {
+        const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
+        clearTimeout(timeoutId);
+        console.log('🚀 Response status:', response.status);
+        if (!response.ok) {
+          const error = await response.json();
+          console.error('❌ Response error:', error);
+          throw new Error(error.error || 'Neural link transmission failed - message not delivered');
+        }
+        const data = await response.json();
+        console.log('✅ Response data:', data);
+        return data;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+          throw new Error('Request timed out after 30 seconds');
+        }
+        throw err;
       }
-      const data = await response.json();
-      console.log('✅ Response data:', data);
-      return data;
     },
     onSuccess: () => {
       console.log('✅ onSuccess called');
@@ -226,6 +240,9 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         description: error.message,
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      console.log('🔄 onSettled called - mutation completed');
     }
   });
 
@@ -419,9 +436,15 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     console.log('🔵 handleSendMessage called, currentMessage:', currentMessage);
     console.log('🔵 sendMessageMutation.isPending:', sendMessageMutation.isPending);
     
-    if (!currentMessage.trim() || sendMessageMutation.isPending) {
-      console.log('⚠️ Message blocked: empty or pending');
+    if (!currentMessage.trim()) {
+      console.log('⚠️ Message blocked: empty');
       return;
+    }
+    
+    // If mutation is stuck pending, reset it
+    if (sendMessageMutation.isPending) {
+      console.log('⚠️ Mutation stuck in pending state, resetting...');
+      sendMessageMutation.reset();
     }
     
     // Normalize input to convert slash commands to natural language
