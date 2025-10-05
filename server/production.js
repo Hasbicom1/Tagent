@@ -503,6 +503,90 @@ try {
   console.warn('⚠️ PRODUCTION: Stripe debugging failed (non-blocking):', error.message);
 }
 
+// STEP 9.5: Register critical message route BEFORE api-routes.js to prevent interception
+console.log('🔧 PRODUCTION: Registering message route...');
+
+app.post('/api/session/:sessionId/message', async (req, res) => {
+  console.log('💬 PRODUCTION: Session message requested for:', req.params.sessionId);
+  try {
+    const userText = req.body.message || req.body.content || 'Hello';
+
+    // Build lightweight conversation history from in-memory bucket for better replies
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    const existing = global.__chatBuckets.get(req.params.sessionId) || [];
+    const historyMessages = existing.map(m => ({
+      role: m.role === 'agent' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
+    // Prefer Ollama tinyllama; fallback to LocalAI if unreachable
+    let aiText = null;
+    const systemPrompt = 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.';
+    const ollamaMessages = [
+      { role: 'system', content: systemPrompt },
+      ...historyMessages,
+      { role: 'user', content: userText }
+    ];
+    if (ollamaClient) {
+      try {
+        const t0 = Date.now();
+        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama:latest', ')');
+        const resp = await ollamaClient.chat({
+          model: process.env.OLLAMA_MODEL || 'tinyllama:latest',
+          messages: ollamaMessages,
+          options: { temperature: 0.7, num_predict: 400, top_p: 0.9 }
+        });
+        aiText = resp?.message?.content?.trim() || null;
+        console.log('🤖 AI: Ollama responded in', (Date.now() - t0), 'ms');
+      } catch (e) {
+        console.warn('⚠️  Ollama call failed, will fallback to LocalAI:', e?.message);
+      }
+    }
+
+    // Fallback to LocalAI if Ollama didn't respond
+    if (!aiText && freeAI) {
+      try {
+        const t0 = Date.now();
+        console.log('🤖 AI: Calling LocalAI fallback');
+        aiText = await freeAI.generate(userText, { max_tokens: 400 });
+        console.log('🤖 AI: LocalAI fallback responded in', (Date.now() - t0), 'ms');
+      } catch (e2) {
+        console.warn('⚠️  LocalAI fallback also failed:', e2?.message);
+      }
+    }
+
+    // Last resort fallback
+    if (!aiText) {
+      aiText = `I understand you said: "${userText}". I'm here to help, but I'm having trouble connecting to my AI service right now. Please try again in a moment.`;
+    }
+
+    // Store both user and AI messages in chat bucket
+    const newHistory = [
+      { role: 'user', content: userText, timestamp: new Date().toISOString(), messageType: 'chat' },
+      { role: 'agent', content: aiText, timestamp: new Date().toISOString(), messageType: 'chat' }
+    ];
+    if (!global.__chatBuckets.has(req.params.sessionId)) {
+      global.__chatBuckets.set(req.params.sessionId, []);
+    }
+    global.__chatBuckets.get(req.params.sessionId).push(...newHistory);
+
+    res.json({
+      success: true,
+      userMessage: userText,
+      agentMessage: aiText,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Session message processing failed:', error);
+    res.status(500).json({
+      error: 'Session message processing failed',
+      details: error.message
+    });
+  }
+});
+
+console.log('✅ PRODUCTION: Message route registered');
+
 // STEP 10: Initialize API routes (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Initializing API routes...');
 
@@ -593,87 +677,7 @@ app.get('/api/session/:sessionId', async (req, res) => {
   }
 });
 
-app.post('/api/session/:sessionId/message', async (req, res) => {
-  console.log('💬 PRODUCTION: Session message requested for:', req.params.sessionId);
-  try {
-    const userText = req.body.message || req.body.content || 'Hello';
-
-    // Build lightweight conversation history from in-memory bucket for better replies
-    global.__chatBuckets = global.__chatBuckets || new Map();
-    const existing = global.__chatBuckets.get(req.params.sessionId) || [];
-    const historyMessages = existing.map(m => ({
-      role: m.role === 'agent' ? 'assistant' : 'user',
-      content: m.content
-    }));
-
-    // Prefer Ollama tinyllama; fallback to LocalAI if unreachable
-    let aiText = null;
-    const systemPrompt = 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.';
-    const ollamaMessages = [
-      { role: 'system', content: systemPrompt },
-      ...historyMessages,
-      { role: 'user', content: userText }
-    ];
-    if (ollamaClient) {
-      try {
-        const t0 = Date.now();
-        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama:latest', ')');
-        const resp = await ollamaClient.chat({
-          model: process.env.OLLAMA_MODEL || 'tinyllama:latest',
-          messages: ollamaMessages,
-          options: { temperature: 0.7, num_predict: 400, top_p: 0.9 }
-        });
-        aiText = resp?.message?.content?.trim() || null;
-        console.log('🤖 AI: Ollama responded in', (Date.now() - t0), 'ms');
-      } catch (e) {
-        console.warn('⚠️  Ollama call failed, will fallback to LocalAI:', e?.message);
-      }
-    }
-    if (!aiText) {
-      const start = Date.now();
-      console.log('🤖 AI: Fallback → LocalAI /chat/completions');
-      const completion = await ai.createChatCompletion({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...historyMessages,
-          { role: 'user', content: userText }
-        ],
-        temperature: 0.7,
-        max_tokens: 500
-      });
-      aiText = completion?.choices?.[0]?.message?.content?.trim() || `Acknowledged: ${userText}`;
-      console.log('🤖 AI: LocalAI responded in', (Date.now() - start), 'ms');
-    }
-
-    // Persist to in-process chat buckets used by history routes
-    try {
-      global.__chatBuckets = global.__chatBuckets || new Map();
-      const bucket = global.__chatBuckets.get(req.params.sessionId) || [];
-      bucket.push({ role: 'user', content: userText, timestamp: new Date().toISOString(), messageType: 'chat' });
-      bucket.push({ role: 'agent', content: aiText, timestamp: new Date().toISOString(), messageType: 'chat' });
-      global.__chatBuckets.set(req.params.sessionId, bucket);
-    } catch (e) {
-      console.warn('⚠️  Failed to persist chat in memory:', e?.message);
-    }
-    
-    res.json({
-      success: true,
-      sessionId: req.params.sessionId,
-      message: aiText,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ PRODUCTION: Session message processing failed:', error);
-    res.status(500).json({
-      success: false,
-      sessionId: req.params.sessionId,
-      message: 'Message processing failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
+// NOTE: Message route is now registered BEFORE api-routes.js (see line ~509) to prevent route interception
 
 app.post('/api/session/:sessionId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Session execute requested for:', req.params.sessionId);
