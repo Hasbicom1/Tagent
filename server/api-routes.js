@@ -760,15 +760,6 @@ router.use((err, req, res, next) => {
   });
 });
 
-// 404 handler for API routes
-router.use('*', (req, res) => {
-  console.log('❓ API: Route not found:', req.method, req.originalUrl);
-  res.status(404).json({
-    status: 'not_found',
-    timestamp: new Date().toISOString(),
-    message: 'API route not found',
-    path: req.originalUrl
-  });
-});
+// NOTE: No 404 handler here - let routes in production.js handle unmatched paths
 
 export default router;
