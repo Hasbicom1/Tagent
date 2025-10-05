@@ -569,6 +569,8 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       global.__chatBuckets.set(req.params.sessionId, []);
     }
     global.__chatBuckets.get(req.params.sessionId).push(...newHistory);
+    console.log('💾 STORAGE: Stored messages for sessionId:', req.params.sessionId);
+    console.log('💾 STORAGE: Total messages in bucket:', global.__chatBuckets.get(req.params.sessionId).length);
 
     res.json({
       success: true,
@@ -937,7 +939,10 @@ app.get('/api/session/:agentId/messages', async (req, res) => {
     }
     global.__chatBuckets = global.__chatBuckets || new Map();
     if (!global.__chatBuckets.has(agentId)) global.__chatBuckets.set(agentId, []);
-    res.json(global.__chatBuckets.get(agentId));
+    const messages = global.__chatBuckets.get(agentId);
+    console.log('📋 MESSAGES: Returning', messages.length, 'messages for agentId:', agentId);
+    console.log('📋 MESSAGES: Available buckets:', Array.from(global.__chatBuckets.keys()));
+    res.json(messages);
   } catch (e) {
     console.error('❌ PRODUCTION: messages endpoint failed:', e);
     res.status(500).json({ error: 'NEURAL_ARCHIVE_ACCESS_DENIED: ' + (e?.message || 'unknown') });
