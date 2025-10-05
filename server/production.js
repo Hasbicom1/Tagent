@@ -617,9 +617,9 @@ app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => 
     if (ollamaClient) {
       try {
         const t0 = Date.now();
-        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama', ')');
+        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama:latest', ')');
         const resp = await ollamaClient.chat({
-          model: process.env.OLLAMA_MODEL || 'tinyllama',
+          model: process.env.OLLAMA_MODEL || 'tinyllama:latest',
           messages: ollamaMessages,
           options: { temperature: 0.7, num_predict: 400, top_p: 0.9 }
         });
