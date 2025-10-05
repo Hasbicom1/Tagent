@@ -593,7 +593,7 @@ app.get('/api/session/:sessionId', async (req, res) => {
   }
 });
 
-app.post('/api/session/:sessionId/message', messageLimiter, async (req, res) => {
+app.post('/api/session/:sessionId/message', async (req, res) => {
   console.log('💬 PRODUCTION: Session message requested for:', req.params.sessionId);
   try {
     const userText = req.body.message || req.body.content || 'Hello';
