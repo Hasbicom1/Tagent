@@ -498,56 +498,57 @@ router.get('/session/:sessionId', async (req, res) => {
   }
 });
 
-router.post('/session/:sessionId/message', async (req, res) => {
-  console.log('💬 API: Session message requested:', req.params.sessionId);
-  try {
-    const { message, content } = req.body;
-    const userMessage = message || content;
-    if (!userMessage || (typeof userMessage === 'string' && userMessage.trim() === '')) {
-      return res.status(400).json({
-        error: 'Message is required',
-        status: 'error'
-      });
-    }
-    
-    // Process message with real AI
-    const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
-    const agent = new LocalUnifiedAIAgent();
-    await agent.initialize();
-    
-    const task = {
-      id: `session_${Date.now()}`,
-      sessionId: req.params.sessionId,
-      message: userMessage,
-      context: req.body.context
-    };
-    
-    const result = await agent.processTask(task);
-    
-    // Persist chat to in-memory history keyed by agentId (deterministic id)
-    try {
-      const agentId = req.params.sessionId; // deterministic: automation_<stripe_session_id>
-      const bucket = getMessageBucket(agentId);
-      bucket.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString(), messageType: 'chat' });
-      bucket.push({ role: 'agent', content: result.message || '', timestamp: new Date().toISOString(), messageType: 'chat' });
-    } catch (e) {
-      console.warn('⚠️  API: Failed to persist chat to memory:', e?.message);
-    }
-
-    res.json({
-      success: true,
-      message: 'Session message processed',
-      result: result,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ API: Session message processing failed:', error);
-    res.status(500).json({
-      error: 'Session message processing failed',
-      details: error.message
-    });
-  }
-});
+// DISABLED: This route is now handled in production.js with Ollama integration
+// router.post('/session/:sessionId/message', async (req, res) => {
+//   console.log('💬 API: Session message requested:', req.params.sessionId);
+//   try {
+//     const { message, content } = req.body;
+//     const userMessage = message || content;
+//     if (!userMessage || (typeof userMessage === 'string' && userMessage.trim() === '')) {
+//       return res.status(400).json({
+//         error: 'Message is required',
+//         status: 'error'
+//       });
+//     }
+//     
+//     // Process message with real AI
+//     const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
+//     const agent = new LocalUnifiedAIAgent();
+//     await agent.initialize();
+//     
+//     const task = {
+//       id: `session_${Date.now()}`,
+//       sessionId: req.params.sessionId,
+//       message: userMessage,
+//       context: req.body.context
+//     };
+//     
+//     const result = await agent.processTask(task);
+//     
+//     // Persist chat to in-memory history keyed by agentId (deterministic id)
+//     try {
+//       const agentId = req.params.sessionId; // deterministic: automation_<stripe_session_id>
+//       const bucket = getMessageBucket(agentId);
+//       bucket.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString(), messageType: 'chat' });
+//       bucket.push({ role: 'agent', content: result.message || '', timestamp: new Date().toISOString(), messageType: 'chat' });
+//     } catch (e) {
+//       console.warn('⚠️  API: Failed to persist chat to memory:', e?.message);
+//     }
+// 
+//     res.json({
+//       success: true,
+//       message: 'Session message processed',
+//       result: result,
+//       timestamp: new Date().toISOString()
+//     });
+//   } catch (error) {
+//     console.error('❌ API: Session message processing failed:', error);
+//     res.status(500).json({
+//       error: 'Session message processing failed',
+//       details: error.message
+//     });
+//   }
+// });
 
 // Chat history endpoints (expected by frontend)
 router.get('/session/:agentId/messages', async (req, res) => {
