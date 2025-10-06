@@ -707,7 +707,9 @@ app.get('/api/session/:sessionId', async (req, res) => {
     
     res.json({
       sessionId: req.params.sessionId,
+      agentId: req.params.sessionId, // agentId is same as sessionId
       status: 'active',
+      isActive: true,
       expiresAt: session.expires_at,
       timeRemaining: timeRemaining,
       paymentVerified: session.payment_verified,
