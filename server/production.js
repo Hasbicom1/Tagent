@@ -468,31 +468,30 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// STEP 9: Initialize Redis (NON-BLOCKING)
-console.log('🔧 PRODUCTION: Initializing Redis...');
+// STEP 9: Initialize Redis (TRULY NON-BLOCKING - after server starts)
+console.log('🔧 PRODUCTION: Scheduling Redis initialization...');
 let redisConnected = false;
 let queueInitialized = false;
-
-try {
-  const redis = await getRedis();
-  if (redis) {
-    console.log('✅ PRODUCTION: Redis connection established');
-    redisConnected = true;
-    
-    // Initialize task queue for browser automation
-    const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
-      queueInitialized = await initQueue(redisUrl);
-      if (queueInitialized) {
-        console.log('✅ PRODUCTION: Browser automation queue initialized');
+setTimeout(async () => {
+  try {
+    const redis = await getRedis();
+    if (redis) {
+      console.log('✅ PRODUCTION: Redis connection established');
+      redisConnected = true;
+      const redisUrl = process.env.REDIS_URL;
+      if (redisUrl) {
+        queueInitialized = await initQueue(redisUrl);
+        if (queueInitialized) {
+          console.log('✅ PRODUCTION: Browser automation queue initialized');
+        }
       }
+    } else {
+      console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
     }
-  } else {
-    console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
+  } catch (error) {
+    console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
   }
-} catch (error) {
-  console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
-}
+}, 0);
 
 // STEP 9.5: Initialize Stripe Payment Gateway (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Initializing Stripe payment gateway...');
@@ -1267,19 +1266,21 @@ console.log('✅ PRODUCTION: Missing API endpoints added');
 console.log('🔧 PRODUCTION: REAL session management endpoints available but not active');
 console.log('ℹ️ PRODUCTION: Real session endpoints can be enabled for production deployment');
 
-// STEP 8: Initialize Database
-console.log('🔧 PRODUCTION: Initializing database...');
-try {
-  const db = initializeDatabase();
-  if (db) {
-    await createTables();
-    console.log('✅ PRODUCTION: Database initialized and tables created');
-  } else {
-    console.log('⚠️ PRODUCTION: Database not available - using mock storage');
+// STEP 8: Initialize Database (TRULY NON-BLOCKING)
+console.log('🔧 PRODUCTION: Scheduling database initialization...');
+setTimeout(async () => {
+  try {
+    const db = initializeDatabase();
+    if (db) {
+      await createTables();
+      console.log('✅ PRODUCTION: Database initialized and tables created');
+    } else {
+      console.log('⚠️ PRODUCTION: Database not available - using mock storage');
+    }
+  } catch (error) {
+    console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
   }
-} catch (error) {
-  console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
-}
+}, 0);
 
 // STEP 9: REAL session management (available but not initialized to avoid startup errors)
 console.log('🔧 PRODUCTION: REAL session management available but not initialized');
