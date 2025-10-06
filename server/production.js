@@ -14,6 +14,7 @@ const require = createRequire(import.meta.url);
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import httpProxy from 'http-proxy';
 import { fileURLToPath } from 'url';
 import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
@@ -1369,6 +1370,33 @@ app.get('/vnc/:sessionId', async (req, res) => {
 });
 
 console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER_URL}`);
+
+// STEP 13C: Generic WebSocket proxy for /websocket and /ws to worker (for VNC/websockify)
+try {
+  const proxy = httpProxy.createProxyServer({
+    target: WORKER_URL,
+    ws: true,
+    changeOrigin: true,
+    secure: false,
+  });
+
+  // Upgrade handler (server-level) for WebSocket paths
+  server.on('upgrade', (req, socket, head) => {
+    try {
+      const url = req.url || '';
+      if (url.startsWith('/websocket') || url.startsWith('/ws')) {
+        console.log('🔌 Proxy WS upgrade → worker:', url);
+        proxy.ws(req, socket, head);
+      }
+    } catch (e) {
+      console.warn('⚠️ WS proxy upgrade failed:', e?.message || e);
+    }
+  });
+
+  console.log('🔌 PRODUCTION: WebSocket proxy enabled for /websocket and /ws →', WORKER_URL);
+} catch (e) {
+  console.warn('⚠️ PRODUCTION: Failed to enable WS proxy:', e?.message || e);
+}
 
 // STEP 14: Server listening (proven pattern)
 server.listen(port, host, () => {
