@@ -535,15 +535,37 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       content: m.content
     }));
 
-    // Prefer Groq (fast, free); fallback to Ollama if Groq unavailable
+    // Groq is the BRAIN - it analyzes requests and generates commands
     let aiText = null;
-    const systemPrompt = 'You are a helpful AI assistant that chats with users to understand their needs. When users ask you to perform web tasks, acknowledge their request in a friendly way.';
+    let browserCommand = null;
+    
+    const systemPrompt = `You are an intelligent AI assistant that controls a browser automation agent.
+
+Your role:
+1. Chat naturally with the user
+2. When they ask you to do a web task, acknowledge it
+3. Output a JSON command for the browser agent
+
+For browser tasks, include this JSON in your response:
+<COMMAND>{"action": "navigate|click|type|search", "target": "url or search term", "description": "what you're doing"}</COMMAND>
+
+Examples:
+User: "navigate to google"
+You: "I'll navigate to Google for you! <COMMAND>{"action": "navigate", "target": "https://google.com", "description": "Opening Google"}</COMMAND>"
+
+User: "search for iPhone 15"
+You: "Let me search for iPhone 15! <COMMAND>{"action": "search", "target": "iPhone 15", "description": "Searching Google for iPhone 15"}</COMMAND>"
+
+User: "just chatting"
+You: "Of course! How can I help you today?"
+
+Always chat naturally, but include <COMMAND> tags when a browser action is needed.`;
     
     // Try Groq first (instant, free, 14k requests/day)
     if (process.env.GROQ_API_KEY) {
       try {
         const t0 = Date.now();
-        console.log('🤖 AI: Calling Groq (llama-3.3-70b-versatile) - Latest Model');
+        console.log('🤖 AI: Calling Groq (llama-3.3-70b-versatile) - Agent Brain');
         const groqMessages = [
           { role: 'system', content: systemPrompt },
           ...historyMessages,
@@ -567,7 +589,7 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
               model: 'llama-3.3-70b-versatile',
               messages: groqMessages,
               temperature: 0.7,
-              max_tokens: 400
+              max_tokens: 500
             })
           }),
           timeoutPromise
@@ -575,8 +597,24 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
         
         if (groqResp.ok) {
           const groqData = await groqResp.json();
-          aiText = groqData?.choices?.[0]?.message?.content?.trim() || null;
+          const fullResponse = groqData?.choices?.[0]?.message?.content?.trim() || null;
           console.log('✅ AI: Groq responded in', (Date.now() - t0), 'ms');
+          
+          // Extract browser command if present
+          const commandMatch = fullResponse?.match(/<COMMAND>(.*?)<\/COMMAND>/);
+          if (commandMatch) {
+            try {
+              browserCommand = JSON.parse(commandMatch[1]);
+              console.log('🎯 Browser command extracted:', browserCommand);
+              // Remove command tags from user-facing message
+              aiText = fullResponse.replace(/<COMMAND>.*?<\/COMMAND>/, '').trim();
+            } catch (parseError) {
+              console.warn('⚠️  Failed to parse browser command:', parseError.message);
+              aiText = fullResponse;
+            }
+          } else {
+            aiText = fullResponse;
+          }
         } else {
           // Log the actual error from Groq
           const errorBody = await groqResp.text();
@@ -596,26 +634,19 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       aiText = `I understand you said: "${userText}". I'm here to help! (Groq API temporarily unavailable)`;
     }
 
-    // Detect browser automation tasks
-    const browserKeywords = ['navigate', 'click', 'screenshot', 'scroll', 'type', 'fill', 'browser', 'website', 'page', 'url', 'open', 'search', 'google', 'find', 'book', 'buy'];
-    const hasBrowserCommand = browserKeywords.some(keyword => 
-      userText.toLowerCase().includes(keyword)
-    );
-    
-    console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
-
-    // REAL BROWSER AUTOMATION: Queue task to worker service via Redis
+    // REAL BROWSER AUTOMATION: Queue task to worker if Groq generated a command
     let taskId = null;
+    const hasBrowserCommand = !!browserCommand;
     
-    if (hasBrowserCommand) {
-      console.log(`🎯 Browser task detected, queueing: "${userText}"`);
+    if (hasBrowserCommand && browserCommand) {
+      console.log(`🎯 Browser command from Groq:`, browserCommand);
       
       try {
         if (isQueueAvailable()) {
           // PRIMARY: Use Redis queue for reliable task distribution
           console.log('📋 Using Redis queue for task distribution');
           const queueResult = await queueBrowserTask(
-            userText,
+            JSON.stringify(browserCommand), // Send structured command
             req.params.sessionId,
             req.params.sessionId
           );
@@ -630,7 +661,7 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              instruction: userText,
+              instruction: browserCommand, // Send structured command
               sessionId: req.params.sessionId,
               agentId: req.params.sessionId
             }),
