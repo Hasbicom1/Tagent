@@ -550,9 +550,9 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
           { role: 'user', content: userText }
         ];
         
-        // Create a timeout promise (10 seconds)
+        // Create a timeout promise (30 seconds - increased for reliability)
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Groq timeout after 10s')), 10000)
+          setTimeout(() => reject(new Error('Groq timeout after 30s')), 30000)
         );
         
         // Race between fetch and timeout
@@ -1282,6 +1282,46 @@ try {
 } catch (e) {
   console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
 }
+
+// STEP 13B: VNC Proxy Routes (forward VNC traffic to worker)
+const WORKER_URL = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
+
+// VNC stream endpoint - proxies to worker's VNC server
+app.get('/vnc/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    console.log(`📺 VNC: Proxying session ${sessionId} to worker at ${WORKER_URL}`);
+    
+    const workerVNCUrl = `${WORKER_URL}/vnc/${sessionId}`;
+    const workerResponse = await fetch(workerVNCUrl, {
+      signal: AbortSignal.timeout(10000)
+    });
+    
+    if (!workerResponse.ok) {
+      console.warn(`⚠️  VNC: Worker returned ${workerResponse.status}`);
+      return res.status(workerResponse.status).json({ 
+        error: 'VNC session not available',
+        workerStatus: workerResponse.status 
+      });
+    }
+    
+    // Set headers for WebSocket upgrade
+    res.setHeader('Connection', 'Upgrade');
+    res.setHeader('Upgrade', 'websocket');
+    
+    // Pipe the VNC stream
+    workerResponse.body.pipe(res);
+  } catch (error) {
+    console.error('❌ VNC: Proxy error:', error.message);
+    res.status(503).json({ 
+      error: 'VNC service unavailable', 
+      message: error.message,
+      workerUrl: WORKER_URL
+    });
+  }
+});
+
+console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER_URL}`);
 
 // STEP 14: Server listening (proven pattern)
 server.listen(port, host, () => {
