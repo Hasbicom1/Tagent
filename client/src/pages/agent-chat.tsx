@@ -84,15 +84,23 @@ export default function AgentChat() {
   }, [agentId, setLocation]);
 
   useEffect(() => {
-    // WebSocket connection is now handled automatically by useRealtimeTaskStatus hook
-    // Only subscribe to session updates once we have session info
+    // WebSocket is OPTIONAL - only for VNC live view, not required for chat
+    // Chat works via HTTP API, WebSocket is bonus feature for real-time task updates
     if (sessionInfo?.sessionId && connectionStatus.isAuthenticated) {
-      subscribeToSession(sessionInfo.sessionId);
+      try {
+        subscribeToSession(sessionInfo.sessionId);
+      } catch (e) {
+        console.warn('⚠️ WebSocket subscription failed (non-critical):', e);
+      }
     }
 
     // Cleanup on unmount
     return () => {
-      disconnect();
+      try {
+        disconnect();
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     };
   }, [sessionInfo, connectionStatus.isAuthenticated, subscribeToSession, disconnect]);
 
@@ -176,7 +184,17 @@ export default function AgentChat() {
         timestamp: new Date().toISOString()
       };
       
-      setMessages(prev => [...prev, userMessage]);
+      // Add agent response from API (instant, no WebSocket needed)
+      const agentMessage: Message = {
+        id: `agent-${Date.now()}`,
+        role: 'agent',
+        content: result.agentMessage || result.response || 'Processing...',
+        timestamp: new Date().toISOString(),
+        hasExecutableTask: result.hasExecutableTask,
+        taskDescription: result.taskDescription
+      };
+      
+      setMessages(prev => [...prev, userMessage, agentMessage]);
       setInputMessage('');
 
       // If task is executable, set current task for tracking
@@ -188,8 +206,6 @@ export default function AgentChat() {
           description: "AI agent is executing your request...",
         });
       }
-
-      // Agent response will come via WebSocket real-time updates
       
     } catch (error: any) {
       console.error('Failed to send message:', error);
