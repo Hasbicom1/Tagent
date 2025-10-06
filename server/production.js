@@ -593,13 +593,39 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     
     console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
 
-    // Note: Browser automation queueing removed due to TypeScript/JavaScript module incompatibility
-    // The queue.ts file cannot be imported from production.js (JS file)
-    // Frontend will handle task execution via /api/session/:agentId/execute endpoint
-    const taskId = hasBrowserCommand ? `task_${Date.now()}` : null;
+    // REAL BROWSER AUTOMATION: Queue task to worker service
+    let taskId = null;
     
     if (hasBrowserCommand) {
-      console.log(`🎯 Browser task detected, frontend will handle execution: "${userText}"`);
+      console.log(`🎯 Browser task detected, queueing to worker: "${userText}"`);
+      
+      // Send task to worker service via HTTP (no Redis needed)
+      const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:3001';
+      
+      try {
+        const workerResponse = await fetch(`${workerUrl}/task`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instruction: userText,
+            sessionId: req.params.sessionId,
+            agentId: req.params.sessionId
+          }),
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+        
+        if (workerResponse.ok) {
+          const workerData = await workerResponse.json();
+          taskId = workerData.taskId;
+          console.log(`✅ Task queued to worker successfully: ${taskId}`);
+        } else {
+          console.warn(`⚠️  Worker returned non-OK status: ${workerResponse.status}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️  Failed to reach worker service: ${error.message}`);
+        console.warn(`   Worker might not be running or URL incorrect: ${workerUrl}`);
+        // Continue without task - chat still works
+      }
     }
 
     // Store both user and AI messages in chat bucket with ALL required frontend fields
@@ -1054,6 +1080,28 @@ app.get('/api/session/:agentId/command-history', async (req, res) => {
   } catch (e) {
     console.error('❌ PRODUCTION: command-history endpoint failed:', e);
     res.status(500).json({ error: 'COMMAND_LOG_RETRIEVAL_FAILED: ' + (e?.message || 'unknown') });
+  }
+});
+
+// Get task status from worker
+app.get('/api/task/:taskId', async (req, res) => {
+  console.log('📊 PRODUCTION: Task status requested for:', req.params.taskId);
+  try {
+    const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:3001';
+    
+    const workerResponse = await fetch(`${workerUrl}/task/${req.params.taskId}`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (!workerResponse.ok) {
+      return res.status(workerResponse.status).json({ error: 'Task not found or worker unavailable' });
+    }
+    
+    const taskData = await workerResponse.json();
+    res.json(taskData);
+  } catch (error) {
+    console.error('❌ PRODUCTION: Failed to get task status:', error);
+    res.status(503).json({ error: 'Worker service unavailable', message: error.message });
   }
 });
 
