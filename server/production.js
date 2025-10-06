@@ -538,64 +538,51 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
           ...historyMessages,
           { role: 'user', content: userText }
         ];
-        const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'llama-3.1-70b-versatile',
-            messages: groqMessages,
-            temperature: 0.7,
-            max_tokens: 400
-          })
-        });
+        
+        // Create a timeout promise (10 seconds)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Groq timeout after 10s')), 10000)
+        );
+        
+        // Race between fetch and timeout
+        const groqResp = await Promise.race([
+          fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-70b-versatile',
+              messages: groqMessages,
+              temperature: 0.7,
+              max_tokens: 400
+            })
+          }),
+          timeoutPromise
+        ]);
+        
         if (groqResp.ok) {
           const groqData = await groqResp.json();
           aiText = groqData?.choices?.[0]?.message?.content?.trim() || null;
-          console.log('🤖 AI: Groq responded in', (Date.now() - t0), 'ms');
+          console.log('✅ AI: Groq responded in', (Date.now() - t0), 'ms');
         } else {
           // Log the actual error from Groq
           const errorBody = await groqResp.text();
-          console.error('❌ Groq API error:', groqResp.status, groqResp.statusText, errorBody);
+          console.error('❌ Groq API error:', groqResp.status, groqResp.statusText, '-', errorBody);
         }
       } catch (e) {
-        console.warn('⚠️  Groq call failed, will try Ollama:', e?.message);
+        console.error('❌ Groq call failed:', e?.message);
       }
     }
     
-    // Fallback to Ollama if Groq didn't respond
-    if (!aiText && ollamaClient) {
-      try {
-        const t0 = Date.now();
-        console.log('🤖 AI: Calling Ollama (model=', process.env.OLLAMA_MODEL || 'tinyllama:latest', ')');
-        const ollamaMessages = [
-          { role: 'system', content: systemPrompt },
-          ...historyMessages,
-          { role: 'user', content: userText }
-        ];
-        const resp = await ollamaClient.chat({
-          model: process.env.OLLAMA_MODEL || 'tinyllama:latest',
-          messages: ollamaMessages,
-          options: { temperature: 0.7, num_predict: 400, top_p: 0.9 }
-        });
-        aiText = resp?.message?.content?.trim() || null;
-        console.log('🤖 AI: Ollama responded in', (Date.now() - t0), 'ms');
-      } catch (e) {
-        console.warn('⚠️  Ollama call failed:', e?.message);
-      }
-    }
+    // Skip Ollama entirely - it's too slow on Railway CPU
+    // Fallback directly to generic response if Groq fails
 
     // Last resort fallback message
     if (!aiText) {
-      console.warn('⚠️  All AI services unavailable, using fallback response');
-      aiText = "I'm currently experiencing connectivity issues. Please try again in a moment.";
-    }
-
-    // Last resort fallback
-    if (!aiText) {
-      aiText = `I understand you said: "${userText}". I'm here to help, but I'm having trouble connecting to my AI service right now. Please try again in a moment.`;
+      console.warn('⚠️  Groq unavailable, using fallback response');
+      aiText = `I understand you said: "${userText}". I'm here to help! (Groq API temporarily unavailable)`;
     }
 
     // Store both user and AI messages in chat bucket with ALL required frontend fields
