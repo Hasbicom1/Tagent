@@ -28,7 +28,7 @@ export function PaymentSuccess({ sessionId, agentId, expiresAt, onEnterAgent }: 
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const link = `${window.location.origin}/agent?id=${agentId}`;
+    const link = `${window.location.origin}/live/agent/${agentId}`;
     setSessionLink(link);
 
     const interval = setInterval(() => {
