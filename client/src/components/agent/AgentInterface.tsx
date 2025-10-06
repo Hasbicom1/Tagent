@@ -263,12 +263,14 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
           const existing = Array.isArray(old) ? old : [];
           return [...existing, userMsg, agentMsg];
         });
+        
+        console.log('✅ Optimistic update complete - messages added to cache');
       } catch (e) {
         console.warn('⚠️ Failed to optimistically update cache:', (e as any)?.message);
       }
       
-      // Single refetch to sync with server
-      refetchMessages();
+      // Don't refetch immediately - the optimistic update is enough
+      // The backend stores messages but we use the client cache for instant display
       
       setCurrentMessage('');
     },
