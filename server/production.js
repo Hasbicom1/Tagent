@@ -706,28 +706,48 @@ CRITICAL RULES:
           console.log(`✅ Task queued to Redis: ${taskId}`);
         } else {
           console.log('⚠️  Redis queue not available, attempting direct HTTP fallback');
-          const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
           
-          try {
-            const workerResponse = await fetch(`${workerUrl}/task`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instruction: browserCommand,
-                sessionId: req.params.sessionId,
-                agentId: req.params.sessionId
-              }),
-              signal: AbortSignal.timeout(5000)
-            });
-            if (workerResponse.ok) {
-              const workerData = await workerResponse.json();
-              taskId = workerData.taskId;
-              console.log(`✅ Task queued via HTTP: ${taskId}`);
-            } else {
-              console.warn(`⚠️  Worker HTTP returned: ${workerResponse.status}`);
+          // Try multiple worker URL formats to handle DNS resolution issues
+          const workerUrls = [
+            process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+            'http://worker.railway.internal:8080',
+            'http://worker:8080'
+          ];
+          
+          let workerResponse = null;
+          let lastError = null;
+          
+          for (const workerUrl of workerUrls) {
+            try {
+              console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
+              workerResponse = await fetch(`${workerUrl}/task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  instruction: browserCommand,
+                  sessionId: req.params.sessionId,
+                  agentId: req.params.sessionId
+                }),
+                signal: AbortSignal.timeout(5000)
+              });
+              
+              if (workerResponse.ok) {
+                const workerData = await workerResponse.json();
+                taskId = workerData.taskId;
+                console.log(`✅ Task queued via HTTP: ${taskId} (${workerUrl})`);
+                break;
+              } else {
+                console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
+              }
+            } catch (error) {
+              console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
+              lastError = error;
+              continue;
             }
-          } catch (workerError) {
-            console.warn(`⚠️  Worker HTTP failed (non-critical): ${workerError.message}`);
+          }
+          
+          if (!workerResponse || !workerResponse.ok) {
+            console.warn(`⚠️  Worker HTTP failed (non-critical): ${lastError?.message || 'All worker URLs failed'}`);
             console.warn(`   Worker may not be deployed yet. Chat still works, but no browser automation.`);
             console.warn(`   To enable automation: Deploy worker service and set WORKER_INTERNAL_URL`);
           }
@@ -1373,16 +1393,43 @@ try {
 // STEP 13B: VNC Proxy Routes (forward VNC traffic to worker)
 const WORKER_URL = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
 
-// VNC stream endpoint - proxies to worker's VNC server
-app.get('/vnc/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    console.log(`📺 VNC: Proxying session ${sessionId} to worker at ${WORKER_URL}`);
-    
-    const workerVNCUrl = `${WORKER_URL}/vnc/${sessionId}`;
-    const workerResponse = await fetch(workerVNCUrl, {
-      signal: AbortSignal.timeout(10000)
-    });
+         // VNC stream endpoint - proxies to worker's VNC server
+         app.get('/vnc/:sessionId', async (req, res) => {
+           try {
+             const { sessionId } = req.params;
+             console.log(`📺 VNC: Proxying session ${sessionId} to worker at ${WORKER_URL}`);
+             
+             // Try multiple worker URL formats to handle DNS resolution issues
+             const workerUrls = [
+               WORKER_URL,
+               'http://worker.railway.internal:8080',
+               'http://worker:8080',
+               'http://localhost:8080' // fallback for testing
+             ];
+             
+             let workerResponse = null;
+             let lastError = null;
+             
+             for (const workerUrl of workerUrls) {
+               try {
+                 console.log(`🔄 VNC: Trying worker URL: ${workerUrl}`);
+                 const workerVNCUrl = `${workerUrl}/vnc/${sessionId}`;
+                 workerResponse = await fetch(workerVNCUrl, {
+                   signal: AbortSignal.timeout(5000)
+                 });
+                 
+                 if (workerResponse.ok) {
+                   console.log(`✅ VNC: Connected to worker at ${workerUrl}`);
+                   break;
+                 } else {
+                   console.warn(`⚠️ VNC: Worker ${workerUrl} returned ${workerResponse.status}`);
+                 }
+               } catch (error) {
+                 console.warn(`⚠️ VNC: Failed to connect to ${workerUrl}: ${error.message}`);
+                 lastError = error;
+                 continue;
+               }
+             }
     
     if (!workerResponse.ok) {
       console.warn(`⚠️  VNC: Worker returned ${workerResponse.status}`);
@@ -1417,6 +1464,11 @@ try {
     ws: true,
     changeOrigin: true,
     secure: false,
+    // Add timeout and retry configuration
+    timeout: 10000,
+    proxyTimeout: 10000,
+    // Force IPv4 to avoid IPv6 DNS issues
+    family: 4,
   });
 
   // Upgrade handler (server-level) for WebSocket paths
@@ -1425,10 +1477,23 @@ try {
       const url = req.url || '';
       if (url.startsWith('/websocket') || url.startsWith('/ws')) {
         console.log('🔌 Proxy WS upgrade → worker:', url);
+        
+        // Add error handling for proxy connection
+        proxy.on('error', (err, req, res) => {
+          console.error('❌ WebSocket proxy error:', err.message);
+          if (res && !res.headersSent) {
+            res.status(503).json({ error: 'WebSocket proxy unavailable' });
+          }
+        });
+        
         proxy.ws(req, socket, head);
       }
     } catch (e) {
       console.warn('⚠️ WS proxy upgrade failed:', e?.message || e);
+      // Close the socket if proxy fails
+      if (socket && !socket.destroyed) {
+        socket.destroy();
+      }
     }
   });
 
