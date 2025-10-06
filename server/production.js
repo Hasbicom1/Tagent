@@ -491,11 +491,27 @@ setTimeout(async () => {
     if (redis) {
       console.log('✅ PRODUCTION: Redis connection established');
       redisConnected = true;
-      const redisUrl = process.env.REDIS_URL;
+      
+      // CRITICAL FIX: Use EXTERNAL Redis URL for task queue to avoid DNS issues
+      // Railway's internal DNS (redis.railway.internal) doesn't always resolve
+      let redisUrl = process.env.REDIS_PUBLIC_URL || 
+                     process.env.REDIS_EXTERNAL_URL ||
+                     process.env.REDIS_URL;
+      
+      // Skip if URL still contains internal hostname
+      if (redisUrl && redisUrl.includes('redis.railway.internal')) {
+        console.warn('⚠️  PRODUCTION: Redis URL contains internal hostname - skipping queue init');
+        console.warn('   Set REDIS_PUBLIC_URL or REDIS_EXTERNAL_URL to enable task queue');
+        redisUrl = null;
+      }
+      
       if (redisUrl) {
+        console.log(`🔌 PRODUCTION: Initializing queue with URL: ${redisUrl.substring(0, 30)}...`);
         queueInitialized = await initQueue(redisUrl);
         if (queueInitialized) {
           console.log('✅ PRODUCTION: Browser automation queue initialized');
+        } else {
+          console.warn('⚠️  PRODUCTION: Queue initialization failed - will use HTTP fallback');
         }
       }
     } else {
@@ -689,24 +705,31 @@ CRITICAL RULES:
           taskId = queueResult.taskId;
           console.log(`✅ Task queued to Redis: ${taskId}`);
         } else {
-          console.log('⚠️  Redis queue not available, using direct HTTP fallback');
+          console.log('⚠️  Redis queue not available, attempting direct HTTP fallback');
           const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
-          const workerResponse = await fetch(`${workerUrl}/task`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              instruction: browserCommand,
-              sessionId: req.params.sessionId,
-              agentId: req.params.sessionId
-            }),
-            signal: AbortSignal.timeout(5000)
-          });
-          if (workerResponse.ok) {
-            const workerData = await workerResponse.json();
-            taskId = workerData.taskId;
-            console.log(`✅ Task queued via HTTP: ${taskId}`);
-          } else {
-            console.warn(`⚠️  Worker HTTP returned: ${workerResponse.status}`);
+          
+          try {
+            const workerResponse = await fetch(`${workerUrl}/task`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instruction: browserCommand,
+                sessionId: req.params.sessionId,
+                agentId: req.params.sessionId
+              }),
+              signal: AbortSignal.timeout(5000)
+            });
+            if (workerResponse.ok) {
+              const workerData = await workerResponse.json();
+              taskId = workerData.taskId;
+              console.log(`✅ Task queued via HTTP: ${taskId}`);
+            } else {
+              console.warn(`⚠️  Worker HTTP returned: ${workerResponse.status}`);
+            }
+          } catch (workerError) {
+            console.warn(`⚠️  Worker HTTP failed (non-critical): ${workerError.message}`);
+            console.warn(`   Worker may not be deployed yet. Chat still works, but no browser automation.`);
+            console.warn(`   To enable automation: Deploy worker service and set WORKER_INTERNAL_URL`);
           }
         }
       } catch (error) {
