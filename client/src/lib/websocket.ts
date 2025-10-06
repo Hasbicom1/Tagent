@@ -117,10 +117,14 @@ export class WebSocketClient {
 
       try {
         // FIXED: Try multiple WebSocket endpoints
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
         const endpoints = [
+          // Prefer Socket.IO path exposed by the server
+          `${protocol}//${host}/ws/socket.io/`,
+          // Raw WS endpoints (proxy forwards to worker if present)
           this.config.url!,
-          `${this.config.url!.replace('/ws', '')}/websocket`,
-          `${this.config.url!.replace('/ws', '')}/socket.io`
+          `${this.config.url!.replace('/ws', '')}/websocket`
         ];
         
         let currentEndpoint = 0;
