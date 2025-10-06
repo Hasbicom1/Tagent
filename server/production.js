@@ -641,40 +641,50 @@ REMEMBER: You generate commands, you don't execute them. Always output <COMMAND>
       aiText = `I understand you said: "${userText}". I'm here to help! (Groq API temporarily unavailable)`;
     }
 
-    // REAL BROWSER AUTOMATION: Queue task to worker if Groq generated a command
+    // REAL BROWSER AUTOMATION: Route through MCP, then queue to worker for execution
     let taskId = null;
     const hasBrowserCommand = !!browserCommand;
-    
+
     if (hasBrowserCommand && browserCommand) {
-      console.log(`🎯 Browser command from Groq:`, browserCommand);
-      
+      console.log('🎯 Browser command from Groq:', browserCommand);
+
       try {
+        // 1) Route via MCP (multi-agent planning/coordination)
+        try {
+          const mcp = await import('./mcp-bridge.js');
+          const mcpResult = await mcp.routeViaMCP(req.params.sessionId, browserCommand);
+          if (mcpResult?.success === false) {
+            console.warn('⚠️  MCP orchestration reported failure:', mcpResult?.error);
+          } else {
+            console.log('🧠 MCP orchestration ok');
+          }
+        } catch (e) {
+          console.warn('⚠️  MCP orchestration unavailable:', e?.message || e);
+        }
+
+        // 2) Ensure execution by queuing to worker (Redis preferred)
         if (isQueueAvailable()) {
-          // PRIMARY: Use Redis queue for reliable task distribution
           console.log('📋 Using Redis queue for task distribution');
           const queueResult = await queueBrowserTask(
-            JSON.stringify(browserCommand), // Send structured command
+            JSON.stringify(browserCommand),
             req.params.sessionId,
             req.params.sessionId
           );
           taskId = queueResult.taskId;
           console.log(`✅ Task queued to Redis: ${taskId}`);
         } else {
-          // FALLBACK: Direct HTTP to worker (for development or when Redis unavailable)
           console.log('⚠️  Redis queue not available, using direct HTTP fallback');
           const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
-          
           const workerResponse = await fetch(`${workerUrl}/task`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              instruction: browserCommand, // Send structured command
+              instruction: browserCommand,
               sessionId: req.params.sessionId,
               agentId: req.params.sessionId
             }),
             signal: AbortSignal.timeout(5000)
           });
-          
           if (workerResponse.ok) {
             const workerData = await workerResponse.json();
             taskId = workerData.taskId;
@@ -684,9 +694,7 @@ REMEMBER: You generate commands, you don't execute them. Always output <COMMAND>
           }
         }
       } catch (error) {
-        console.warn(`⚠️  Failed to queue task: ${error.message}`);
-        console.warn(`   Chat will still work, but automation will not execute`);
-        // Continue without task - chat still works
+        console.warn('⚠️  Failed to orchestrate/queue task:', error?.message || error);
       }
     }
 
