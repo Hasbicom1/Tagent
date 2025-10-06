@@ -554,17 +554,11 @@ router.get('/session/:sessionId', async (req, res) => {
 router.get('/session/:agentId/messages', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const session = await getUserSession(agentId);
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-    const now = new Date();
-    const expires = new Date(session.expires_at);
-    if (now > expires) {
-      await updateSessionStatus(agentId, 'expired');
-      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
-    }
+    console.log('💾 API: Messages requested for agentId:', agentId);
+    
+    // Use in-memory storage only (no database dependency)
     const bucket = getMessageBucket(agentId);
+    console.log('💾 API: Messages loaded:', bucket.length, 'messages');
     res.json(bucket);
   } catch (error) {
     console.error('❌ API: Get messages failed:', error);
@@ -575,15 +569,11 @@ router.get('/session/:agentId/messages', async (req, res) => {
 router.get('/session/:agentId/chat-history', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const session = await getUserSession(agentId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    const now = new Date();
-    const expires = new Date(session.expires_at);
-    if (now > expires) {
-      await updateSessionStatus(agentId, 'expired');
-      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
-    }
+    console.log('💾 API: Chat history requested for agentId:', agentId);
+    
+    // Use in-memory storage only (no database dependency)
     const bucket = getMessageBucket(agentId).filter(m => m.messageType !== 'command');
+    console.log('💾 API: Chat history loaded:', bucket.length, 'messages');
     res.json(bucket);
   } catch (error) {
     console.error('❌ API: Get chat history failed:', error);
@@ -594,15 +584,11 @@ router.get('/session/:agentId/chat-history', async (req, res) => {
 router.get('/session/:agentId/command-history', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const session = await getUserSession(agentId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    const now = new Date();
-    const expires = new Date(session.expires_at);
-    if (now > expires) {
-      await updateSessionStatus(agentId, 'expired');
-      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
-    }
+    console.log('💾 API: Command history requested for agentId:', agentId);
+    
+    // Use in-memory storage only (no database dependency)
     const bucket = getMessageBucket(agentId).filter(m => m.messageType === 'command');
+    console.log('💾 API: Command history loaded:', bucket.length, 'commands');
     res.json(bucket);
   } catch (error) {
     console.error('❌ API: Get command history failed:', error);
