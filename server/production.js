@@ -532,7 +532,7 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     if (process.env.GROQ_API_KEY) {
       try {
         const t0 = Date.now();
-        console.log('🤖 AI: Calling Groq (llama-3.1-70b-versatile)');
+        console.log('🤖 AI: Calling Groq (llama-3.3-70b-versatile) - Latest Model');
         const groqMessages = [
           { role: 'system', content: systemPrompt },
           ...historyMessages,
@@ -553,7 +553,7 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
               'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
             },
             body: JSON.stringify({
-              model: 'llama-3.1-70b-versatile',
+              model: 'llama-3.3-70b-versatile',
               messages: groqMessages,
               temperature: 0.7,
               max_tokens: 400
