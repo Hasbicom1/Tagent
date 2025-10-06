@@ -593,28 +593,13 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     
     console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
 
-    // Queue browser automation task if detected
-    let taskId = null;
+    // Note: Browser automation queueing removed due to TypeScript/JavaScript module incompatibility
+    // The queue.ts file cannot be imported from production.js (JS file)
+    // Frontend will handle task execution via /api/session/:agentId/execute endpoint
+    const taskId = hasBrowserCommand ? `task_${Date.now()}` : null;
+    
     if (hasBrowserCommand) {
-      try {
-        const { addTask, TaskType, TaskPriority } = await import('./queue.js');
-        taskId = await addTask(
-          TaskType.BROWSER_AUTOMATION,
-          {
-            instruction: userText,
-            sessionId: req.params.sessionId,
-            agentId: req.params.sessionId,
-            context: {
-              timestamp: new Date().toISOString()
-            }
-          },
-          TaskPriority.HIGH
-        );
-        console.log(`✅ BROWSER AUTOMATION QUEUED: Task ${taskId} for: "${userText}"`);
-      } catch (queueError) {
-        console.error('❌ Failed to queue browser automation:', queueError);
-        // Continue without queuing - chat still works
-      }
+      console.log(`🎯 Browser task detected, frontend will handle execution: "${userText}"`);
     }
 
     // Store both user and AI messages in chat bucket with ALL required frontend fields
