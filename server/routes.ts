@@ -782,7 +782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch {
           // best-effort in dev
         }
-        return res.redirect(`/agent?id=${encodeURIComponent(agentId)}`);
+        return res.redirect(`/live/agent/${encodeURIComponent(agentId)}`);
       }
 
       // Validate Stripe payment
@@ -842,8 +842,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.redirect('/payment-failed');
       }
 
-      // Redirect to existing split-screen chat interface using agent id
-      return res.redirect(`/agent?id=${encodeURIComponent(agentIdCreated)}`);
+      // Redirect to split-screen chat interface (live browser + chat)
+      return res.redirect(`/live/agent/${encodeURIComponent(agentIdCreated)}`);
     } catch (error) {
       console.error('Checkout success (GET) error:', error);
       return res.redirect('/payment-failed');
