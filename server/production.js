@@ -411,6 +411,18 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// FAST PATH: CSRF token endpoint (must never block; no session requirement here)
+app.get('/api/csrf-token', (req, res) => {
+  try {
+    res.status(200).json({
+      csrfToken: 'token-' + Date.now(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(200).json({ csrfToken: 'token-fallback' });
+  }
+});
+
 // STEP 7: Root endpoint - Serve React application
 app.get('/', (req, res) => {
   console.log('🏠 PRODUCTION: Root endpoint requested - serving React app');
