@@ -1,0 +1,26 @@
+[phases.setup]
+apt_packages = [
+  "curl",
+  "xvfb",        # Virtual framebuffer for headless display
+  "x11vnc",      # VNC server for display streaming
+  "fluxbox",     # Lightweight window manager
+  "libgtk-3-0",  # GTK3 for Chromium
+  "libnss3",     # Network Security Services for Chromium
+  "libatk-bridge2.0-0",
+  "libdrm2",
+  "libxkbcommon0",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxrandr2",
+  "libgbm1",
+  "libasound2",
+  "fonts-liberation",
+  "fonts-noto-color-emoji"
+]
+
+[phases.install]
+cmds = ['npm ci --production']
+
+[start]
+cmd = 'node worker-production-vnc.js'
+

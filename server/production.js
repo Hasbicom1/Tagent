@@ -20,6 +20,7 @@ import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables, getDatabase } from './database.js';
 import FreeAIService from '../services/FreeAIService.js';
+import { initQueue, queueBrowserTask, isQueueAvailable } from './queue-simple.js';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -470,12 +471,22 @@ app.get('/api/health', async (req, res) => {
 // STEP 9: Initialize Redis (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Initializing Redis...');
 let redisConnected = false;
+let queueInitialized = false;
 
 try {
   const redis = await getRedis();
   if (redis) {
     console.log('✅ PRODUCTION: Redis connection established');
     redisConnected = true;
+    
+    // Initialize task queue for browser automation
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      queueInitialized = await initQueue(redisUrl);
+      if (queueInitialized) {
+        console.log('✅ PRODUCTION: Browser automation queue initialized');
+      }
+    }
   } else {
     console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
   }
@@ -593,37 +604,50 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     
     console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
 
-    // REAL BROWSER AUTOMATION: Queue task to worker service
+    // REAL BROWSER AUTOMATION: Queue task to worker service via Redis
     let taskId = null;
     
     if (hasBrowserCommand) {
-      console.log(`🎯 Browser task detected, queueing to worker: "${userText}"`);
-      
-      // Send task to worker service via HTTP (no Redis needed)
-      const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:3001';
+      console.log(`🎯 Browser task detected, queueing: "${userText}"`);
       
       try {
-        const workerResponse = await fetch(`${workerUrl}/task`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instruction: userText,
-            sessionId: req.params.sessionId,
-            agentId: req.params.sessionId
-          }),
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        });
-        
-        if (workerResponse.ok) {
-          const workerData = await workerResponse.json();
-          taskId = workerData.taskId;
-          console.log(`✅ Task queued to worker successfully: ${taskId}`);
+        if (isQueueAvailable()) {
+          // PRIMARY: Use Redis queue for reliable task distribution
+          console.log('📋 Using Redis queue for task distribution');
+          const queueResult = await queueBrowserTask(
+            userText,
+            req.params.sessionId,
+            req.params.sessionId
+          );
+          taskId = queueResult.taskId;
+          console.log(`✅ Task queued to Redis: ${taskId}`);
         } else {
-          console.warn(`⚠️  Worker returned non-OK status: ${workerResponse.status}`);
+          // FALLBACK: Direct HTTP to worker (for development or when Redis unavailable)
+          console.log('⚠️  Redis queue not available, using direct HTTP fallback');
+          const workerUrl = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
+          
+          const workerResponse = await fetch(`${workerUrl}/task`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instruction: userText,
+              sessionId: req.params.sessionId,
+              agentId: req.params.sessionId
+            }),
+            signal: AbortSignal.timeout(5000)
+          });
+          
+          if (workerResponse.ok) {
+            const workerData = await workerResponse.json();
+            taskId = workerData.taskId;
+            console.log(`✅ Task queued via HTTP: ${taskId}`);
+          } else {
+            console.warn(`⚠️  Worker HTTP returned: ${workerResponse.status}`);
+          }
         }
       } catch (error) {
-        console.warn(`⚠️  Failed to reach worker service: ${error.message}`);
-        console.warn(`   Worker might not be running or URL incorrect: ${workerUrl}`);
+        console.warn(`⚠️  Failed to queue task: ${error.message}`);
+        console.warn(`   Chat will still work, but automation will not execute`);
         // Continue without task - chat still works
       }
     }
