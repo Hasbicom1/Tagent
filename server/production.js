@@ -585,6 +585,14 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       aiText = `I understand you said: "${userText}". I'm here to help! (Groq API temporarily unavailable)`;
     }
 
+    // Detect browser automation tasks
+    const browserKeywords = ['navigate', 'click', 'screenshot', 'scroll', 'type', 'fill', 'browser', 'website', 'page', 'url', 'open', 'search', 'google', 'find', 'book', 'buy'];
+    const hasBrowserCommand = browserKeywords.some(keyword => 
+      userText.toLowerCase().includes(keyword)
+    );
+    
+    console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
+
     // Store both user and AI messages in chat bucket with ALL required frontend fields
     const timestamp = new Date().toISOString();
     const newHistory = [
@@ -596,8 +604,8 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
         timestamp: timestamp, 
         messageType: 'chat',
         inputMethod: 'typing',
-        hasExecutableTask: null,
-        taskDescription: null
+        hasExecutableTask: hasBrowserCommand,
+        taskDescription: hasBrowserCommand ? 'Browser automation task' : null
       },
       { 
         id: `msg_${Date.now()}_agent`,
@@ -607,8 +615,8 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
         timestamp: timestamp, 
         messageType: 'chat',
         inputMethod: 'typing',
-        hasExecutableTask: null,
-        taskDescription: null
+        hasExecutableTask: hasBrowserCommand,
+        taskDescription: hasBrowserCommand ? 'Browser automation task' : null
       }
     ];
     if (!global.__chatBuckets.has(req.params.sessionId)) {
