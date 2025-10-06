@@ -88,8 +88,9 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
     });
     
     if (!sessionData.token) {
-      console.error('❌ [TOKEN] Session data missing JWT token:', sessionData);
-      throw new Error('Session does not contain JWT token');
+      console.warn('⚠️ [TOKEN] Session data missing JWT token (WebSocket will be unavailable, but chat works via HTTP):', sessionData);
+      // Return a dummy token to prevent crashes - WebSocket is optional
+      return 'no-token-available';
     }
 
     console.log('✅ [TOKEN] JWT token fetched successfully');
