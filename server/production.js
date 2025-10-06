@@ -985,21 +985,21 @@ app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
 // ===== Chat history endpoints required by frontend =====
 console.log('🛠️ PRODUCTION: Registering chat history routes');
 
-app.get('/api/session/:agentId/messages', async (req, res) => {
+app.get('/api/session/:sessionId/messages', async (req, res) => {
   try {
-    const agentId = req.params.agentId;
+    const sessionId = req.params.sessionId;
     const { getUserSession } = await import('./database.js');
-    const session = await getUserSession(agentId);
+    const session = await getUserSession(sessionId);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     if (new Date() > new Date(session.expires_at)) {
       const { updateSessionStatus } = await import('./database.js');
-      await updateSessionStatus(agentId, 'expired');
+      await updateSessionStatus(sessionId, 'expired');
       return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
     }
     global.__chatBuckets = global.__chatBuckets || new Map();
-    if (!global.__chatBuckets.has(agentId)) global.__chatBuckets.set(agentId, []);
-    const messages = global.__chatBuckets.get(agentId);
-    console.log('📋 MESSAGES: Returning', messages.length, 'messages for agentId:', agentId);
+    if (!global.__chatBuckets.has(sessionId)) global.__chatBuckets.set(sessionId, []);
+    const messages = global.__chatBuckets.get(sessionId);
+    console.log('📋 MESSAGES: Returning', messages.length, 'messages for sessionId:', sessionId);
     console.log('📋 MESSAGES: Available buckets:', Array.from(global.__chatBuckets.keys()));
     res.json(messages);
   } catch (e) {
