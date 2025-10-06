@@ -593,6 +593,30 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     
     console.log(`🔍 Browser task detection: ${hasBrowserCommand} (keywords: ${browserKeywords.filter(k => userText.toLowerCase().includes(k)).join(', ') || 'none'})`);
 
+    // Queue browser automation task if detected
+    let taskId = null;
+    if (hasBrowserCommand) {
+      try {
+        const { addTask, TaskType, TaskPriority } = await import('./queue.js');
+        taskId = await addTask(
+          TaskType.BROWSER_AUTOMATION,
+          {
+            instruction: userText,
+            sessionId: req.params.sessionId,
+            agentId: req.params.sessionId,
+            context: {
+              timestamp: new Date().toISOString()
+            }
+          },
+          TaskPriority.HIGH
+        );
+        console.log(`✅ BROWSER AUTOMATION QUEUED: Task ${taskId} for: "${userText}"`);
+      } catch (queueError) {
+        console.error('❌ Failed to queue browser automation:', queueError);
+        // Continue without queuing - chat still works
+      }
+    }
+
     // Store both user and AI messages in chat bucket with ALL required frontend fields
     const timestamp = new Date().toISOString();
     const newHistory = [
@@ -630,6 +654,9 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
       success: true,
       userMessage: userText,
       agentMessage: aiText,
+      hasExecutableTask: hasBrowserCommand,
+      taskDescription: hasBrowserCommand ? 'Browser automation task' : null,
+      taskId: taskId,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
