@@ -555,6 +555,10 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
           const groqData = await groqResp.json();
           aiText = groqData?.choices?.[0]?.message?.content?.trim() || null;
           console.log('🤖 AI: Groq responded in', (Date.now() - t0), 'ms');
+        } else {
+          // Log the actual error from Groq
+          const errorBody = await groqResp.text();
+          console.error('❌ Groq API error:', groqResp.status, groqResp.statusText, errorBody);
         }
       } catch (e) {
         console.warn('⚠️  Groq call failed, will try Ollama:', e?.message);
