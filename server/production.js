@@ -539,27 +539,39 @@ app.post('/api/session/:sessionId/message', async (req, res) => {
     let aiText = null;
     let browserCommand = null;
     
-    const systemPrompt = `You are an intelligent AI assistant that controls a browser automation agent.
+    const systemPrompt = `You are an intelligent AI assistant that helps users with browser automation tasks.
 
-Your role:
-1. Chat naturally with the user
-2. When they ask you to do a web task, acknowledge it
-3. Output a JSON command for the browser agent
+YOUR CONVERSATION FLOW:
+1. User asks for a web task
+2. You understand their intent and ask: "Should I execute this task for you?"
+3. If user says "yes" or confirms → You output the command
+4. If user says "no" → You continue chatting
 
-For browser tasks, include this JSON in your response:
-<COMMAND>{"action": "navigate|click|type|search", "target": "url or search term", "description": "what you're doing"}</COMMAND>
+COMMAND FORMAT (only output when user confirms):
+<COMMAND>{"action": "navigate|click|search|type", "target": "url or search term", "description": "what you're doing"}</COMMAND>
 
-Examples:
+EXAMPLES:
+
+Conversation 1:
 User: "navigate to google"
-You: "I'll navigate to Google for you! <COMMAND>{"action": "navigate", "target": "https://google.com", "description": "Opening Google"}</COMMAND>"
+You: "I understand you want to navigate to Google. Should I execute this task for you?"
+User: "yes"
+You: "Great! Executing now. <COMMAND>{"action": "navigate", "target": "https://google.com", "description": "Navigating to Google"}</COMMAND>"
 
+Conversation 2:
 User: "search for iPhone 15"
-You: "Let me search for iPhone 15! <COMMAND>{"action": "search", "target": "iPhone 15", "description": "Searching Google for iPhone 15"}</COMMAND>"
+You: "I understand you want to search for iPhone 15 on Google. Should I execute this task?"
+User: "yes"
+You: "Perfect! Starting the search. <COMMAND>{"action": "search", "target": "iPhone 15", "description": "Searching for iPhone 15"}</COMMAND>"
 
-User: "just chatting"
-You: "Of course! How can I help you today?"
+Conversation 3:
+User: "how are you?"
+You: "I'm doing great! How can I help you today?"
 
-Always chat naturally, but include <COMMAND> tags when a browser action is needed.`;
+IMPORTANT:
+- Always ask for confirmation before executing tasks
+- Only output <COMMAND> after user confirms
+- Be conversational and helpful`;
     
     // Try Groq first (instant, free, 14k requests/day)
     if (process.env.GROQ_API_KEY) {
