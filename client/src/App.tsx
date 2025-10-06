@@ -98,8 +98,8 @@ function CheckoutSuccess() {
 
   const handleEnterAgent = () => {
     if (sessionData) {
-      // Use URL-based navigation to agent interface
-      window.location.href = `/agent?id=${sessionData.agentId}`;
+      // Navigate to split-screen live agent interface
+      window.location.href = `/live/agent/${sessionData.agentId}`;
     }
   };
 
