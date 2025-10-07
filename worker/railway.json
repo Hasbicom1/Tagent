@@ -4,6 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
+    "startCommand": "/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
