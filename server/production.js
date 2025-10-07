@@ -697,10 +697,14 @@ CRITICAL RULES:
         // 2) Ensure execution by queuing to worker (FORCE DIRECT HTTP)
         console.log('📋 Using DIRECT HTTP to worker (no Redis dependency)');
         const workerUrls = [
-          process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+          process.env.WORKER_INTERNAL_URL,
+          process.env.WORKER_PUBLIC_URL,
           'http://worker.railway.internal:8080',
+          'http://automation-worker.railway.internal:8080',
+          'http://browser-worker.railway.internal:8080',
+          'http://vnc-worker.railway.internal:8080',
           'http://worker:8080'
-        ];
+        ].filter(Boolean);
 
         let workerResponse = null;
         let lastError = null;
