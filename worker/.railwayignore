@@ -1,0 +1,6 @@
+# Railway ignore file for worker service
+node_modules/
+.git/
+*.log
+.env
+
