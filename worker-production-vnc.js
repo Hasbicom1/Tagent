@@ -115,6 +115,63 @@ async function startVNCServer(displayNumber, vncPort) {
 }
 
 /**
+ * Create or get VNC session for a given sessionId
+ */
+async function ensureVNCSession(sessionId) {
+  let vncSession = vncSessions.get(sessionId);
+  
+  if (!vncSession) {
+    const displayNumber = vncSessions.size + 1;
+    const vncPort = 5900 + displayNumber;
+    
+    console.log(`🎬 Creating VNC session for ${sessionId}`);
+    
+    // Start Xvfb
+    const xvfbProcess = await startXvfb(displayNumber);
+    
+    // Start VNC server
+    const vncProcess = await startVNCServer(displayNumber, vncPort);
+    
+    // Start websockify (bridge VNC TCP -> WS). Prefer system websockify; fallback to python -m websockify
+    const wsPort = 6000 + displayNumber;
+    let websockifyProcess;
+    try {
+      console.log(`🔌 Starting websockify on ${wsPort} -> 127.0.0.1:${vncPort}`);
+      websockifyProcess = spawn('websockify', [wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
+    } catch (e) {
+      console.warn('⚠️ websockify binary not found, trying python module...');
+      websockifyProcess = spawn('python3', ['-m', 'websockify', wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
+    }
+
+    // Get public worker URL from environment or construct it
+    const workerPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : process.env.WORKER_PUBLIC_URL 
+      ? process.env.WORKER_PUBLIC_URL.replace(/^https?:\/\//, '')
+      : 'worker.railway.internal';
+    
+    vncSession = {
+      sessionId,
+      displayNumber,
+      vncPort,
+      wsPort,
+      xvfbProcess,
+      vncProcess,
+      websockifyProcess,
+      displayEnv: `:${displayNumber}`,
+      webSocketURL: `wss://${workerPublicUrl}:${wsPort}`,
+      createdAt: new Date()
+    };
+    
+    vncSessions.set(sessionId, vncSession);
+    
+    console.log(`✅ VNC session ready: display=${vncSession.displayEnv}, port=${vncPort}, wsURL=${vncSession.webSocketURL}`);
+  }
+  
+  return vncSession;
+}
+
+/**
  * Execute browser automation task with VNC streaming
  */
 async function executeTask(taskId, instruction, sessionId) {
@@ -135,48 +192,7 @@ async function executeTask(taskId, instruction, sessionId) {
   
   try {
     // Get or create VNC session
-    let vncSession = vncSessions.get(sessionId);
-    
-    if (!vncSession) {
-      const displayNumber = vncSessions.size + 1;
-      const vncPort = 5900 + displayNumber;
-      
-      console.log(`🎬 Creating VNC session for ${sessionId}`);
-      
-      // Start Xvfb
-      const xvfbProcess = await startXvfb(displayNumber);
-      
-      // Start VNC server
-      const vncProcess = await startVNCServer(displayNumber, vncPort);
-      
-      // Start websockify (bridge VNC TCP -> WS). Prefer system websockify; fallback to python -m websockify
-      const wsPort = 6000 + displayNumber;
-      let websockifyProcess;
-      try {
-        console.log(`🔌 Starting websockify on ${wsPort} -> 127.0.0.1:${vncPort}`);
-        websockifyProcess = spawn('websockify', [wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
-      } catch (e) {
-        console.warn('⚠️ websockify binary not found, trying python module...');
-        websockifyProcess = spawn('python3', ['-m', 'websockify', wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
-      }
-
-      vncSession = {
-        sessionId,
-        displayNumber,
-        vncPort,
-        wsPort,
-        xvfbProcess,
-        vncProcess,
-        websockifyProcess,
-        displayEnv: `:${displayNumber}`,
-        webSocketURL: `ws://worker.railway.internal:${wsPort}`,
-        createdAt: new Date()
-      };
-      
-      vncSessions.set(sessionId, vncSession);
-      
-      console.log(`✅ VNC session ready: display=${vncSession.displayEnv}, port=${vncPort}`);
-    }
+    const vncSession = await ensureVNCSession(sessionId);
     
     task.progress = 20;
     
@@ -356,22 +372,30 @@ app.get('/task/:taskId', (req, res) => {
   });
 });
 
-// Get VNC session info
-app.get('/vnc/:sessionId', (req, res) => {
-  const vncSession = vncSessions.get(req.params.sessionId);
-  
-  if (!vncSession) {
-    return res.status(404).json({ error: 'VNC session not found' });
-  }
+// Get VNC session info (creates session on-demand if not exists)
+app.get('/vnc/:sessionId', async (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    
+    // Create VNC session on-demand if it doesn't exist
+    const vncSession = await ensureVNCSession(sessionId);
 
-  res.json({
-    sessionId: vncSession.sessionId,
-    displayEnv: vncSession.displayEnv,
-    vncPort: vncSession.vncPort,
-    webSocketURL: vncSession.webSocketURL,
-    isActive: true,
-    createdAt: vncSession.createdAt
-  });
+    res.json({
+      sessionId: vncSession.sessionId,
+      displayEnv: vncSession.displayEnv,
+      vncPort: vncSession.vncPort,
+      wsPort: vncSession.wsPort,
+      webSocketURL: vncSession.webSocketURL,
+      isActive: true,
+      createdAt: vncSession.createdAt
+    });
+  } catch (error) {
+    console.error(`❌ Failed to create VNC session:`, error);
+    res.status(500).json({ 
+      error: 'Failed to create VNC session', 
+      message: error.message 
+    });
+  }
 });
 
 // Initialize Redis worker if Redis URL provided
