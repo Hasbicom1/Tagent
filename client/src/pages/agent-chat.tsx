@@ -75,13 +75,22 @@ export default function AgentChat() {
   } = useRealtimeTaskStatus(agentId, sessionInfo?.sessionId);
 
   useEffect(() => {
-    if (!agentId) {
+		if (!agentId) {
       setLocation('/');
       return;
     }
 
-    loadSessionAndMessages();
+		console.log('[SESSION] Bootstrapping session for:', agentId);
+		loadSessionAndMessages();
   }, [agentId, setLocation]);
+
+	useEffect(() => {
+		if (sessionInfo) {
+			console.log('Session Info:', sessionInfo);
+			console.log('Session ID:', sessionInfo.sessionId);
+			console.log('Agent ID:', sessionInfo.agentId);
+		}
+	}, [sessionInfo]);
 
   useEffect(() => {
     // WebSocket is OPTIONAL - only for VNC live view, not required for chat
@@ -108,7 +117,7 @@ export default function AgentChat() {
     scrollToBottom();
   }, [messages]);
 
-  const loadSessionAndMessages = async () => {
+	const loadSessionAndMessages = async () => {
     try {
       setIsLoading(true);
       
@@ -120,8 +129,17 @@ export default function AgentChat() {
         throw new Error(error.error);
       }
       
-      const session = await sessionResponse.json();
-      setSessionInfo(session);
+			const raw = await sessionResponse.json();
+			console.log('[SESSION] Bootstrap complete:', raw);
+			const normalized: SessionInfo = {
+				sessionId: raw.sessionId || raw.id || agentId,
+				agentId: raw.agentId || raw.agent_id || agentId,
+				expiresAt: raw.expiresAt || raw.expires_at || '',
+				timeRemaining: computeMinutesRemaining(raw.expiresAt || raw.expires_at || ''),
+				isActive: (raw.isActive ?? raw.active ?? true) as boolean
+			};
+			console.log('[SESSION] IDs - sessionId:', normalized.sessionId, 'agentId:', normalized.agentId);
+			setSessionInfo(normalized);
 
       // Get chat history
       const messagesResponse = await apiRequest('GET', `/api/session/${agentId}/chat-history`);
