@@ -290,7 +290,7 @@ export default function AgentChat() {
             onConnectionStateChange={(connected) => {
               setVncConnection(prev => ({ ...prev, isActive: connected }));
             }}
-            autoConnect={true}
+            autoConnect={Boolean(vncConnection.webSocketURL)}
           />
         </div>
       )}

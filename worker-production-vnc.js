@@ -16,6 +16,7 @@ const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const http = require('http');
 const express = require('express');
+const { spawnSync } = require('child_process');
 
 console.log('🤖 PRODUCTION WORKER: Starting with VNC live streaming...');
 console.log('🤖 Environment:', process.env.NODE_ENV || 'production');
@@ -143,14 +144,27 @@ async function executeTask(taskId, instruction, sessionId) {
       // Start VNC server
       const vncProcess = await startVNCServer(displayNumber, vncPort);
       
+      // Start websockify (bridge VNC TCP -> WS). Prefer system websockify; fallback to python -m websockify
+      const wsPort = 6000 + displayNumber;
+      let websockifyProcess;
+      try {
+        console.log(`🔌 Starting websockify on ${wsPort} -> 127.0.0.1:${vncPort}`);
+        websockifyProcess = spawn('websockify', [wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
+      } catch (e) {
+        console.warn('⚠️ websockify binary not found, trying python module...');
+        websockifyProcess = spawn('python3', ['-m', 'websockify', wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
+      }
+
       vncSession = {
         sessionId,
         displayNumber,
         vncPort,
+        wsPort,
         xvfbProcess,
         vncProcess,
+        websockifyProcess,
         displayEnv: `:${displayNumber}`,
-        webSocketURL: `ws://worker.railway.internal:${vncPort}`,
+        webSocketURL: `ws://worker.railway.internal:${wsPort}`,
         createdAt: new Date()
       };
       
@@ -247,6 +261,13 @@ async function executeTask(taskId, instruction, sessionId) {
         console.log(`🧹 Cleaning up browser for session ${sessionId}`);
         browser.close();
         browsers.delete(sessionId);
+      }
+      const s = vncSessions.get(sessionId);
+      if (s) {
+        s.vncProcess?.kill();
+        s.websockifyProcess?.kill();
+        s.xvfbProcess?.kill();
+        vncSessions.delete(sessionId);
       }
     }, 5 * 60 * 1000);
     

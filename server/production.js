@@ -1401,7 +1401,7 @@ const WORKER_URLS = [
 
 const WORKER_URL = WORKER_URLS[0] || 'http://worker.railway.internal:8080';
 
-// VNC stream endpoint - proxies to worker's VNC server
+// VNC stream endpoint - proxies to worker's VNC WS bridge
 app.get('/vnc/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1440,9 +1440,14 @@ app.get('/vnc/:sessionId', async (req, res) => {
       });
     }
 
-    res.setHeader('Connection', 'Upgrade');
-    res.setHeader('Upgrade', 'websocket');
-    workerResponse.body.pipe(res);
+    // Return the worker-provided WS URL for the client to connect
+    const data = await workerResponse.json();
+    return res.json({
+      webSocketURL: data.webSocketURL,
+      sessionId: data.sessionId,
+      display: data.displayEnv,
+      vncPort: data.vncPort
+    });
   } catch (error) {
     console.error('❌ VNC: Proxy error:', error.message);
     res.status(503).json({ 
@@ -1457,50 +1462,8 @@ console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER
 
 // Generic WebSocket proxy for /websocket and /ws to worker (for VNC/websockify)
 try {
-  // Create multiple proxies for different worker URLs
-  const proxies = WORKER_URLS.map(url => httpProxy.createProxyServer({
-    target: url,
-    ws: true,
-    changeOrigin: true,
-    secure: false,
-    timeout: 10000,
-    proxyTimeout: 10000,
-    family: 4,
-  }));
-
-  let currentProxyIndex = 0;
-  const getNextProxy = () => {
-    const proxy = proxies[currentProxyIndex];
-    currentProxyIndex = (currentProxyIndex + 1) % proxies.length;
-    return proxy;
-  };
-
-  server.on('upgrade', (req, socket, head) => {
-    try {
-      const url = req.url || '';
-      if (url.startsWith('/websocket') || url.startsWith('/ws')) {
-        console.log('🔌 Proxy WS upgrade → worker:', url);
-
-        const proxy = getNextProxy();
-
-        proxy.on('error', (err, req, res) => {
-          console.error('❌ WebSocket proxy error:', err.message);
-          if (res && typeof res.status === 'function' && !res.headersSent) {
-            res.status(503).json({ error: 'WebSocket proxy unavailable' });
-          }
-        });
-
-        proxy.ws(req, socket, head);
-      }
-    } catch (e) {
-      console.warn('⚠️ WS proxy upgrade failed:', e?.message || e);
-      if (socket && !socket.destroyed) {
-        socket.destroy();
-      }
-    }
-  });
-
-  console.log('🔌 PRODUCTION: WebSocket proxy enabled for /websocket and /ws →', WORKER_URL);
+  // For VNC we now return the WS URL from /vnc/:sessionId; raw WS proxy not needed
+  console.log('🔌 PRODUCTION: WS proxy not required; VNC uses worker-provided URL');
 } catch (e) {
   console.warn('⚠️ PRODUCTION: Failed to enable WS proxy:', e?.message || e);
 }
