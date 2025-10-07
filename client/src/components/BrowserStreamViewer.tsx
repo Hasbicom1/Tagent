@@ -20,8 +20,9 @@ export function BrowserStreamViewer({
   const [error, setError] = useState<string | null>(null);
 
   // Construct noVNC URL
-  // Worker exposes noVNC on port 6080 at /vnc.html
-  const vncUrl = `${workerUrl.replace(/^ws/, 'http')}:6080/vnc.html?autoconnect=true&resize=scale`;
+  // Worker exposes noVNC internally on port 6080, but Railway exposes it on main port (8080)
+  const baseUrl = workerUrl.replace(/^wss?:\/\//, '');
+  const vncUrl = `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale`;
 
   useEffect(() => {
     console.log('[VNC_VIEWER] Session ID:', sessionId);
@@ -32,7 +33,7 @@ export function BrowserStreamViewer({
     setError(null);
 
     // Check if worker is accessible
-    const workerHealthUrl = `${workerUrl.replace(/^ws/, 'http')}/health`;
+    const workerHealthUrl = `https://${baseUrl}/health`;
     fetch(workerHealthUrl, { method: 'GET' })
       .then(res => {
         if (res.ok) {

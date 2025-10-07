@@ -9,6 +9,8 @@ import json
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from playwright.async_api import async_playwright, Browser, Page
 import redis
 from rq import Queue, Worker
@@ -260,13 +262,11 @@ async def get_task_status(job_id: str):
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    return {
-        "service": "Browser Agent Worker",
-        "version": "1.0.0",
-        "status": "running",
-        "vnc": "Access live browser at http://worker-url:6080/vnc.html",
-    }
+    """Root endpoint - redirect to VNC"""
+    return RedirectResponse(url="/vnc.html")
+
+# Mount noVNC static files
+app.mount("/", StaticFiles(directory="/opt/novnc", html=True), name="novnc")
 
 
 if __name__ == "__main__":
