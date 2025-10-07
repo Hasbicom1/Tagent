@@ -1,12 +1,5 @@
 [phases.setup]
-apt_packages = ["curl"]
-
-[phases.install]
-cmds = ['npm ci --production']
-
-[phases.build]
-cmds = ['npm run build']
+aptPkgs = ['xvfb', 'x11vnc', 'fluxbox', 'x11-xserver-utils', 'xfonts-base', 'chromium']
 
 [start]
-cmd = 'npm run start'
-
+cmd = "node worker-production-vnc.js"
