@@ -117,6 +117,13 @@ export default function AgentChat() {
     scrollToBottom();
   }, [messages]);
 
+  // Helper function to compute time remaining (must be before loadSessionAndMessages)
+  const computeMinutesRemaining = (expiresAt: string): number => {
+    const ts = expiresAt ? new Date(expiresAt).getTime() : NaN;
+    if (!Number.isFinite(ts)) return 0;
+    return Math.max(0, Math.floor((ts - Date.now()) / 60000));
+  };
+
 	const loadSessionAndMessages = async () => {
     try {
       setIsLoading(true);
@@ -252,12 +259,6 @@ export default function AgentChat() {
     } else {
       return `${mins}m`;
     }
-  };
-
-  const computeMinutesRemaining = (expiresAt: string): number => {
-    const ts = expiresAt ? new Date(expiresAt).getTime() : NaN;
-    if (!Number.isFinite(ts)) return 0;
-    return Math.max(0, Math.floor((ts - Date.now()) / 60000));
   };
 
   const toggleLiveViewFullscreen = () => {
