@@ -5,20 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { 
   Send, 
   Bot, 
   User, 
-  Monitor, 
+  MessageCircle,
   Play, 
-  Square, 
   Clock, 
   CheckCircle, 
   AlertCircle,
-  Eye,
-  EyeOff,
-  Maximize2
+  X,
+  Minimize2
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -50,16 +47,9 @@ export default function AgentChat() {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [liveViewVisible, setLiveViewVisible] = useState(true);
-  const [liveViewFullscreen, setLiveViewFullscreen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
-  const [vncConnection, setVncConnection] = useState<{
-    webSocketURL?: string;
-    vncToken?: string;
-    isActive: boolean;
-  }>({ isActive: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const vncContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   // Real-time task status using existing proven infrastructure
@@ -231,6 +221,9 @@ export default function AgentChat() {
           description: "AI agent is executing your request...",
         });
       }
+
+      // Auto-minimize chat after sending (optional: comment out if you want it to stay open)
+      // setTimeout(() => setChatOpen(false), 2000);
       
     } catch (error: any) {
       console.error('Failed to send message:', error);
@@ -261,59 +254,6 @@ export default function AgentChat() {
     }
   };
 
-  const toggleLiveViewFullscreen = () => {
-    setLiveViewFullscreen(!liveViewFullscreen);
-  };
-
-  const renderLiveView = () => (
-    <Card className={`${liveViewFullscreen ? 'fixed inset-4 z-50' : 'h-full'} flex flex-col`}>
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Monitor className="w-4 h-4" />
-          <span className="font-semibold">Live Browser View</span>
-          {connectionStatus.isConnected && (
-            <Badge variant="outline" className="text-xs">
-              <CheckCircle className="w-3 h-3 mr-1" />
-              Connected
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => setLiveViewVisible(!liveViewVisible)}
-            data-testid="button-toggle-liveview"
-          >
-            {liveViewVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={toggleLiveViewFullscreen}
-            data-testid="button-fullscreen-liveview"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-      
-      {liveViewVisible && (
-        <div className="flex-1 rounded-b-lg overflow-hidden">
-          {sessionInfo?.sessionId ? (
-            <BrowserStreamViewer
-              sessionId={sessionInfo.sessionId}
-              workerUrl="wss://worker-production-6480.up.railway.app"
-            />
-          ) : (
-            <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
-              Initializing session...
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
 
   if (isLoading) {
     return (
@@ -341,31 +281,29 @@ export default function AgentChat() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-card">
+    <div className="h-screen w-screen flex flex-col bg-gray-950 overflow-hidden">
+      {/* Slim Status Bar at Top */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900/90 border-b border-gray-800 backdrop-blur-sm z-30">
         <div className="flex items-center gap-3">
-          <Bot className="w-6 h-6 text-primary" />
-          <div>
-            <h1 className="font-semibold" data-testid="text-agent-title">
-              Agent {sessionInfo.agentId}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              AI Browser Automation Agent
-            </p>
+          <Bot className="w-5 h-5 text-blue-400" />
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-400">Agent</span>
+            <span className="text-white font-medium" data-testid="text-agent-title">
+              {sessionInfo.agentId}
+            </span>
           </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
             <Clock className="w-4 h-4" />
-              <span data-testid="text-session-time">
+            <span data-testid="text-session-time">
               {formatTimeRemaining(computeMinutesRemaining(sessionInfo.expiresAt))}
             </span>
           </div>
           
           {currentTaskId && (
-            <Badge className="flex items-center gap-1">
+            <Badge className="flex items-center gap-1 bg-green-600">
               <Play className="w-3 h-3" />
               Task Running
             </Badge>
@@ -377,46 +315,120 @@ export default function AgentChat() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          {/* Chat Panel */}
-          <ResizablePanel defaultSize={50} minSize={30}>
-            <div className="h-full flex flex-col">
+      {/* FULLSCREEN BROWSER VIEW */}
+      <div className="flex-1 relative overflow-hidden">
+        {sessionInfo?.sessionId ? (
+          <BrowserStreamViewer
+            sessionId={sessionInfo.sessionId}
+            workerUrl="wss://worker-production-6480.up.railway.app"
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center text-gray-500">
+            <div className="text-center">
+              <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+              <p>Initializing browser session...</p>
+            </div>
+          </div>
+        )}
+
+        {/* FLOATING CHAT BUTTON (bottom-right) */}
+        {!chatOpen && (
+          <button
+            onClick={() => setChatOpen(true)}
+            className="fixed bottom-6 right-6 z-40 w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full shadow-2xl hover:scale-110 transition-all duration-200 flex items-center justify-center group"
+            data-testid="button-open-chat"
+          >
+            <MessageCircle className="w-7 h-7 text-white" />
+            {messages.length > 0 && (
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold border-2 border-gray-950">
+                {messages.length}
+              </div>
+            )}
+          </button>
+        )}
+
+        {/* SLIDING CHAT OVERLAY (from right) */}
+        {chatOpen && (
+          <>
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
+              onClick={() => setChatOpen(false)}
+            />
+            
+            {/* Chat Panel */}
+            <div className="fixed top-0 right-0 bottom-0 w-full sm:w-[450px] bg-gray-900 border-l border-gray-800 shadow-2xl z-50 flex flex-col animate-slide-in-right">
+              {/* Chat Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gradient-to-r from-blue-600 to-purple-600">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-white" />
+                  <h2 className="font-semibold text-white">AI Agent Chat</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setChatOpen(false)}
+                    className="text-white hover:bg-white/20"
+                    data-testid="button-minimize-chat"
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setChatOpen(false)}
+                    className="text-white hover:bg-white/20"
+                    data-testid="button-close-chat"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
               {/* Messages */}
-              <ScrollArea className="flex-1 p-4">
+              <ScrollArea className="flex-1 p-4 bg-gray-900">
                 <div className="space-y-4">
+                  {messages.length === 0 && (
+                    <div className="text-center text-gray-500 py-12">
+                      <Bot className="w-16 h-16 mx-auto mb-4 text-gray-700" />
+                      <p className="text-sm">Start chatting with your AI agent!</p>
+                      <p className="text-xs mt-2">Ask me to automate browser tasks...</p>
+                    </div>
+                  )}
+                  
                   {messages.map((message) => (
                     <div 
                       key={message.id} 
                       className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       {message.role === 'agent' && (
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Bot className="w-4 h-4 text-primary" />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                          <Bot className="w-4 h-4 text-white" />
                         </div>
                       )}
                       
-                      <Card className={`max-w-[80%] p-3 ${
+                      <div className={`max-w-[80%] rounded-2xl p-3 ${
                         message.role === 'user' 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-muted'
+                          ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white' 
+                          : 'bg-gray-800 text-gray-100'
                       }`}>
                         <p className="text-sm whitespace-pre-wrap" data-testid={`message-${message.role}`}>
                           {message.content}
                         </p>
                         {message.hasExecutableTask && (
                           <div className="mt-2 pt-2 border-t border-current/20">
-                            <p className="text-xs opacity-75">
-                              🤖 Executable Task: {message.taskDescription}
+                            <p className="text-xs opacity-75 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Task: {message.taskDescription}
                             </p>
                           </div>
                         )}
-                      </Card>
+                      </div>
                       
                       {message.role === 'user' && (
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          <User className="w-4 h-4" />
+                        <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-gray-300" />
                         </div>
                       )}
                     </div>
@@ -426,23 +438,25 @@ export default function AgentChat() {
               </ScrollArea>
 
               {/* Input */}
-              <div className="p-4 border-t">
+              <div className="p-4 border-t border-gray-800 bg-gray-900">
                 <div className="flex gap-2">
                   <Input
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Ask the AI agent to automate browser tasks..."
+                    placeholder="Type your command..."
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                     disabled={isSending}
+                    className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 focus:border-blue-500"
                     data-testid="input-message"
                   />
                   <Button 
                     onClick={sendMessage} 
                     disabled={!inputMessage.trim() || isSending}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                     data-testid="button-send-message"
                   >
                     {isSending ? (
-                      <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
                     ) : (
                       <Send className="w-4 h-4" />
                     )}
@@ -450,21 +464,9 @@ export default function AgentChat() {
                 </div>
               </div>
             </div>
-          </ResizablePanel>
-
-          <ResizableHandle />
-
-          {/* Live View Panel */}
-          <ResizablePanel defaultSize={50} minSize={30}>
-            {renderLiveView()}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </>
+        )}
       </div>
-
-      {/* Fullscreen Live View Overlay */}
-      {liveViewFullscreen && (
-        <div className="fixed inset-0 bg-black/50 z-40" onClick={toggleLiveViewFullscreen} />
-      )}
     </div>
   );
 }
