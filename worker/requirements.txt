@@ -1,0 +1,13 @@
+# Core dependencies
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+playwright==1.49.1
+
+# Redis & Queue
+redis==5.2.1
+rq==2.1.0
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.10.5
+

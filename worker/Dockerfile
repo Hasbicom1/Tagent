@@ -1,52 +1,83 @@
-# Tagent Worker - Browser Automation with Puppeteer
-FROM node:18-slim
+FROM python:3.11-slim-bookworm
 
-# Install Chromium dependencies
+# Set platform for multi-arch builds
+ARG TARGETPLATFORM
+ARG NODE_MAJOR=20
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    chromium \
-    fonts-liberation \
-    libasound2t64 \
-    libatk-bridge2.0-0 \
+    wget \
+    netcat-traditional \
+    gnupg \
+    curl \
+    unzip \
+    xvfb \
+    libxss1 \
+    libnss3 \
+    libnspr4 \
+    libasound2 \
     libatk1.0-0 \
-    libatspi2.0-0 \
+    libatk-bridge2.0-0 \
     libcups2 \
     libdbus-1-3 \
     libdrm2 \
     libgbm1 \
     libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libwayland-client0 \
     libxcomposite1 \
     libxdamage1 \
     libxfixes3 \
-    libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    fonts-unifont \
+    dbus \
+    xauth \
+    x11vnc \
+    tigervnc-tools \
+    supervisor \
+    net-tools \
+    procps \
+    git \
+    python3-numpy \
+    fontconfig \
+    fonts-dejavu \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Install noVNC
+RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
+    && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
+    && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+
+# Set up working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install dependencies
-RUN npm install
+# Playwright setup
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
+RUN mkdir -p $PLAYWRIGHT_BROWSERS_PATH
+
+# Install Chromium via Playwright
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 playwright install chromium
 
 # Copy application code
-COPY browser-agent-cdp.js ./
+COPY . .
 
-# Set Puppeteer to use system Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Set up supervisor configuration
+RUN mkdir -p /var/log/supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Expose port
-EXPOSE 8080
+# Expose ports:
+# 8080 - FastAPI worker
+# 6080 - noVNC web interface
+# 5901 - x11vnc direct VNC
+# 9222 - Chrome debugging (optional)
+EXPOSE 8080 6080 5901 9222
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8080/health', (r) => {if(r.statusCode !== 200) throw new Error()})"
-
-# Start application
-CMD ["npm", "start"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
