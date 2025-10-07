@@ -694,63 +694,48 @@ CRITICAL RULES:
           console.warn('⚠️  MCP orchestration unavailable:', e?.message || e);
         }
 
-        // 2) Ensure execution by queuing to worker (Redis preferred)
-        if (isQueueAvailable()) {
-          console.log('📋 Using Redis queue for task distribution');
-          const queueResult = await queueBrowserTask(
-            JSON.stringify(browserCommand),
-            req.params.sessionId,
-            req.params.sessionId
-          );
-          taskId = queueResult.taskId;
-          console.log(`✅ Task queued to Redis: ${taskId}`);
-        } else {
-          console.log('⚠️  Redis queue not available, attempting direct HTTP fallback');
-          
-          // Try multiple worker URL formats to handle DNS resolution issues
-          const workerUrls = [
-            process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
-            'http://worker.railway.internal:8080',
-            'http://worker:8080'
-          ];
-          
-          let workerResponse = null;
-          let lastError = null;
-          
-          for (const workerUrl of workerUrls) {
-            try {
-              console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
-              workerResponse = await fetch(`${workerUrl}/task`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  instruction: browserCommand,
-                  sessionId: req.params.sessionId,
-                  agentId: req.params.sessionId
-                }),
-                signal: AbortSignal.timeout(5000)
-              });
-              
-              if (workerResponse.ok) {
-                const workerData = await workerResponse.json();
-                taskId = workerData.taskId;
-                console.log(`✅ Task queued via HTTP: ${taskId} (${workerUrl})`);
-                break;
-              } else {
-                console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
-              }
-            } catch (error) {
-              console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
-              lastError = error;
-              continue;
+        // 2) Ensure execution by queuing to worker (FORCE DIRECT HTTP)
+        console.log('📋 Using DIRECT HTTP to worker (no Redis dependency)');
+        const workerUrls = [
+          process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+          'http://worker.railway.internal:8080',
+          'http://worker:8080'
+        ];
+
+        let workerResponse = null;
+        let lastError = null;
+
+        for (const workerUrl of workerUrls) {
+          try {
+            console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
+            workerResponse = await fetch(`${workerUrl}/task`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instruction: browserCommand,
+                sessionId: req.params.sessionId,
+                agentId: req.params.sessionId
+              }),
+              signal: AbortSignal.timeout(8000)
+            });
+
+            if (workerResponse.ok) {
+              const workerData = await workerResponse.json();
+              taskId = workerData.taskId;
+              console.log(`✅ Task queued via HTTP: ${taskId} (${workerUrl})`);
+              break;
+            } else {
+              console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
             }
+          } catch (error) {
+            console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
+            lastError = error;
+            continue;
           }
-          
-          if (!workerResponse || !workerResponse.ok) {
-            console.warn(`⚠️  Worker HTTP failed (non-critical): ${lastError?.message || 'All worker URLs failed'}`);
-            console.warn(`   Worker may not be deployed yet. Chat still works, but no browser automation.`);
-            console.warn(`   To enable automation: Deploy worker service and set WORKER_INTERNAL_URL`);
-          }
+        }
+        
+        if (!workerResponse || !workerResponse.ok) {
+          console.warn(`⚠️  Worker HTTP failed: ${lastError?.message || 'All worker URLs failed'}`);
         }
       } catch (error) {
         console.warn('⚠️  Failed to orchestrate/queue task:', error?.message || error);
