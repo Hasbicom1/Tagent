@@ -1455,10 +1455,14 @@ app.post('/api/session/:agentId/live-view', async (req, res) => {
     const sessionId = req.params.agentId;
     // Reuse worker VNC discovery: returns { webSocketURL, sessionId, displayEnv, vncPort }
     const workerUrls = [
-      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      process.env.WORKER_INTERNAL_URL,
+      process.env.WORKER_PUBLIC_URL,
       'http://worker.railway.internal:8080',
+      'http://automation-worker.railway.internal:8080',
+      'http://browser-worker.railway.internal:8080',
+      'http://vnc-worker.railway.internal:8080',
       'http://worker:8080'
-    ];
+    ].filter(Boolean);
 
     let workerResponse = null;
     let lastError = null;
@@ -1505,10 +1509,14 @@ app.post('/api/session/live-view', async (req, res) => {
     }
 
     const workerUrls = [
-      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      process.env.WORKER_INTERNAL_URL,
+      process.env.WORKER_PUBLIC_URL,
       'http://worker.railway.internal:8080',
+      'http://automation-worker.railway.internal:8080',
+      'http://browser-worker.railway.internal:8080',
+      'http://vnc-worker.railway.internal:8080',
       'http://worker:8080'
-    ];
+    ].filter(Boolean);
 
     let workerResponse = null;
     let lastError = null;
@@ -1549,16 +1557,20 @@ app.post('/api/session/live-view', async (req, res) => {
 app.get('/api/diag/worker', async (req, res) => {
   try {
     const workerUrls = [
-      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      process.env.WORKER_INTERNAL_URL,
+      process.env.WORKER_PUBLIC_URL,
       'http://worker.railway.internal:8080',
+      'http://automation-worker.railway.internal:8080',
+      'http://browser-worker.railway.internal:8080',
+      'http://vnc-worker.railway.internal:8080',
       'http://worker:8080'
-    ];
+    ].filter(Boolean);
 
     const results = [];
     for (const base of workerUrls) {
       const item = { base, health: null, vncExample: null, ok: false, error: null };
       try {
-        const healthResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+        const healthResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
         item.health = { status: healthResp.status, ok: healthResp.ok, text: await healthResp.text().catch(() => '') };
         item.ok = item.ok || healthResp.ok;
       } catch (e) {
@@ -1569,6 +1581,7 @@ app.get('/api/diag/worker', async (req, res) => {
     const anyOk = results.some(r => r.health?.ok);
     res.json({
       workerEnv: process.env.WORKER_INTERNAL_URL || null,
+      workerPublic: process.env.WORKER_PUBLIC_URL || null,
       anyOk,
       results,
       timestamp: new Date().toISOString()

@@ -620,16 +620,20 @@ router.get('/status', (req, res) => {
 router.get('/diag/worker', async (req, res) => {
   try {
     const workerUrls = [
-      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      process.env.WORKER_INTERNAL_URL,
+      process.env.WORKER_PUBLIC_URL,
       'http://worker.railway.internal:8080',
+      'http://automation-worker.railway.internal:8080',
+      'http://browser-worker.railway.internal:8080',
+      'http://vnc-worker.railway.internal:8080',
       'http://worker:8080'
-    ];
+    ].filter(Boolean);
 
     const results = [];
     for (const base of workerUrls) {
       const item = { base, health: null, ok: false, error: null };
       try {
-        const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+        const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
         item.health = { status: r.status, ok: r.ok, text: await r.text().catch(() => '') };
         item.ok = item.ok || r.ok;
       } catch (e) {
