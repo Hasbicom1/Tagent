@@ -323,7 +323,8 @@ export function VNCClient({
 
   // Auto-connect on mount or URL change
   useEffect(() => {
-    if (autoConnect && webSocketURL && !connectionState.connected && !connectionState.connecting) {
+    // Connect even if webSocketURL is not yet provided; we will fetch it via auth endpoint
+    if (autoConnect && !connectionState.connected && !connectionState.connecting) {
       connectVNC();
     }
 

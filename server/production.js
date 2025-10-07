@@ -1445,6 +1445,86 @@ app.get('/vnc/:sessionId', async (req, res) => {
 
 console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER_URL}`);
 
+// Auth endpoint used by frontend VNCClient to obtain WS URL/token
+app.post('/api/session/:agentId/live-view', async (req, res) => {
+  try {
+    const sessionId = req.params.agentId;
+    // Reuse worker VNC discovery: returns { webSocketURL, sessionId, displayEnv, vncPort }
+    const workerUrls = [
+      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      'http://worker.railway.internal:8080',
+      'http://worker:8080'
+    ];
+
+    let workerResponse = null;
+    let lastError = null;
+
+    for (const workerUrl of workerUrls) {
+      try {
+        const url = `${workerUrl}/vnc/${encodeURIComponent(sessionId)}`;
+        console.log('🔐 VNC auth: requesting worker VNC info at', url);
+        workerResponse = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (workerResponse.ok) break;
+        console.warn('⚠️ VNC auth: worker returned', workerResponse.status);
+      } catch (e) {
+        lastError = e;
+        console.warn('⚠️ VNC auth: worker connect failed:', e?.message || e);
+      }
+    }
+
+    if (!workerResponse || !workerResponse.ok) {
+      return res.status(503).json({ error: 'Worker unavailable', message: lastError?.message || 'No worker response' });
+    }
+
+    const data = await workerResponse.json();
+    // Shape for VNCClient
+    const out = {
+      webSocketURL: data.webSocketURL,
+      vncToken: null,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      sessionId: data.sessionId,
+      displayNumber: data.displayEnv
+    };
+    return res.json(out);
+  } catch (e) {
+    console.error('❌ VNC auth error:', e?.message || e);
+    return res.status(500).json({ error: 'VNC auth failed', message: e?.message || String(e) });
+  }
+});
+
+// Lightweight diagnostics to verify Worker reachability from Tagent
+app.get('/api/diag/worker', async (req, res) => {
+  try {
+    const workerUrls = [
+      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      'http://worker.railway.internal:8080',
+      'http://worker:8080'
+    ];
+
+    const results = [];
+    for (const base of workerUrls) {
+      const item = { base, health: null, vncExample: null, ok: false, error: null };
+      try {
+        const healthResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+        item.health = { status: healthResp.status, ok: healthResp.ok, text: await healthResp.text().catch(() => '') };
+        item.ok = item.ok || healthResp.ok;
+      } catch (e) {
+        item.error = e?.message || String(e);
+      }
+      results.push(item);
+    }
+    const anyOk = results.some(r => r.health?.ok);
+    res.json({
+      workerEnv: process.env.WORKER_INTERNAL_URL || null,
+      anyOk,
+      results,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'diag_failed', message: e?.message || String(e) });
+  }
+});
+
 // Generic WebSocket proxy for /websocket and /ws to worker (for VNC/websockify)
 try {
   // For VNC we now return the WS URL from /vnc/:sessionId; raw WS proxy not needed
