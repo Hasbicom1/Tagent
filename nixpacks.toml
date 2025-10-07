@@ -1,8 +1,0 @@
-[phases.setup]
-aptPkgs = ['xvfb', 'x11vnc', 'fluxbox', 'x11-xserver-utils', 'xfonts-base', 'websockify']
-
-[phases.build]
-cmds = ['npx playwright install --with-deps chromium']
-
-[start]
-cmd = "node worker-production-vnc.js"
