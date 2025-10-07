@@ -90,11 +90,13 @@ export function VNCClient({
       
       const { csrfToken } = await csrfResponse.json();
 
-      // Request VNC authentication token
+      // Request VNC authentication token (alias supports body ids)
+      const safeAgent = agentId || sessionId;
+      if (!safeAgent) throw new Error('Missing agent/session id for live-view');
       const response = await apiRequest(
         'POST',
-        `/api/session/${agentId}/live-view`,
-        { csrfToken }
+        '/api/session/live-view',
+        { csrfToken, agentId: safeAgent, sessionId }
       );
 
       if (!response.ok) {
