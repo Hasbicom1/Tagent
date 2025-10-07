@@ -23,7 +23,7 @@ import {
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
-import { VNCClient } from '@/components/vnc/VNCClient';
+import { BrowserStreamViewer } from '@/components/BrowserStreamViewer';
 
 interface Message {
   id: string;
@@ -301,16 +301,9 @@ export default function AgentChat() {
       {liveViewVisible && (
         <div className="flex-1 rounded-b-lg overflow-hidden">
           {sessionInfo?.sessionId ? (
-            <VNCClient
+            <BrowserStreamViewer
               sessionId={sessionInfo.sessionId}
-              agentId={sessionInfo.agentId}
-              webSocketURL={vncConnection.webSocketURL}
-              vncToken={vncConnection.vncToken}
-              className="h-full"
-              onConnectionStateChange={(connected) => {
-                setVncConnection(prev => ({ ...prev, isActive: connected }));
-              }}
-              autoConnect={true}
+              workerUrl="wss://worker-production-6480.up.railway.app"
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">

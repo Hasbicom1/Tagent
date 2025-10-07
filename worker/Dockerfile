@@ -1,44 +1,27 @@
-# Dockerfile for Playwright Browser Automation Worker
-FROM node:18-bullseye-slim
+# Tagent Worker - Browser Automation with Puppeteer
+FROM node:18-slim
 
-# Install system dependencies required for Playwright
+# Install Chromium dependencies
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
+    chromium \
     fonts-liberation \
-    libasound2 \
+    libasound2t64 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
-    libc6 \
-    libcairo2 \
+    libatspi2.0-0 \
     libcups2 \
     libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgcc1 \
-    libgconf-2-4 \
-    libgdk-pixbuf2.0-0 \
-    libglib2.0-0 \
+    libdrm2 \
+    libgbm1 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
+    libwayland-client0 \
     libxcomposite1 \
-    libxcursor1 \
     libxdamage1 \
-    libxext6 \
     libxfixes3 \
-    libxi6 \
+    libxkbcommon0 \
     libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    lsb-release \
-    wget \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -46,49 +29,24 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY package.json ./
 
-# Install Node.js dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install dependencies
+RUN npm install
 
-# Copy worker source code
-COPY worker/ ./worker/
-COPY shared/ ./shared/
+# Copy application code
+COPY browser-agent-cdp.js ./
 
-# Install TypeScript for compilation
-RUN npm install -g typescript tsx
+# Set Puppeteer to use system Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Compile TypeScript
-RUN tsc --project . --outDir ./dist
-
-# Install Playwright browsers
-RUN npx playwright install chromium firefox
-RUN npx playwright install-deps
-
-# Create user for running the worker (security best practice)
-RUN groupadd -r worker && useradd -r -g worker -G audio,video worker \
-    && mkdir -p /home/worker/Downloads \
-    && chown -R worker:worker /home/worker \
-    && chown -R worker:worker /app
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV WORKER_ID=worker-1
-ENV BROWSER_TYPE=chromium
-ENV MAX_CONCURRENT_BROWSERS=3
-ENV TASK_TIMEOUT=300000
-ENV HEADLESS=true
+# Expose port
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD node -e "require('./dist/worker/health-check.js')"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:8080/health', (r) => {if(r.statusCode !== 200) throw new Error()})"
 
-# Switch to worker user
-USER worker
-
-# Expose port for health check endpoint (optional)
-EXPOSE 3001
-
-# Set the startup command
-CMD ["node", "./dist/worker/worker.js"]
+# Start application
+CMD ["npm", "start"]

@@ -1,59 +1,17 @@
 {
-  "name": "phoenix-7742-worker",
+  "name": "tagent-worker",
   "version": "1.0.0",
-  "description": "PHOENIX-7742 Containerized Browser Automation Worker",
   "type": "module",
-  "main": "dist/worker/worker.js",
+  "description": "Browser automation worker with CDP streaming",
+  "main": "browser-agent-cdp.js",
   "scripts": {
-    "build": "tsc --project .",
-    "start": "node dist/worker/worker.js",
-    "dev": "tsx worker/worker.ts",
-    "health": "node dist/worker/health-check.js",
-    "test": "node --test dist/worker/test/*.js",
-    "clean": "rm -rf dist",
-    "check": "tsc --noEmit",
-    "lint": "echo 'Linting worker code...'",
-    "docker:build": "docker build -t phoenix-worker -f Dockerfile .",
-    "docker:run": "docker run --rm -e REDIS_URL=redis://host.docker.internal:6379 phoenix-worker",
-    "compose:up": "docker-compose -f ../docker-compose.worker.yml up",
-    "compose:scale": "docker-compose -f ../docker-compose.worker.yml up --scale worker-scale=3",
-    "compose:down": "docker-compose -f ../docker-compose.worker.yml down"
+    "start": "node browser-agent-cdp.js",
+    "dev": "node --watch browser-agent-cdp.js"
   },
-  "keywords": [
-    "browser-automation",
-    "playwright",
-    "bullmq",
-    "redis",
-    "containerized",
-    "scalable",
-    "ai-agent"
-  ],
-  "author": "PHOENIX-7742 Team",
-  "license": "MIT",
   "dependencies": {
+    "puppeteer": "^24.2.0",
     "bullmq": "^5.58.5",
-    "ioredis": "^5.7.0",
-    "playwright": "^1.55.0",
-    "openai": "^5.20.1",
-    "ws": "^8.18.0",
-    "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "20.16.11",
-    "@types/ws": "^8.5.13",
-    "tsx": "^4.19.1",
-    "typescript": "5.6.3"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/phoenix-7742-worker"
-  },
-  "bugs": {
-    "url": "https://github.com/your-org/phoenix-7742-worker/issues"
-  },
-  "homepage": "https://github.com/your-org/phoenix-7742-worker#readme"
+    "express": "^4.21.2",
+    "ws": "^8.18.3"
+  }
 }
