@@ -1496,6 +1496,55 @@ app.post('/api/session/:agentId/live-view', async (req, res) => {
   }
 });
 
+// Alias: allow POST /api/session/live-view with { agentId | sessionId } in body
+app.post('/api/session/live-view', async (req, res) => {
+  try {
+    const sessionId = req.body?.agentId || req.body?.sessionId;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'agentId_required', message: 'Provide agentId or sessionId in body' });
+    }
+
+    const workerUrls = [
+      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      'http://worker.railway.internal:8080',
+      'http://worker:8080'
+    ];
+
+    let workerResponse = null;
+    let lastError = null;
+
+    for (const workerUrl of workerUrls) {
+      try {
+        const url = `${workerUrl}/vnc/${encodeURIComponent(sessionId)}`;
+        console.log('🔐 VNC alias auth: requesting worker VNC info at', url);
+        workerResponse = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (workerResponse.ok) break;
+        console.warn('⚠️ VNC alias auth: worker returned', workerResponse.status);
+      } catch (e) {
+        lastError = e;
+        console.warn('⚠️ VNC alias auth: worker connect failed:', e?.message || e);
+      }
+    }
+
+    if (!workerResponse || !workerResponse.ok) {
+      return res.status(503).json({ error: 'Worker unavailable', message: lastError?.message || 'No worker response' });
+    }
+
+    const data = await workerResponse.json();
+    const out = {
+      webSocketURL: data.webSocketURL,
+      vncToken: null,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      sessionId: data.sessionId,
+      displayNumber: data.displayEnv
+    };
+    return res.json(out);
+  } catch (e) {
+    console.error('❌ VNC alias auth error:', e?.message || e);
+    return res.status(500).json({ error: 'VNC auth failed', message: e?.message || String(e) });
+  }
+});
+
 // Lightweight diagnostics to verify Worker reachability from Tagent
 app.get('/api/diag/worker', async (req, res) => {
   try {

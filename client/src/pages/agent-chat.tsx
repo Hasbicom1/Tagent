@@ -283,7 +283,7 @@ export default function AgentChat() {
         <div className="flex-1 rounded-b-lg overflow-hidden">
           <VNCClient
             sessionId={sessionInfo?.sessionId || ''}
-            agentId={sessionInfo?.agentId || ''}
+            agentId={sessionInfo?.agentId || sessionInfo?.sessionId || ''}
             webSocketURL={vncConnection.webSocketURL}
             vncToken={vncConnection.vncToken}
             className="h-full"
