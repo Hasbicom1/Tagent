@@ -1,0 +1,5 @@
+[33m99e33c2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Docs: Add architecture documentation proving Groq is now the orchestrator brain
+[33m216b6d4[m Fix: Update Groq system prompt to immediately generate browser commands without confirmation - make Groq the real orchestrator brain
+[33m18f3296[m Hotfix: add non-blocking /api/csrf-token endpoint in production.js to stop 502 on token fetch
+[33m01d3e72[m Fix: prefer Socket.IO path /ws/socket.io/ first in WS client endpoints
+[33mcdbc206[m Feat: add http-proxy WS proxy for /websocket and /ws to worker; keep VNC HTTP proxy

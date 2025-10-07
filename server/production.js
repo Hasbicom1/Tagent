@@ -1390,117 +1390,40 @@ try {
   console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
 }
 
-// STEP 13B: VNC Proxy Routes (forward VNC traffic to worker)
-const WORKER_URL = process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080';
+// STEP 13B: Simple Browser Worker Integration
+// Worker URL with multiple fallback options
+const WORKER_URLS = [
+  process.env.WORKER_INTERNAL_URL,
+  'http://worker.railway.internal:8080',
+  'http://worker:8080',
+  'http://localhost:8080' // fallback for testing
+].filter(Boolean);
 
-         // VNC stream endpoint - proxies to worker's VNC server
-         app.get('/vnc/:sessionId', async (req, res) => {
+const WORKER_URL = WORKER_URLS[0] || 'http://worker.railway.internal:8080';
+
+         // Simple task status endpoint - no streaming needed
+         app.get('/task/:taskId', async (req, res) => {
+           console.log('📊 PRODUCTION: Task status requested for:', req.params.taskId);
            try {
-             const { sessionId } = req.params;
-             console.log(`📺 VNC: Proxying session ${sessionId} to worker at ${WORKER_URL}`);
-             
-             // Try multiple worker URL formats to handle DNS resolution issues
-             const workerUrls = [
-               WORKER_URL,
-               'http://worker.railway.internal:8080',
-               'http://worker:8080',
-               'http://localhost:8080' // fallback for testing
-             ];
-             
-             let workerResponse = null;
-             let lastError = null;
-             
-             for (const workerUrl of workerUrls) {
-               try {
-                 console.log(`🔄 VNC: Trying worker URL: ${workerUrl}`);
-                 const workerVNCUrl = `${workerUrl}/vnc/${sessionId}`;
-                 workerResponse = await fetch(workerVNCUrl, {
-                   signal: AbortSignal.timeout(5000)
-                 });
-                 
-                 if (workerResponse.ok) {
-                   console.log(`✅ VNC: Connected to worker at ${workerUrl}`);
-                   break;
-                 } else {
-                   console.warn(`⚠️ VNC: Worker ${workerUrl} returned ${workerResponse.status}`);
-                 }
-               } catch (error) {
-                 console.warn(`⚠️ VNC: Failed to connect to ${workerUrl}: ${error.message}`);
-                 lastError = error;
-                 continue;
-               }
+             const workerUrl = WORKER_URL;
+
+             const workerResponse = await fetch(`${workerUrl}/task/${req.params.taskId}`, {
+               signal: AbortSignal.timeout(5000)
+             });
+
+             if (!workerResponse.ok) {
+               return res.status(workerResponse.status).json({ error: 'Task not found or worker unavailable' });
              }
-    
-    if (!workerResponse.ok) {
-      console.warn(`⚠️  VNC: Worker returned ${workerResponse.status}`);
-      return res.status(workerResponse.status).json({ 
-        error: 'VNC session not available',
-        workerStatus: workerResponse.status 
-      });
-    }
-    
-    // Set headers for WebSocket upgrade
-    res.setHeader('Connection', 'Upgrade');
-    res.setHeader('Upgrade', 'websocket');
-    
-    // Pipe the VNC stream
-    workerResponse.body.pipe(res);
-  } catch (error) {
-    console.error('❌ VNC: Proxy error:', error.message);
-    res.status(503).json({ 
-      error: 'VNC service unavailable', 
-      message: error.message,
-      workerUrl: WORKER_URL
-    });
-  }
-});
 
-console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER_URL}`);
+             const taskData = await workerResponse.json();
+             res.json(taskData);
+           } catch (error) {
+             console.error('❌ PRODUCTION: Failed to get task status:', error);
+             res.status(503).json({ error: 'Worker service unavailable', message: error.message });
+           }
+         });
 
-// STEP 13C: Generic WebSocket proxy for /websocket and /ws to worker (for VNC/websockify)
-try {
-  const proxy = httpProxy.createProxyServer({
-    target: WORKER_URL,
-    ws: true,
-    changeOrigin: true,
-    secure: false,
-    // Add timeout and retry configuration
-    timeout: 10000,
-    proxyTimeout: 10000,
-    // Force IPv4 to avoid IPv6 DNS issues
-    family: 4,
-  });
-
-  // Upgrade handler (server-level) for WebSocket paths
-  server.on('upgrade', (req, socket, head) => {
-    try {
-      const url = req.url || '';
-      if (url.startsWith('/websocket') || url.startsWith('/ws')) {
-        console.log('🔌 Proxy WS upgrade → worker:', url);
-        
-        // Add error handling for proxy connection
-        proxy.on('error', (err, req, res) => {
-          console.error('❌ WebSocket proxy error:', err.message);
-          if (res && !res.headersSent) {
-            res.status(503).json({ error: 'WebSocket proxy unavailable' });
-          }
-        });
-        
-        proxy.ws(req, socket, head);
-      }
-    } catch (e) {
-      console.warn('⚠️ WS proxy upgrade failed:', e?.message || e);
-      // Close the socket if proxy fails
-      if (socket && !socket.destroyed) {
-        socket.destroy();
-      }
-    }
-  });
-
-  console.log('🔌 PRODUCTION: WebSocket proxy enabled for /websocket and /ws →', WORKER_URL);
-} catch (e) {
-  console.warn('⚠️ PRODUCTION: Failed to enable WS proxy:', e?.message || e);
-}
+console.log(`✅ PRODUCTION: Simple browser worker integration ready: ${WORKER_URL}`);
 
 // STEP 14: Server listening (proven pattern)
 server.listen(port, host, () => {

@@ -5,7 +5,7 @@
     "nixpacksConfigPath": "nixpacks-worker.toml"
   },
   "deploy": {
-    "startCommand": "node worker-production-vnc.js",
+    "startCommand": "node worker/simple-browser-worker.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
