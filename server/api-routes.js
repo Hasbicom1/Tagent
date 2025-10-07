@@ -616,6 +616,39 @@ router.get('/status', (req, res) => {
   });
 });
 
+// Worker diagnostics here too, to guarantee availability regardless of route order in production.js
+router.get('/diag/worker', async (req, res) => {
+  try {
+    const workerUrls = [
+      process.env.WORKER_INTERNAL_URL || 'http://worker.railway.internal:8080',
+      'http://worker.railway.internal:8080',
+      'http://worker:8080'
+    ];
+
+    const results = [];
+    for (const base of workerUrls) {
+      const item = { base, health: null, ok: false, error: null };
+      try {
+        const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+        item.health = { status: r.status, ok: r.ok, text: await r.text().catch(() => '') };
+        item.ok = item.ok || r.ok;
+      } catch (e) {
+        item.error = e?.message || String(e);
+      }
+      results.push(item);
+    }
+    res.json({
+      from: 'api-router',
+      workerEnv: process.env.WORKER_INTERNAL_URL || null,
+      anyOk: results.some(x => x.health?.ok),
+      results,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'diag_failed', message: e?.message || String(e) });
+  }
+});
+
 // Test endpoint
 router.get('/test', (req, res) => {
   console.log('🧪 API: Test endpoint requested');
