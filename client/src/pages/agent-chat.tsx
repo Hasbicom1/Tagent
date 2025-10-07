@@ -281,17 +281,23 @@ export default function AgentChat() {
       
       {liveViewVisible && (
         <div className="flex-1 rounded-b-lg overflow-hidden">
-          <VNCClient
-            sessionId={sessionInfo?.sessionId || ''}
-            agentId={sessionInfo?.agentId || sessionInfo?.sessionId || ''}
-            webSocketURL={vncConnection.webSocketURL}
-            vncToken={vncConnection.vncToken}
-            className="h-full"
-            onConnectionStateChange={(connected) => {
-              setVncConnection(prev => ({ ...prev, isActive: connected }));
-            }}
-            autoConnect={true}
-          />
+          {sessionInfo?.sessionId ? (
+            <VNCClient
+              sessionId={sessionInfo.sessionId}
+              agentId={sessionInfo.agentId}
+              webSocketURL={vncConnection.webSocketURL}
+              vncToken={vncConnection.vncToken}
+              className="h-full"
+              onConnectionStateChange={(connected) => {
+                setVncConnection(prev => ({ ...prev, isActive: connected }));
+              }}
+              autoConnect={true}
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
+              Initializing session...
+            </div>
+          )}
         </div>
       )}
     </Card>
