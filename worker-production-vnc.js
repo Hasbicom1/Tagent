@@ -18,6 +18,14 @@ const http = require('http');
 const express = require('express');
 const { spawnSync } = require('child_process');
 
+console.log('==========================================');
+console.log('🔌 WORKER STARTUP - REDIS CONFIGURATION');
+console.log('==========================================');
+console.log('REDIS_PRIVATE_URL:', process.env.REDIS_PRIVATE_URL || 'NOT SET');
+console.log('REDIS_PUBLIC_URL:', process.env.REDIS_PUBLIC_URL || 'NOT SET');
+console.log('REDIS_URL:', process.env.REDIS_URL || 'NOT SET');
+console.log('==========================================');
+
 console.log('🤖 PRODUCTION WORKER: Starting with VNC live streaming...');
 console.log('🤖 Environment:', process.env.NODE_ENV || 'production');
 console.log('🤖 Port:', process.env.PORT || '8080');
@@ -29,10 +37,7 @@ const config = {
   workerId: process.env.WORKER_ID || `worker-${Math.random().toString(36).substr(2, 9)}`
 };
 
-console.log('🔌 Redis configuration:');
-console.log('   REDIS_PRIVATE_URL:', process.env.REDIS_PRIVATE_URL ? 'SET (using this)' : 'not set');
-console.log('   REDIS_URL:', process.env.REDIS_URL ? 'SET' : 'not set');
-console.log('   Using:', config.redisUrl ? config.redisUrl.replace(/:[^:@]+@/, ':***@') : 'NONE (HTTP mode)');
+console.log('✅ Redis connection using:', process.env.REDIS_PRIVATE_URL || process.env.REDIS_URL || 'NONE');
 
 // In-memory task storage (fallback when no Redis)
 const tasks = new Map();
@@ -143,13 +148,6 @@ async function ensureVNCSession(sessionId) {
       websockifyProcess = spawn('python3', ['-m', 'websockify', wsPort.toString(), `127.0.0.1:${vncPort}`], { stdio: 'ignore', detached: true });
     }
 
-    // Get public worker URL from environment or construct it
-    const workerPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
-      ? `${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : process.env.WORKER_PUBLIC_URL 
-      ? process.env.WORKER_PUBLIC_URL.replace(/^https?:\/\//, '')
-      : 'worker.railway.internal';
-    
     vncSession = {
       sessionId,
       displayNumber,
@@ -159,13 +157,15 @@ async function ensureVNCSession(sessionId) {
       vncProcess,
       websockifyProcess,
       displayEnv: `:${displayNumber}`,
-      webSocketURL: `wss://${workerPublicUrl}:${wsPort}`,
+      webSocketURL: `wss://worker-production-6480.up.railway.app:${wsPort}`,
       createdAt: new Date()
     };
     
+    console.log('🌐 VNC WebSocket URL:', `wss://worker-production-6480.up.railway.app:${wsPort}`);
+    
     vncSessions.set(sessionId, vncSession);
     
-    console.log(`✅ VNC session ready: display=${vncSession.displayEnv}, port=${vncPort}, wsURL=${vncSession.webSocketURL}`);
+    console.log(`✅ VNC session ready: display=${vncSession.displayEnv}, port=${vncPort}`);
   }
   
   return vncSession;
