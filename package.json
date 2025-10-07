@@ -5,8 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && npm run build-worker",
-    "build-worker": "esbuild worker/browser-engine-vnc.ts worker/vnc-manager.ts worker/browser-engine.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/worker",
+    "build": "vite build",
+    "build-worker": "echo 'Worker is Python-based, skipping Node.js worker build'",
     "build-full": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "node server/production.js",
     "start-test": "node test-server.js",
