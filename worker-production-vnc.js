@@ -24,10 +24,15 @@ console.log('🤖 Port:', process.env.PORT || '8080');
 
 // Configuration
 const config = {
-  redisUrl: process.env.REDIS_URL || null,
+  redisUrl: process.env.REDIS_PUBLIC_URL || process.env.REDIS_URL || null,
   port: parseInt(process.env.PORT || '8080'),
   workerId: process.env.WORKER_ID || `worker-${Math.random().toString(36).substr(2, 9)}`
 };
+
+console.log('🔌 Redis configuration:');
+console.log('   REDIS_PUBLIC_URL:', process.env.REDIS_PUBLIC_URL ? 'SET (using this)' : 'not set');
+console.log('   REDIS_URL:', process.env.REDIS_URL ? 'SET' : 'not set');
+console.log('   Using:', config.redisUrl ? config.redisUrl.replace(/:[^:@]+@/, ':***@') : 'NONE (HTTP mode)');
 
 // In-memory task storage (fallback when no Redis)
 const tasks = new Map();
