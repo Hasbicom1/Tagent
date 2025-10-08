@@ -27,7 +27,7 @@ export function BrowserStreamViewer({
   const baseUrl = workerUrl.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '');
   // Build vncUrl dynamically once we have the token
   const vncUrl = auth
-    ? `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify&token=${encodeURIComponent(auth.token)}&sessionId=${encodeURIComponent(sessionId)}&password=${encodeURIComponent(auth.vncPassword)}`
+    ? `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify?token=${encodeURIComponent(auth.token)}&sessionId=${encodeURIComponent(sessionId)}&password=${encodeURIComponent(auth.vncPassword)}`
     : `https://${baseUrl}/vnc.html`;
 
   useEffect(() => {
