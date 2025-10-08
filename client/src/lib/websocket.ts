@@ -120,11 +120,8 @@ export class WebSocketClient {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const endpoints = [
-          // Prefer Socket.IO path exposed by the server
-          `${protocol}//${host}/ws/socket.io/`,
-          // Raw WS endpoints (proxy forwards to worker if present)
-          this.config.url!,
-          `${this.config.url!.replace('/ws', '')}/websocket`
+          // Use only the configured raw WS endpoint to avoid invalid socket.io/raw websocket attempts
+          this.config.url!
         ];
         
         let currentEndpoint = 0;

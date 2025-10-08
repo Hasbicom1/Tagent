@@ -95,7 +95,8 @@ export function BrowserStreamViewer({
         src={vncUrl}
         className="flex-1 w-full border-0"
         title="Live Browser View"
-        allow="clipboard-read; clipboard-write"
+        allow="clipboard-read; clipboard-write; fullscreen"
+        allowFullScreen
         sandbox="allow-same-origin allow-scripts allow-forms allow-modals"
       />
 

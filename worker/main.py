@@ -7,7 +7,7 @@ import os
 import asyncio
 import json
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -316,17 +316,17 @@ async def root():
 # Lightweight WebSocket proxy: /websockify → ws://127.0.0.1:6080
 # Bridges the browser's WS connection (Metal Edge 8080) to local noVNC websockify on 6080
 @app.websocket("/websockify")
-async def websockify_proxy(ws):
+async def websockify_proxy(websocket: WebSocket):
     target_host = "127.0.0.1"
     target_port = 6080
     try:
-        await ws.accept()
+        await websocket.accept()
         uri = f"ws://{target_host}:{target_port}"
         async with websockets.connect(uri) as upstream:
             async def client_to_upstream():
                 try:
                     while True:
-                        data = await ws.receive_bytes()
+                        data = await websocket.receive_bytes()
                         await upstream.send(data)
                 except Exception:
                     try:
@@ -338,12 +338,12 @@ async def websockify_proxy(ws):
                 try:
                     async for message in upstream:
                         if isinstance(message, bytes):
-                            await ws.send_bytes(message)
+                            await websocket.send_bytes(message)
                         else:
-                            await ws.send_text(message)
+                            await websocket.send_text(message)
                 except Exception:
                     try:
-                        await ws.close()
+                        await websocket.close()
                     except Exception:
                         pass
 
@@ -352,7 +352,7 @@ async def websockify_proxy(ws):
     except Exception as e:
         logger.error(f"❌ Websockify proxy error: {e}")
         try:
-            await ws.close()
+            await websocket.close()
         except Exception:
             pass
 
