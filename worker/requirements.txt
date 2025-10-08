@@ -10,7 +10,7 @@ rq==2.1.0
 # Utilities
 python-dotenv==1.0.1
 pydantic>=2.11.5
-websockets==12.0
+websockets>=15.0.1
 PyJWT==2.9.0
 
 # REAL AI FRAMEWORKS - ACTUAL PACKAGES
