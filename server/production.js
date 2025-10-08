@@ -898,34 +898,56 @@ app.get('/api/session/:sessionId', async (req, res) => {
 app.post('/api/session/:sessionId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Session execute requested for:', req.params.sessionId);
   try {
-    // Import and use the REAL agent orchestrator
-    const { RealAgentOrchestrator } = await import('./agents/real-agent-orchestrator.js');
-    const agent = new RealAgentOrchestrator();
-    await agent.initialize();
+    // Route directly to worker with real AI frameworks
+    const workerUrls = [
+      'https://worker-production-6480.up.railway.app',
+      'http://worker.railway.internal:8080'
+    ];
     
-    const task = {
-      id: `execute_${Date.now()}`,
-      sessionId: req.params.sessionId,
-      message: req.body.taskDescription || req.body.message || 'Execute task',
-      context: req.body.context
-    };
+    let workerResponse = null;
+    let lastError = null;
     
-    const response = await agent.executeTaskWithRealAgent({
-      id: task.id,
-      instruction: task.message,
-      sessionId: task.sessionId,
-      context: task.context,
-      priority: 1
-    });
+    for (const workerUrl of workerUrls) {
+      try {
+        console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
+        workerResponse = await fetch(`${workerUrl}/task`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instruction: req.body.taskDescription || req.body.message || 'Execute task',
+            sessionId: req.params.sessionId,
+            agentId: req.params.sessionId
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+        
+        if (workerResponse.ok) {
+          console.log(`✅ Task: Worker ${workerUrl} responded successfully`);
+          break;
+        } else {
+          console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    if (!workerResponse || !workerResponse.ok) {
+      throw new Error(`All workers failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    }
+    
+    const result = await workerResponse.json();
     
     res.json({
-      success: response.success,
+      success: result.success,
       sessionId: req.params.sessionId,
-      task: response.result,
-      actions: response.actionsExecuted,
-      screenshot: response.screenshot,
-      agentType: response.agentType,
-      executionTime: response.executionTime,
+      task: result.data,
+      actions: result.actionsExecuted || 0,
+      screenshot: result.screenshot,
+      agentType: result.agentType || 'worker',
+      executionTime: result.executionTime || 0,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
