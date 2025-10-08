@@ -203,40 +203,75 @@ async def health_check():
 @app.post("/task")
 async def create_task(task_data: Dict[str, Any]):
     """
-    Create a browser automation task
+    Execute a browser automation task DIRECTLY (no queue)
     Expected JSON format:
     {
         "sessionId": "automation_cs_live_xxx",
-        "actions": [
-            {"navigate": "https://example.com"},
-            {"type": {"selector": "#search", "text": "hello"}},
-            {"click": {"selector": "#submit"}}
-        ]
+        "action": "navigate",
+        "target": "https://google.com",
+        "description": "Opening Google"
     }
     """
-    if not task_queue:
-        raise HTTPException(status_code=503, detail="Redis queue not available")
-    
     try:
         session_id = task_data.get('sessionId', 'default')
+        action = task_data.get('action')
+        target = task_data.get('target')
+        description = task_data.get('description', 'Executing task')
+        
         logger.info(f"📥 Received task for session: {session_id}")
+        logger.info(f"🎯 Action: {action}, Target: {target}")
         
-        # Enqueue task
-        job = task_queue.enqueue(
-            process_task,
-            json.dumps(task_data),
-            job_timeout='5m',
-            result_ttl=3600
-        )
+        # Execute task DIRECTLY using the global browser
+        if not browser_instance:
+            raise HTTPException(status_code=503, detail="Browser not initialized")
         
-        return {
-            "success": True,
-            "jobId": job.id,
-            "sessionId": session_id,
-            "message": "Task enqueued successfully"
-        }
+        # Create a new page for this session
+        page = await browser_instance.new_page()
+        
+        result = {"success": False, "message": "Unknown action"}
+        
+        try:
+            if action == "navigate":
+                await page.goto(target, wait_until="networkidle", timeout=30000)
+                result = {
+                    "success": True,
+                    "message": f"Navigated to {target}",
+                    "url": page.url,
+                    "title": await page.title()
+                }
+                logger.info(f"✅ Navigation successful: {target}")
+                
+            elif action == "screenshot":
+                screenshot = await page.screenshot(type="png", full_page=False)
+                import base64
+                result = {
+                    "success": True,
+                    "message": "Screenshot captured",
+                    "screenshot": base64.b64encode(screenshot).decode('utf-8')
+                }
+                logger.info(f"✅ Screenshot captured")
+                
+            else:
+                result = {
+                    "success": False,
+                    "message": f"Unsupported action: {action}"
+                }
+                logger.warning(f"⚠️ Unsupported action: {action}")
+            
+            # Keep page open for VNC viewing
+            # await page.close()  # Comment out to keep page visible in VNC
+            
+        except Exception as page_error:
+            logger.error(f"❌ Task execution failed: {page_error}")
+            result = {
+                "success": False,
+                "message": f"Task failed: {str(page_error)}"
+            }
+        
+        return result
+        
     except Exception as e:
-        logger.error(f"❌ Task creation failed: {e}")
+        logger.error(f"❌ Task endpoint failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
