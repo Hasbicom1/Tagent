@@ -26,8 +26,9 @@ export function BrowserStreamViewer({
   // Worker exposes noVNC internally on port 6080, but Railway exposes it on main port (8080)
   const baseUrl = workerUrl.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '');
   // Build vncUrl dynamically once we have the token
+  // Pass token directly in the WebSocket path for noVNC to forward
   const vncUrl = auth
-    ? `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify&token=${encodeURIComponent(auth.token)}&sessionId=${encodeURIComponent(sessionId)}&password=${encodeURIComponent(auth.vncPassword)}`
+    ? `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify?token=${encodeURIComponent(auth.token)}&sessionId=${encodeURIComponent(sessionId)}&password=${encodeURIComponent(auth.vncPassword)}`
     : `https://${baseUrl}/vnc.html`;
 
   useEffect(() => {
