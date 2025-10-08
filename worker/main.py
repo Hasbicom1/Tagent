@@ -466,57 +466,105 @@ async def websockify_endpoint(websocket: WebSocket):
     print("🔍 NEW VNC WEBSOCKET CONNECTION ATTEMPT")
     print("=" * 80)
     
-    # 🔥 EMERGENCY BYPASS - REMOVE AFTER TESTING 🔥
-    print("🔥 EMERGENCY MODE: Bypassing all validation")
-    print("=" * 80)
+    # Extract token and sessionId from query parameters
+    token = websocket.query_params.get('token')
+    session_id = websocket.query_params.get('sessionId')
     
-    client_ip = websocket.client.host
-    print(f"Client IP: {client_ip}")
+    print(f"🔐 Token present: {bool(token)}")
+    print(f"🔐 Session ID: {session_id}")
     
-    # Accept ALL connections from Railway internal network
-    if client_ip.startswith("100.64.") or client_ip.startswith("10.") or "railway" in client_ip:
-        print("✅ Internal Railway connection - accepting without JWT")
-        await websocket.accept()
-        print("✅ WebSocket accepted - starting VNC bridge")
+    # Validate JWT token
+    if not token:
+        print("❌ ERROR: No token provided")
+        await websocket.close(code=1008, reason="Missing token")
+        return
+    
+    # Get JWT secret from environment
+    jwt_secret = os.getenv('JWT_SECRET', 'dev-secret-key-replace-in-production')
+    print(f"🔐 Using JWT secret: {jwt_secret[:30]}...")
+    
+    # JWT Validation with detailed error handling
+    try:
+        print("🔐 Starting JWT decode...")
+        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+        print("✅ JWT DECODED SUCCESSFULLY!")
         
-        # Connect to VNC at localhost:5901
-        target_host = "127.0.0.1"
-        target_port = 6080  # noVNC websockify port
-        try:
-            uri = f"ws://{target_host}:{target_port}"
-            print(f"🔌 Connecting to noVNC websockify at {uri}")
-            async with websockets.connect(uri) as upstream:
-                print("✅ Connected to noVNC websockify")
-                
-                async def client_to_upstream():
+        # Validate session ID
+        token_session = payload.get('sessionId') or payload.get('agentId')
+        if token_session and session_id and token_session != session_id:
+            print("⚠️  WARNING: Session mismatch but continuing...")
+        
+        # Check expiration
+        exp = payload.get('exp')
+        if exp:
+            exp_time = datetime.fromtimestamp(exp)
+            now = datetime.now()
+            if now >= exp_time:
+                print("❌ ERROR: Token has EXPIRED")
+                await websocket.close(code=1008, reason="Token expired")
+                return
+        
+        print("✅ ALL JWT VALIDATIONS PASSED")
+        
+    except jwt.ExpiredSignatureError as e:
+        print(f"❌ JWT ERROR: Token expired: {e}")
+        await websocket.close(code=1008, reason="Token expired")
+        return
+    except jwt.InvalidSignatureError as e:
+        print(f"❌ JWT ERROR: Invalid signature: {e}")
+        await websocket.close(code=1008, reason="Invalid signature")
+        return
+    except jwt.DecodeError as e:
+        print(f"❌ JWT ERROR: Cannot decode token: {e}")
+        await websocket.close(code=1008, reason="Invalid token format")
+        return
+    except Exception as e:
+        print(f"❌ JWT ERROR: Unexpected error: {e}")
+        await websocket.close(code=1008, reason="Token validation failed")
+        return
+    
+    # Accept WebSocket connection after successful validation
+    await websocket.accept()
+    print("✅ WebSocket accepted - starting VNC bridge")
+    
+    # Connect to VNC at localhost:5901
+    target_host = "127.0.0.1"
+    target_port = 5901  # x11vnc direct port
+    try:
+        uri = f"ws://{target_host}:{target_port}"
+        print(f"🔌 Connecting to x11vnc at {uri}")
+        async with websockets.connect(uri) as upstream:
+            print("✅ Connected to x11vnc")
+            
+            async def client_to_upstream():
+                try:
+                    while True:
+                        data = await websocket.receive_bytes()
+                        await upstream.send(data)
+                        print(f"→ Forwarded {len(data)} bytes to VNC")
+                except Exception as e:
+                    print(f"client_to_upstream terminated: {e}")
                     try:
-                        while True:
-                            data = await websocket.receive_bytes()
-                            await upstream.send(data)
-                            print(f"→ Forwarded {len(data)} bytes to VNC")
-                    except Exception as e:
-                        print(f"client_to_upstream terminated: {e}")
-                        try:
-                            await upstream.close()
-                        except Exception:
-                            pass
+                        await upstream.close()
+                    except Exception:
+                        pass
 
-                async def upstream_to_client():
+            async def upstream_to_client():
+                try:
+                    async for message in upstream:
+                        if isinstance(message, bytes):
+                            await websocket.send_bytes(message)
+                            print(f"← Forwarded {len(message)} bytes to client")
+                        else:
+                            await websocket.send_text(message)
+                except Exception as e:
+                    print(f"upstream_to_client terminated: {e}")
                     try:
-                        async for message in upstream:
-                            if isinstance(message, bytes):
-                                await websocket.send_bytes(message)
-                                print(f"← Forwarded {len(message)} bytes to client")
-                            else:
-                                await websocket.send_text(message)
-                    except Exception as e:
-                        print(f"upstream_to_client terminated: {e}")
-                        try:
-                            await websocket.close()
-                        except Exception:
-                            pass
+                        await websocket.close()
+                    except Exception:
+                        pass
 
-                await asyncio.gather(client_to_upstream(), upstream_to_client())
+            await asyncio.gather(client_to_upstream(), upstream_to_client())
                 
         except Exception as e:
             print(f"❌ VNC bridge error: {e}")
