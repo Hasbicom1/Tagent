@@ -3,6 +3,9 @@
 Worker Service: Python FastAPI + Playwright + VNC Streaming
 Architecture: FastAPI (HTTP/health) + RQ (Redis Queue) + Playwright Browser Automation
 """
+
+print("🚨🚨🚨 WORKER VERSION 2.0 - DEBUGGING ENABLED 🚨🚨🚨")
+print("🚨 If you see this, the new code is running 🚨")
 import os
 import asyncio
 import json
@@ -329,6 +332,70 @@ async def websockify_endpoint(websocket: WebSocket):
     print("=" * 80)
     print("🔍 NEW VNC WEBSOCKET CONNECTION ATTEMPT")
     print("=" * 80)
+    
+    # 🔥 EMERGENCY BYPASS - REMOVE AFTER TESTING 🔥
+    print("🔥 EMERGENCY MODE: Bypassing all validation")
+    print("=" * 80)
+    
+    client_ip = websocket.client.host
+    print(f"Client IP: {client_ip}")
+    
+    # Accept ALL connections from Railway internal network
+    if client_ip.startswith("100.64.") or client_ip.startswith("10.") or "railway" in client_ip:
+        print("✅ Internal Railway connection - accepting without JWT")
+        await websocket.accept()
+        print("✅ WebSocket accepted - starting VNC bridge")
+        
+        # Connect to VNC at localhost:5901
+        target_host = "127.0.0.1"
+        target_port = 6080  # noVNC websockify port
+        try:
+            uri = f"ws://{target_host}:{target_port}"
+            print(f"🔌 Connecting to noVNC websockify at {uri}")
+            async with websockets.connect(uri) as upstream:
+                print("✅ Connected to noVNC websockify")
+                
+                async def client_to_upstream():
+                    try:
+                        while True:
+                            data = await websocket.receive_bytes()
+                            await upstream.send(data)
+                            print(f"→ Forwarded {len(data)} bytes to VNC")
+                    except Exception as e:
+                        print(f"client_to_upstream terminated: {e}")
+                        try:
+                            await upstream.close()
+                        except Exception:
+                            pass
+
+                async def upstream_to_client():
+                    try:
+                        async for message in upstream:
+                            if isinstance(message, bytes):
+                                await websocket.send_bytes(message)
+                                print(f"← Forwarded {len(message)} bytes to client")
+                            else:
+                                await websocket.send_text(message)
+                    except Exception as e:
+                        print(f"upstream_to_client terminated: {e}")
+                        try:
+                            await websocket.close()
+                        except Exception:
+                            pass
+
+                await asyncio.gather(client_to_upstream(), upstream_to_client())
+                
+        except Exception as e:
+            print(f"❌ VNC bridge error: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        return
+    
+    print("⚠️  External connection - checking JWT")
 
     # Extract parameters
     token = websocket.query_params.get("token")
