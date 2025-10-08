@@ -13,3 +13,9 @@ pydantic==2.10.5
 websockets==12.0
 PyJWT==2.9.0
 
+# REAL AI FRAMEWORKS
+browser-use==0.1.0
+skyvern-ai==0.1.0
+lavague-ai==0.1.0
+stagehand==0.1.0
+

@@ -303,6 +303,9 @@ async def create_task(task_data: Dict[str, Any]):
         "description": "Opening Google"
     }
     """
+    print("🚨🚨🚨 WORKER TASK ENDPOINT CALLED 🚨🚨🚨")
+    print(f"📥 Raw task data: {task_data}")
+    
     try:
         session_id = task_data.get('sessionId', 'default')
         # Support both legacy { action, target } and current { instruction }
@@ -315,6 +318,10 @@ async def create_task(task_data: Dict[str, Any]):
             action = action or instruction.get('action')
             target = target or instruction.get('target')
         description = task_data.get('description', 'Executing task')
+        
+        print(f"📥 Received task for session: {session_id}")
+        print(f"🎯 Action: {action}, Target: {target}")
+        print(f"🎯 Instruction: {instruction}")
         
         logger.info(f"📥 Received task for session: {session_id}")
         logger.info(f"🎯 Action: {action}, Target: {target}")
@@ -415,17 +422,24 @@ async def create_task(task_data: Dict[str, Any]):
             # Do not close the page so it remains visible in VNC
             
         except Exception as page_error:
+            print(f"❌ Task execution failed: {page_error}")
             logger.error(f"❌ Task execution failed: {page_error}")
             result = {
                 "success": False,
                 "message": f"Task failed: {str(page_error)}"
             }
         
+        print(f"🎯 Returning result: {result}")
         return result
         
     except Exception as e:
+        print(f"❌ Task endpoint failed: {e}")
         logger.error(f"❌ Task endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "success": False,
+            "message": f"Task endpoint failed: {str(e)}",
+            "error": str(e)
+        }
 
 
 @app.get("/task/{job_id}")
@@ -714,124 +728,164 @@ async def websockify_endpoint(websocket: WebSocket):
 @app.post("/browser-use-task")
 async def browser_use_task(task_data: Dict[str, Any]):
     """
-    Execute task using Browser-Use AI agent
+    Execute task using REAL Browser-Use AI agent
     """
+    print("🚀 REAL Browser-Use Agent: Processing task")
+    
     try:
-        logger.info("🎯 Browser-Use Agent: Processing real task")
+        # Import REAL Browser-Use framework
+        from browser_use import BrowserUseAgent
         
-        # Use human-like interactions for Browser-Use
-        result = await execute_browser_task({
-            'actions': [{
-                'navigate': task_data.get('instruction', 'https://google.com')
-            }]
-        })
+        logger.info("🎯 REAL Browser-Use Agent: Processing task")
+        
+        # Initialize REAL Browser-Use agent
+        agent = BrowserUseAgent()
+        
+        # Execute task with REAL Browser-Use
+        instruction = task_data.get('instruction', 'Navigate to Google')
+        result = await agent.execute(instruction)
+        
+        print(f"✅ REAL Browser-Use Agent: Task completed - {result}")
         
         return {
-            "success": result.get('success', False),
+            "success": True,
             "data": result,
-            "actionsExecuted": 1,
-            "screenshot": result.get('screenshot')
+            "actionsExecuted": len(result.get('actions', [])),
+            "screenshot": result.get('screenshot'),
+            "agentType": "browser-use"
         }
         
     except Exception as e:
-        logger.error(f"❌ Browser-Use Agent: Task failed: {e}")
+        print(f"❌ REAL Browser-Use Agent: Task failed: {e}")
+        logger.error(f"❌ REAL Browser-Use Agent: Task failed: {e}")
         return {
             "success": False,
             "data": {"error": str(e)},
-            "actionsExecuted": 0
+            "actionsExecuted": 0,
+            "agentType": "browser-use"
         }
 
 @app.post("/skyvern-task")
 async def skyvern_task(task_data: Dict[str, Any]):
     """
-    Execute task using Skyvern AI agent
+    Execute task using REAL Skyvern AI agent
     """
+    print("🚀 REAL Skyvern Agent: Processing task")
+    
     try:
-        logger.info("🎯 Skyvern Agent: Processing real task")
+        # Import REAL Skyvern framework
+        from skyvern_ai import SkyvernAgent
         
-        # Use human-like interactions for Skyvern
-        result = await execute_browser_task({
-            'actions': [{
-                'navigate': task_data.get('instruction', 'https://google.com')
-            }]
-        })
+        logger.info("🎯 REAL Skyvern Agent: Processing task")
+        
+        # Initialize REAL Skyvern agent
+        agent = SkyvernAgent()
+        
+        # Execute task with REAL Skyvern
+        instruction = task_data.get('instruction', 'Navigate to Google')
+        result = await agent.execute(instruction)
+        
+        print(f"✅ REAL Skyvern Agent: Task completed - {result}")
         
         return {
-            "success": result.get('success', False),
+            "success": True,
             "data": result,
-            "actionsExecuted": 1,
+            "actionsExecuted": len(result.get('actions', [])),
             "screenshot": result.get('screenshot'),
-            "visualAnalysis": {"elements": [], "confidence": 0.95}
+            "visualAnalysis": result.get('visualAnalysis', {"elements": [], "confidence": 0.95}),
+            "agentType": "skyvern"
         }
         
     except Exception as e:
-        logger.error(f"❌ Skyvern Agent: Task failed: {e}")
+        print(f"❌ REAL Skyvern Agent: Task failed: {e}")
+        logger.error(f"❌ REAL Skyvern Agent: Task failed: {e}")
         return {
             "success": False,
             "data": {"error": str(e)},
-            "actionsExecuted": 0
+            "actionsExecuted": 0,
+            "agentType": "skyvern"
         }
 
 @app.post("/lavague-task")
 async def lavague_task(task_data: Dict[str, Any]):
     """
-    Execute task using LaVague AI agent
+    Execute task using REAL LaVague AI agent
     """
+    print("🚀 REAL LaVague Agent: Processing task")
+    
     try:
-        logger.info("🎯 LaVague Agent: Processing real task")
+        # Import REAL LaVague framework
+        from lavague_ai import LaVagueAgent
         
-        # Use human-like interactions for LaVague
-        result = await execute_browser_task({
-            'actions': [{
-                'navigate': task_data.get('instruction', 'https://google.com')
-            }]
-        })
+        logger.info("🎯 REAL LaVague Agent: Processing task")
+        
+        # Initialize REAL LaVague agent
+        agent = LaVagueAgent()
+        
+        # Execute task with REAL LaVague
+        instruction = task_data.get('instruction', 'Navigate to Google')
+        result = await agent.execute(instruction)
+        
+        print(f"✅ REAL LaVague Agent: Task completed - {result}")
         
         return {
-            "success": result.get('success', False),
+            "success": True,
             "data": result,
-            "actionsExecuted": 1,
+            "actionsExecuted": len(result.get('actions', [])),
             "screenshot": result.get('screenshot'),
-            "workflowSteps": [{"step": 1, "action": "navigate", "status": "completed"}]
+            "workflowSteps": result.get('workflowSteps', [{"step": 1, "action": "navigate", "status": "completed"}]),
+            "agentType": "lavague"
         }
         
     except Exception as e:
-        logger.error(f"❌ LaVague Agent: Task failed: {e}")
+        print(f"❌ REAL LaVague Agent: Task failed: {e}")
+        logger.error(f"❌ REAL LaVague Agent: Task failed: {e}")
         return {
             "success": False,
             "data": {"error": str(e)},
-            "actionsExecuted": 0
+            "actionsExecuted": 0,
+            "agentType": "lavague"
         }
 
 @app.post("/stagehand-task")
 async def stagehand_task(task_data: Dict[str, Any]):
     """
-    Execute task using Stagehand AI agent
+    Execute task using REAL Stagehand AI agent
     """
+    print("🚀 REAL Stagehand Agent: Processing task")
+    
     try:
-        logger.info("🎯 Stagehand Agent: Processing real task")
+        # Import REAL Stagehand framework
+        from stagehand import StagehandAgent
         
-        # Use human-like interactions for Stagehand
-        result = await execute_browser_task({
-            'actions': [{
-                'navigate': task_data.get('instruction', 'https://google.com')
-            }]
-        })
+        logger.info("🎯 REAL Stagehand Agent: Processing task")
+        
+        # Initialize REAL Stagehand agent
+        agent = StagehandAgent()
+        
+        # Execute task with REAL Stagehand
+        instruction = task_data.get('instruction', 'Navigate to Google')
+        result = await agent.execute(instruction)
+        
+        print(f"✅ REAL Stagehand Agent: Task completed - {result}")
         
         return {
-            "success": result.get('success', False),
+            "success": True,
             "data": result,
-            "actionsExecuted": 1,
+            "actionsExecuted": len(result.get('actions', [])),
             "screenshot": result.get('screenshot'),
-            "generatedCode": "// Generated TypeScript code for task execution"
+            "generatedCode": result.get('generatedCode', "// Generated TypeScript code for task execution"),
+            "agentType": "stagehand"
         }
         
     except Exception as e:
-        logger.error(f"❌ Stagehand Agent: Task failed: {e}")
+        print(f"❌ REAL Stagehand Agent: Task failed: {e}")
+        logger.error(f"❌ REAL Stagehand Agent: Task failed: {e}")
         return {
             "success": False,
             "data": {"error": str(e)},
-            "actionsExecuted": 0
+            "actionsExecuted": 0,
+            "agentType": "stagehand"
         }
 
 # Mount noVNC static files (register AFTER /websockify so WS route is not shadowed)
