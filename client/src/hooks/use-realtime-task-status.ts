@@ -105,47 +105,18 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         return;
       }
 
-      // Check if already authenticated with same agent - no need to reconnect
-      if (wsClient.isReady()) {
-        console.log('✅ [WS] Already authenticated and ready, skipping reconnection');
-        return;
-      }
-
-      // Only disconnect if connection is in error state or for fresh authentication
-      const currentState = wsClient.getState();
-      if (currentState !== WSConnectionState.DISCONNECTED) {
-        if (currentState === WSConnectionState.ERROR || currentState === WSConnectionState.RECONNECTING) {
-          console.log('🔄 [WS] Resetting connection from error state...');
-          wsClient.forceDisconnect(); // Use force disconnect for error recovery
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } else {
-          console.log('⚠️ [WS] Connection exists but not authenticated, continuing...');
-        }
-      }
-
-      // Fetch fresh JWT token
-      const token = await refreshToken();
-      console.log('🔌 [WS] Got token for authentication, length:', token?.length || 0);
+      // TEMPORARY: Disable WebSocket connection since server only has Socket.IO
+      // The VNC stream and chat functionality work via HTTP, so WebSocket is optional
+      console.log('⚠️ [WS] WebSocket temporarily disabled - using HTTP fallback mode');
+      console.log('ℹ️ [WS] VNC stream and chat work via HTTP endpoints');
       
-      console.log('🔌 [WS] Connecting to WebSocket with fresh token...');
-      await wsClient.connect();
-      
-      // Authenticate with JWT token and provide refresh callback
-      console.log('🔐 [WS] Starting authentication with token length:', token?.length || 0);
-      await wsClient.authenticate(token, agentId, refreshToken);
-      console.log('✅ [WS] WebSocket authenticated successfully');
-
       setConnectionStatus(prev => ({
         ...prev,
-        isConnected: true,
-        isAuthenticated: true,
-        connectionState: WSConnectionState.AUTHENTICATED,
-        lastConnected: new Date(),
+        isConnected: false,
+        isAuthenticated: false,
+        connectionState: WSConnectionState.DISCONNECTED,
         reconnectAttempts: 0
       }));
-      
-      // Mark successful connection to prevent unnecessary reconnections
-      console.log('🎉 [WS] Connection established successfully!');
 
     } catch (error: any) {
       console.error('Failed to connect to WebSocket:', error);
