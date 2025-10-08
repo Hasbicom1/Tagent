@@ -898,9 +898,9 @@ app.get('/api/session/:sessionId', async (req, res) => {
 app.post('/api/session/:sessionId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Session execute requested for:', req.params.sessionId);
   try {
-    // Import and use the real unified AI agent
-    const { LocalUnifiedAIAgent } = await import('./agents/local-unified-ai-agent.js');
-    const agent = new LocalUnifiedAIAgent();
+    // Import and use the REAL agent orchestrator
+    const { RealAgentOrchestrator } = await import('./agents/real-agent-orchestrator.js');
+    const agent = new RealAgentOrchestrator();
     await agent.initialize();
     
     const task = {
@@ -910,15 +910,22 @@ app.post('/api/session/:sessionId/execute', async (req, res) => {
       context: req.body.context
     };
     
-    const response = await agent.processMessage(task);
+    const response = await agent.executeTaskWithRealAgent({
+      id: task.id,
+      instruction: task.message,
+      sessionId: task.sessionId,
+      context: task.context,
+      priority: 1
+    });
     
     res.json({
       success: response.success,
       sessionId: req.params.sessionId,
-      task: response.message,
-      actions: response.actions,
+      task: response.result,
+      actions: response.actionsExecuted,
       screenshot: response.screenshot,
-      confidence: response.confidence,
+      agentType: response.agentType,
+      executionTime: response.executionTime,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

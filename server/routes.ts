@@ -855,7 +855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { agentId } = req.params;
       let session = await storage.getSessionByAgentId(agentId);
-
+      
       // Fallback: read from production database (user_sessions) if Drizzle storage has no record
       if (!session) {
         try {
