@@ -915,7 +915,7 @@ app.post('/api/session/:sessionId/execute', async (req, res) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             instruction: req.body.taskDescription || req.body.message || 'Execute task',
-            sessionId: req.params.sessionId,
+      sessionId: req.params.sessionId,
             agentId: req.params.sessionId
           }),
           signal: AbortSignal.timeout(8000)
@@ -1396,6 +1396,140 @@ app.get('*', (req, res) => {
       timestamp: new Date().toISOString(),
       message: 'API route not found',
       path: req.originalUrl
+    });
+  }
+});
+
+// CRITICAL MISSING ENDPOINTS - ADDING THEM NOW
+// Session message endpoint (for chat)
+app.post('/api/session/:agentId/message', async (req, res) => {
+  console.log('💬 PRODUCTION: Session message requested for:', req.params.agentId);
+  try {
+    const { agentId } = req.params;
+    const { content, csrfToken } = req.body;
+    
+    // Validate session exists
+    const { getUserSession } = await import('./database.js');
+    const session = await getUserSession(agentId);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    if (new Date() > new Date(session.expires_at)) {
+      return res.status(410).json({ error: 'LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed' });
+    }
+    
+    // Store message in chat bucket
+    global.__chatBuckets = global.__chatBuckets || new Map();
+    const messages = global.__chatBuckets.get(agentId) || [];
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: content,
+      timestamp: new Date().toISOString(),
+      messageType: 'message'
+    };
+    messages.push(userMessage);
+    global.__chatBuckets.set(agentId, messages);
+    
+    // Generate AI response using Groq
+    const aiResponse = await ai.generateResponse(content, messages.slice(-10)); // Last 10 messages for context
+    
+    const agentMessage = {
+      id: `agent-${Date.now()}`,
+      role: 'agent',
+      content: aiResponse.message,
+      timestamp: new Date().toISOString(),
+      messageType: 'message',
+      hasExecutableTask: aiResponse.hasExecutableTask,
+      taskDescription: aiResponse.taskDescription
+    };
+    messages.push(agentMessage);
+    global.__chatBuckets.set(agentId, messages);
+    
+    res.json({
+      success: true,
+      agentMessage: aiResponse.message,
+      hasExecutableTask: aiResponse.hasExecutableTask,
+      taskDescription: aiResponse.taskDescription,
+      taskId: aiResponse.hasExecutableTask ? `task-${Date.now()}` : null
+    });
+    
+  } catch (error) {
+    console.error('❌ PRODUCTION: Session message failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Message processing failed',
+      message: error.message
+    });
+  }
+});
+
+// Session execute endpoint (for task execution)
+app.post('/api/session/:agentId/execute', async (req, res) => {
+  console.log('⚡ PRODUCTION: Session execute requested for:', req.params.agentId);
+  try {
+    // Route directly to worker with real AI frameworks
+    const workerUrls = [
+      'https://worker-production-6480.up.railway.app',
+      'http://worker.railway.internal:8080'
+    ];
+    
+    let workerResponse = null;
+    let lastError = null;
+    
+    for (const workerUrl of workerUrls) {
+      try {
+        console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
+        workerResponse = await fetch(`${workerUrl}/task`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instruction: req.body.taskDescription || req.body.message || 'Execute task',
+            sessionId: req.params.agentId,
+            agentId: req.params.agentId
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+        
+        if (workerResponse.ok) {
+          console.log(`✅ Task: Worker ${workerUrl} responded successfully`);
+          break;
+        } else {
+          console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    if (!workerResponse || !workerResponse.ok) {
+      throw new Error(`All workers failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    }
+    
+    const result = await workerResponse.json();
+    
+    res.json({
+      success: result.success,
+      sessionId: req.params.agentId,
+      task: result.data,
+      actions: result.actionsExecuted || 0,
+      screenshot: result.screenshot,
+      agentType: result.agentType || 'worker',
+      executionTime: result.executionTime || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Task execution failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId: req.params.agentId,
+      task: 'Task execution failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
