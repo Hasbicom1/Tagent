@@ -116,12 +116,12 @@ export class WebSocketClient {
       this.log('🔌 Connecting to WebSocket...');
 
       try {
-        // FIXED: Try multiple WebSocket endpoints
+        // FIXED: Use only Socket.IO endpoint to avoid raw WebSocket failures
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const endpoints = [
-          // Use only the configured raw WS endpoint to avoid invalid socket.io/raw websocket attempts
-          this.config.url!
+          // Use Socket.IO endpoint which is properly configured
+          `${protocol}//${host}/ws/socket.io/`
         ];
         
         let currentEndpoint = 0;

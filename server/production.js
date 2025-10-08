@@ -1470,10 +1470,9 @@ app.post('/api/session/:agentId/message', async (req, res) => {
 app.post('/api/session/:agentId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Session execute requested for:', req.params.agentId);
   try {
-    // Route directly to worker with real AI frameworks
+    // FIXED: Prioritize external worker URL since internal is failing
     const workerUrls = [
-      'https://worker-production-6480.up.railway.app',
-      'http://worker.railway.internal:8080'
+      'https://worker-production-6480.up.railway.app'
     ];
     
     let workerResponse = null;

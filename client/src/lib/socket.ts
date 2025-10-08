@@ -12,9 +12,11 @@ export class RealtimeClient {
     if (this.socket && this.socket.connected) return;
     this.socket = io({
       path,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'], // FIXED: Add polling fallback
       withCredentials: false,
       query,
+      timeout: 20000, // FIXED: Increase timeout
+      forceNew: true // FIXED: Force new connection
     });
   }
 

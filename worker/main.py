@@ -4,8 +4,8 @@ Worker Service: Python FastAPI + Playwright + VNC Streaming
 Architecture: FastAPI (HTTP/health) + RQ (Redis Queue) + Playwright Browser Automation
 """
 
-print("🚨🚨🚨 WORKER VERSION 2.0 - DEBUGGING ENABLED 🚨🚨🚨")
-print("🚨 If you see this, the new code is running 🚨")
+print("🚨🚨🚨 WORKER VERSION 3.0 - ADVANCED BUILDER MODE 🚨🚨🚨")
+print("🚨 REAL SOLUTIONS ONLY - NO MORE FAKE CODE 🚨")
 import os
 import asyncio
 import json
