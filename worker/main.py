@@ -584,14 +584,14 @@ async def websockify_endpoint(websocket: WebSocket):
 
             await asyncio.gather(client_to_upstream(), upstream_to_client())
                 
-        except Exception as e:
-            print(f"❌ VNC bridge error: {e}")
-            import traceback
-            traceback.print_exc()
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+    except Exception as e:
+        print(f"❌ VNC bridge error: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         return
     
     print("⚠️  External connection - checking JWT")
