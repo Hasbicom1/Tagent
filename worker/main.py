@@ -7,7 +7,7 @@ import os
 import asyncio
 import json
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -15,6 +15,9 @@ from playwright.async_api import async_playwright, Browser, Page
 import redis
 from rq import Queue, Worker
 import logging
+import websockets
+import asyncio
+import socket
 
 # Configure logging
 logging.basicConfig(
@@ -214,35 +217,45 @@ async def create_task(task_data: Dict[str, Any]):
     """
     try:
         session_id = task_data.get('sessionId', 'default')
+        # Support both legacy { action, target } and current { instruction }
         action = task_data.get('action')
         target = task_data.get('target')
+        instruction = task_data.get('instruction')
+
+        # If instruction object exists, normalize to action/target
+        if isinstance(instruction, dict):
+            action = action or instruction.get('action')
+            target = target or instruction.get('target')
         description = task_data.get('description', 'Executing task')
         
         logger.info(f"📥 Received task for session: {session_id}")
         logger.info(f"🎯 Action: {action}, Target: {target}")
         
         # Execute task DIRECTLY using the global browser
-        if not browser_instance:
-            raise HTTPException(status_code=503, detail="Browser not initialized")
+        if not browser:
+            # Initialize on-demand if not ready yet
+            await init_browser()
         
-        # Create a new page for this session
-        page = await browser_instance.new_page()
+        # Reuse existing context, create a fresh page per task to avoid cross-talk
+        context_page = await browser.new_page()
         
         result = {"success": False, "message": "Unknown action"}
         
         try:
             if action == "navigate":
-                await page.goto(target, wait_until="networkidle", timeout=30000)
+                if not target:
+                    raise ValueError("Missing 'target' URL for navigate action")
+                await context_page.goto(target, wait_until="networkidle", timeout=30000)
                 result = {
                     "success": True,
                     "message": f"Navigated to {target}",
-                    "url": page.url,
-                    "title": await page.title()
+                    "url": context_page.url,
+                    "title": await context_page.title()
                 }
                 logger.info(f"✅ Navigation successful: {target}")
                 
             elif action == "screenshot":
-                screenshot = await page.screenshot(type="png", full_page=False)
+                screenshot = await context_page.screenshot(type="png", full_page=False)
                 import base64
                 result = {
                     "success": True,
@@ -259,7 +272,7 @@ async def create_task(task_data: Dict[str, Any]):
                 logger.warning(f"⚠️ Unsupported action: {action}")
             
             # Keep page open for VNC viewing
-            # await page.close()  # Comment out to keep page visible in VNC
+            # Do not close the page so it remains visible in VNC
             
         except Exception as page_error:
             logger.error(f"❌ Task execution failed: {page_error}")
@@ -300,7 +313,50 @@ async def root():
     """Root endpoint - redirect to VNC"""
     return RedirectResponse(url="/vnc.html")
 
-# Mount noVNC static files
+# Lightweight WebSocket proxy: /websockify → ws://127.0.0.1:6080
+# Bridges the browser's WS connection (Metal Edge 8080) to local noVNC websockify on 6080
+@app.websocket("/websockify")
+async def websockify_proxy(ws):
+    target_host = "127.0.0.1"
+    target_port = 6080
+    try:
+        await ws.accept()
+        uri = f"ws://{target_host}:{target_port}"
+        async with websockets.connect(uri) as upstream:
+            async def client_to_upstream():
+                try:
+                    while True:
+                        data = await ws.receive_bytes()
+                        await upstream.send(data)
+                except Exception:
+                    try:
+                        await upstream.close()
+                    except Exception:
+                        pass
+
+            async def upstream_to_client():
+                try:
+                    async for message in upstream:
+                        if isinstance(message, bytes):
+                            await ws.send_bytes(message)
+                        else:
+                            await ws.send_text(message)
+                except Exception:
+                    try:
+                        await ws.close()
+                    except Exception:
+                        pass
+
+            await asyncio.gather(client_to_upstream(), upstream_to_client())
+
+    except Exception as e:
+        logger.error(f"❌ Websockify proxy error: {e}")
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+# Mount noVNC static files (register AFTER /websockify so WS route is not shadowed)
 app.mount("/", StaticFiles(directory="/opt/novnc", html=True), name="novnc")
 
 

@@ -153,7 +153,9 @@ app.use(helmet({
       connectSrc: ["'self'", 'wss:', 'https:', 'http:', 'https://api.stripe.com', 'https://api.openai.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       objectSrc: ["'none'"],
-      frameSrc: ['https://checkout.stripe.com', 'https://js.stripe.com'],
+      // Allow embedding the worker's noVNC viewer (served from its own domain)
+      // Broadly allow HTTPS frames to avoid whitelisting per-deploy worker hostnames
+      frameSrc: ["'self'", 'https:', 'https://checkout.stripe.com', 'https://js.stripe.com'],
       baseUri: ["'self'"],
       formAction: ["'self'"],
     }
@@ -486,11 +488,11 @@ console.log('🔧 PRODUCTION: Scheduling Redis initialization...');
 let redisConnected = false;
 let queueInitialized = false;
 setTimeout(async () => {
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      console.log('✅ PRODUCTION: Redis connection established');
-      redisConnected = true;
+try {
+  const redis = await getRedis();
+  if (redis) {
+    console.log('✅ PRODUCTION: Redis connection established');
+    redisConnected = true;
       
       // CRITICAL FIX: Use EXTERNAL Redis URL for task queue to avoid DNS issues
       // Railway's internal DNS (redis.railway.internal) doesn't always resolve
@@ -514,12 +516,12 @@ setTimeout(async () => {
           console.warn('⚠️  PRODUCTION: Queue initialization failed - will use HTTP fallback');
         }
       }
-    } else {
-      console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
-    }
-  } catch (error) {
-    console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
+  } else {
+    console.warn('⚠️ PRODUCTION: Redis not available - continuing without Redis');
   }
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Redis initialization failed (non-blocking):', error.message);
+}
 }, 0);
 
 // STEP 9.5: Initialize Stripe Payment Gateway (NON-BLOCKING)
@@ -856,13 +858,13 @@ app.get('/api/session/:sessionId', async (req, res) => {
       }
       
       return res.status(410).json({
-        sessionId: req.params.sessionId,
+      sessionId: req.params.sessionId,
         status: 'expired',
         message: 'Session has expired',
-        expiresAt: session.expires_at,
-        timestamp: new Date().toISOString()
-      });
-    }
+      expiresAt: session.expires_at,
+      timestamp: new Date().toISOString()
+    });
+  }
     
     // Calculate time remaining in minutes
     const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
@@ -1318,17 +1320,17 @@ console.log('ℹ️ PRODUCTION: Real session endpoints can be enabled for produc
 // STEP 8: Initialize Database (TRULY NON-BLOCKING)
 console.log('🔧 PRODUCTION: Scheduling database initialization...');
 setTimeout(async () => {
-  try {
-    const db = initializeDatabase();
-    if (db) {
-      await createTables();
-      console.log('✅ PRODUCTION: Database initialized and tables created');
-    } else {
-      console.log('⚠️ PRODUCTION: Database not available - using mock storage');
-    }
-  } catch (error) {
-    console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
+try {
+  const db = initializeDatabase();
+  if (db) {
+    await createTables();
+    console.log('✅ PRODUCTION: Database initialized and tables created');
+  } else {
+    console.log('⚠️ PRODUCTION: Database not available - using mock storage');
   }
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
+}
 }, 0);
 
 // STEP 9: REAL session management (available but not initialized to avoid startup errors)

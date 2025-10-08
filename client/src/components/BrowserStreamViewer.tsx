@@ -21,8 +21,9 @@ export function BrowserStreamViewer({
 
   // Construct noVNC URL
   // Worker exposes noVNC internally on port 6080, but Railway exposes it on main port (8080)
-  const baseUrl = workerUrl.replace(/^wss?:\/\//, '');
-  const vncUrl = `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale`;
+  const baseUrl = workerUrl.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '');
+  // Use worker-hosted noVNC plus WS proxy path so the WS tunnel stays on port 8080
+  const vncUrl = `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify`;
 
   useEffect(() => {
     console.log('[VNC_VIEWER] Session ID:', sessionId);
