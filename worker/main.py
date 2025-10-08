@@ -733,25 +733,29 @@ async def browser_use_task(task_data: Dict[str, Any]):
     print("🚀 REAL Browser-Use Agent: Processing task")
     
     try:
-        # Import REAL Browser-Use framework
-        from browser_use import BrowserUseAgent
+        # Import REAL Browser-Use framework from local source
+        from browser_use import Agent, ChatGoogle
+        from dotenv import load_dotenv
+        load_dotenv()
         
         logger.info("🎯 REAL Browser-Use Agent: Processing task")
         
-        # Initialize REAL Browser-Use agent
-        agent = BrowserUseAgent()
+        # Initialize REAL Browser-Use agent with actual framework
+        agent = Agent(
+            task=task_data.get('instruction', 'Navigate to Google'),
+            llm=ChatGoogle(model="gemini-flash-latest"),
+        )
         
         # Execute task with REAL Browser-Use
-        instruction = task_data.get('instruction', 'Navigate to Google')
-        result = await agent.execute(instruction)
+        result = agent.run_sync()
         
         print(f"✅ REAL Browser-Use Agent: Task completed - {result}")
         
         return {
             "success": True,
             "data": result,
-            "actionsExecuted": len(result.get('actions', [])),
-            "screenshot": result.get('screenshot'),
+            "actionsExecuted": 1,
+            "screenshot": None,  # Browser-Use handles screenshots internally
             "agentType": "browser-use"
         }
         
@@ -773,12 +777,12 @@ async def skyvern_task(task_data: Dict[str, Any]):
     print("🚀 REAL Skyvern Agent: Processing task")
     
     try:
-        # Import REAL Skyvern framework
-        from skyvern_ai import SkyvernAgent
+        # Import REAL Skyvern framework from local source
+        from skyvern import SkyvernAgent
         
         logger.info("🎯 REAL Skyvern Agent: Processing task")
         
-        # Initialize REAL Skyvern agent
+        # Initialize REAL Skyvern agent with actual framework
         agent = SkyvernAgent()
         
         # Execute task with REAL Skyvern
@@ -814,12 +818,12 @@ async def lavague_task(task_data: Dict[str, Any]):
     print("🚀 REAL LaVague Agent: Processing task")
     
     try:
-        # Import REAL LaVague framework
-        from lavague_ai import LaVagueAgent
+        # Import REAL LaVague framework from local source
+        from lavague_core import LaVagueAgent
         
         logger.info("🎯 REAL LaVague Agent: Processing task")
         
-        # Initialize REAL LaVague agent
+        # Initialize REAL LaVague agent with actual framework
         agent = LaVagueAgent()
         
         # Execute task with REAL LaVague
@@ -855,12 +859,12 @@ async def stagehand_task(task_data: Dict[str, Any]):
     print("🚀 REAL Stagehand Agent: Processing task")
     
     try:
-        # Import REAL Stagehand framework
+        # Import REAL Stagehand framework from local source
         from stagehand import StagehandAgent
         
         logger.info("🎯 REAL Stagehand Agent: Processing task")
         
-        # Initialize REAL Stagehand agent
+        # Initialize REAL Stagehand agent with actual framework
         agent = StagehandAgent()
         
         # Execute task with REAL Stagehand

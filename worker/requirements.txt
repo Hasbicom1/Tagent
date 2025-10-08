@@ -13,9 +13,9 @@ pydantic==2.10.5
 websockets==12.0
 PyJWT==2.9.0
 
-# REAL AI FRAMEWORKS
-browser-use==0.1.0
-skyvern-ai==0.1.0
-lavague-ai==0.1.0
-stagehand==0.1.0
+# REAL AI FRAMEWORKS - ACTUAL PACKAGES
+browser-use>=0.7.10
+# Skyvern - install from local source
+# LaVague - install from local source  
+# Stagehand - install from local source
 
