@@ -9,6 +9,7 @@ print("🚨 If you see this, the new code is running 🚨")
 import os
 import asyncio
 import json
+import random
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,6 +91,86 @@ async def init_browser():
         logger.info("✅ Browser initialized successfully")
     except Exception as e:
         logger.error(f"❌ Browser initialization failed: {e}")
+        raise
+
+
+async def human_like_delay(min_ms: int = 50, max_ms: int = 200):
+    """Add realistic human-like delays"""
+    delay = random.uniform(min_ms / 1000, max_ms / 1000)
+    await asyncio.sleep(delay)
+
+
+async def human_like_typing(page: Page, selector: str, text: str):
+    """Type text with human-like delays and realistic keystrokes"""
+    try:
+        # Focus the element first
+        await page.focus(selector)
+        await human_like_delay(100, 300)
+        
+        # Clear existing text
+        await page.fill(selector, "")
+        await human_like_delay(50, 150)
+        
+        # Type character by character with realistic delays
+        for char in text:
+            await page.keyboard.type(char)
+            # Human-like typing speed: 50-120ms between keystrokes
+            await asyncio.sleep(random.uniform(0.05, 0.12))
+            
+        logger.info(f"✅ Typed '{text}' with human-like delays")
+        
+    except Exception as e:
+        logger.error(f"❌ Human-like typing failed: {e}")
+        raise
+
+
+async def human_like_click(page: Page, selector: str):
+    """Click with human-like mouse movement and delays"""
+    try:
+        # Get element position
+        element = await page.query_selector(selector)
+        if not element:
+            raise ValueError(f"Element not found: {selector}")
+            
+        # Get bounding box
+        box = await element.bounding_box()
+        if not box:
+            raise ValueError(f"Element not visible: {selector}")
+            
+        # Calculate click position (center of element with slight randomness)
+        x = box['x'] + box['width'] / 2 + random.uniform(-5, 5)
+        y = box['y'] + box['height'] / 2 + random.uniform(-5, 5)
+        
+        # Move mouse to position with human-like movement
+        await page.mouse.move(x, y)
+        await human_like_delay(100, 300)
+        
+        # Click with slight delay
+        await page.mouse.click(x, y)
+        await human_like_delay(50, 150)
+        
+        logger.info(f"✅ Clicked element '{selector}' at ({x:.1f}, {y:.1f})")
+        
+    except Exception as e:
+        logger.error(f"❌ Human-like click failed: {e}")
+        raise
+
+
+async def human_like_navigation(page: Page, url: str):
+    """Navigate with human-like behavior"""
+    try:
+        # Move mouse to address bar area (top of page)
+        await page.mouse.move(960, 50)  # Center top
+        await human_like_delay(200, 500)
+        
+        # Navigate to URL
+        await page.goto(url, wait_until="networkidle", timeout=30000)
+        await human_like_delay(500, 1000)  # Wait for page to settle
+        
+        logger.info(f"✅ Navigated to {url} with human-like behavior")
+        
+    except Exception as e:
+        logger.error(f"❌ Human-like navigation failed: {e}")
         raise
 
 
@@ -252,10 +333,11 @@ async def create_task(task_data: Dict[str, Any]):
             if action == "navigate":
                 if not target:
                     raise ValueError("Missing 'target' URL for navigate action")
-                await context_page.goto(target, wait_until="networkidle", timeout=30000)
+                # Use human-like navigation with visible mouse movement
+                await human_like_navigation(context_page, target)
                 result = {
                     "success": True,
-                    "message": f"Navigated to {target}",
+                    "message": f"Navigated to {target} with human-like behavior",
                     "url": context_page.url,
                     "title": await context_page.title()
                 }
@@ -270,6 +352,57 @@ async def create_task(task_data: Dict[str, Any]):
                     "screenshot": base64.b64encode(screenshot).decode('utf-8')
                 }
                 logger.info(f"✅ Screenshot captured")
+                
+            elif action == "type":
+                # Human-like typing with visible keystrokes
+                selector = task_data.get('selector', 'input[type="text"], input[type="search"], textarea')
+                text = task_data.get('text', '')
+                if not text:
+                    raise ValueError("Missing 'text' for type action")
+                await human_like_typing(context_page, selector, text)
+                result = {
+                    "success": True,
+                    "message": f"Typed '{text}' with human-like behavior",
+                    "selector": selector,
+                    "text": text
+                }
+                logger.info(f"✅ Typing successful: '{text}'")
+                
+            elif action == "click":
+                # Human-like clicking with visible mouse movement
+                selector = task_data.get('selector', '')
+                if not selector:
+                    raise ValueError("Missing 'selector' for click action")
+                await human_like_click(context_page, selector)
+                result = {
+                    "success": True,
+                    "message": f"Clicked '{selector}' with human-like behavior",
+                    "selector": selector
+                }
+                logger.info(f"✅ Click successful: '{selector}'")
+                
+            elif action == "search":
+                # Combined search action: type in search box and click search button
+                search_text = task_data.get('text', '')
+                search_selector = task_data.get('search_selector', 'input[type="search"], input[name="q"], input[placeholder*="search"]')
+                button_selector = task_data.get('button_selector', 'button[type="submit"], input[type="submit"], button:has-text("Search")')
+                
+                if not search_text:
+                    raise ValueError("Missing 'text' for search action")
+                
+                # Type in search box
+                await human_like_typing(context_page, search_selector, search_text)
+                await human_like_delay(200, 500)  # Pause before clicking
+                
+                # Click search button
+                await human_like_click(context_page, button_selector)
+                
+                result = {
+                    "success": True,
+                    "message": f"Searched for '{search_text}' with human-like behavior",
+                    "search_text": search_text
+                }
+                logger.info(f"✅ Search successful: '{search_text}'")
                 
             else:
                 result = {
