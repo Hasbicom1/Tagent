@@ -484,6 +484,10 @@ async def websockify_endpoint(websocket: WebSocket):
     print("🔍 NEW VNC WEBSOCKET CONNECTION ATTEMPT")
     print("=" * 80)
     
+    # Accept WebSocket connection FIRST, then validate
+    await websocket.accept()
+    print("✅ WebSocket accepted - starting validation")
+    
     # Extract token and sessionId from query parameters
     token = websocket.query_params.get('token')
     session_id = websocket.query_params.get('sessionId')
@@ -541,9 +545,8 @@ async def websockify_endpoint(websocket: WebSocket):
         await websocket.close(code=1008, reason="Token validation failed")
         return
     
-    # Accept WebSocket connection after successful validation
-    await websocket.accept()
-    print("✅ WebSocket accepted - starting VNC bridge")
+    # JWT validation passed - proceed with VNC bridge
+    print("✅ JWT validation passed - starting VNC bridge")
     
     # Connect to noVNC websockify proxy at localhost:6080
     target_host = "127.0.0.1"
