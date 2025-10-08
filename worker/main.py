@@ -80,6 +80,10 @@ async def init_browser():
                 '--disable-dev-shm-usage',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-web-security',
+                '--disable-extensions',  # Disable all browser extensions (MetaMask, etc.)
+                '--disable-plugins',
+                '--disable-default-apps',
+                '--disable-component-extensions-with-background-pages',
                 f'--display={DISPLAY}',
             ]
         )
@@ -541,14 +545,14 @@ async def websockify_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("✅ WebSocket accepted - starting VNC bridge")
     
-    # Connect to VNC at localhost:5901
+    # Connect to noVNC websockify proxy at localhost:6080
     target_host = "127.0.0.1"
-    target_port = 5901  # x11vnc direct port
+    target_port = 6080  # noVNC websockify proxy
     try:
         uri = f"ws://{target_host}:{target_port}"
-        print(f"🔌 Connecting to x11vnc at {uri}")
+        print(f"🔌 Connecting to noVNC websockify at {uri}")
         async with websockets.connect(uri) as upstream:
-            print("✅ Connected to x11vnc")
+            print("✅ Connected to noVNC websockify")
             
             async def client_to_upstream():
                 try:
