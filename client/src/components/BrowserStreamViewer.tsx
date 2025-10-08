@@ -9,47 +9,62 @@ import { useEffect, useState } from 'react';
 
 interface BrowserStreamViewerProps {
   sessionId: string;
+  agentId?: string;
   workerUrl?: string;
 }
 
 export function BrowserStreamViewer({ 
-  sessionId, 
+  sessionId,
+  agentId,
   workerUrl = 'https://worker-production-6480.up.railway.app' 
 }: BrowserStreamViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [auth, setAuth] = useState<{ token: string; vncPassword: string } | null>(null);
 
   // Construct noVNC URL
   // Worker exposes noVNC internally on port 6080, but Railway exposes it on main port (8080)
   const baseUrl = workerUrl.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '');
-  // Use worker-hosted noVNC plus WS proxy path so the WS tunnel stays on port 8080
-  const vncUrl = `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify`;
+  // Build vncUrl dynamically once we have the token
+  const vncUrl = auth
+    ? `https://${baseUrl}/vnc.html?autoconnect=true&resize=scale&path=/websockify&token=${encodeURIComponent(auth.token)}&sessionId=${encodeURIComponent(sessionId)}&password=${encodeURIComponent(auth.vncPassword)}`
+    : `https://${baseUrl}/vnc.html`;
 
   useEffect(() => {
     console.log('[VNC_VIEWER] Session ID:', sessionId);
-    console.log('[VNC_VIEWER] noVNC URL:', vncUrl);
+    // Request per-session VNC token from server
+    (async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const res = await fetch(`/api/session/${encodeURIComponent(agentId || sessionId)}/live-view`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csrfToken: 'skip' }) // server schema allows CSRF in production; backend handles
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || `VNC auth failed: ${res.status}`);
+        }
+        const j = await res.json();
+        // Expect { vncToken, vncPassword, workerUrl? }
+        if (j.workerUrl) {
+          // if server provides public worker URL, override
+        }
+        setAuth({ token: j.vncToken, vncPassword: j.vncPassword || 'password' });
+      } catch (e: any) {
+        console.error('[VNC_VIEWER] Token fetch error:', e);
+        setError(e.message || 'Failed to obtain VNC token');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
     
     // Reset states
     setIsLoading(true);
     setError(null);
 
-    // Check if worker is accessible
-    const workerHealthUrl = `https://${baseUrl}/health`;
-    fetch(workerHealthUrl, { method: 'GET' })
-      .then(res => {
-        if (res.ok) {
-          console.log('[VNC_VIEWER] Worker is healthy');
-          setIsLoading(false);
-        } else {
-          throw new Error('Worker health check failed');
-        }
-      })
-      .catch(err => {
-        console.error('[VNC_VIEWER] Worker health check error:', err);
-        setError('Worker service is not responding. Please wait for deployment to complete.');
-        setIsLoading(false);
-      });
-  }, [sessionId, vncUrl, workerUrl]);
+  }, [sessionId, agentId, workerUrl]);
 
   if (error) {
     return (

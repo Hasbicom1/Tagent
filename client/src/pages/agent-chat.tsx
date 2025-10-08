@@ -320,7 +320,8 @@ export default function AgentChat() {
         {sessionInfo?.sessionId ? (
           <BrowserStreamViewer
             sessionId={sessionInfo.sessionId}
-            workerUrl="wss://worker-production-6480.up.railway.app"
+            agentId={agentId}
+            workerUrl="https://worker-production-6480.up.railway.app"
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-gray-500">

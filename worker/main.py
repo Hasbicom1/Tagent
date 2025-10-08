@@ -16,6 +16,8 @@ import redis
 from rq import Queue, Worker
 import logging
 import websockets
+import jwt
+from jwt import InvalidTokenError
 import asyncio
 import socket
 
@@ -320,6 +322,27 @@ async def websockify_proxy(websocket: WebSocket):
     target_host = "127.0.0.1"
     target_port = 6080
     try:
+        # Validate JWT token from query params before accepting
+        params = websocket.query_params
+        token = params.get("token")
+        session_id = params.get("sessionId")
+
+        jwt_secret = os.getenv("JWT_SECRET", "dev-secret-key-replace-in-production")
+        if not token:
+            await websocket.close(code=1008)
+            return
+        try:
+            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            if payload.get("type") != "vnc_access":
+                await websocket.close(code=1008)
+                return
+            if session_id and payload.get("sessionId") != session_id:
+                await websocket.close(code=1008)
+                return
+        except InvalidTokenError:
+            await websocket.close(code=1008)
+            return
+
         await websocket.accept()
         uri = f"ws://{target_host}:{target_port}"
         async with websockets.connect(uri) as upstream:

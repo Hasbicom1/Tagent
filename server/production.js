@@ -1459,47 +1459,28 @@ console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER
 app.post('/api/session/:agentId/live-view', async (req, res) => {
   try {
     const sessionId = req.params.agentId;
-    // Reuse worker VNC discovery: returns { webSocketURL, sessionId, displayEnv, vncPort }
-    const workerUrls = [
-      process.env.WORKER_INTERNAL_URL,
-      process.env.WORKER_PUBLIC_URL,
-      'http://worker.railway.internal:8080',
-      'http://automation-worker.railway.internal:8080',
-      'http://browser-worker.railway.internal:8080',
-      'http://vnc-worker.railway.internal:8080',
-      'http://worker:8080'
-    ].filter(Boolean);
-
-    let workerResponse = null;
-    let lastError = null;
-
-    for (const workerUrl of workerUrls) {
-      try {
-        const url = `${workerUrl}/vnc/${encodeURIComponent(sessionId)}`;
-        console.log('🔐 VNC auth: requesting worker VNC info at', url);
-        workerResponse = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        if (workerResponse.ok) break;
-        console.warn('⚠️ VNC auth: worker returned', workerResponse.status);
-      } catch (e) {
-        lastError = e;
-        console.warn('⚠️ VNC auth: worker connect failed:', e?.message || e);
-      }
-    }
-
-    if (!workerResponse || !workerResponse.ok) {
-      return res.status(503).json({ error: 'Worker unavailable', message: lastError?.message || 'No worker response' });
-    }
-
-    const data = await workerResponse.json();
-    // Shape for VNCClient
-    const out = {
-      webSocketURL: data.webSocketURL,
-      vncToken: null,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      sessionId: data.sessionId,
-      displayNumber: data.displayEnv
+    // Mint short-lived JWT allowing access at worker /websockify
+    const jwtModule = await import('jsonwebtoken');
+    const jwt = jwtModule.default || jwtModule;
+    const iat = Math.floor(Date.now() / 1000);
+    const exp = iat + (15 * 60); // 15 minutes
+    const payload = {
+      sessionId,
+      agentId: sessionId,
+      type: 'vnc_access',
+      iat,
+      exp
     };
-    return res.json(out);
+    const secret = process.env.JWT_SECRET || 'dev-secret-key-replace-in-production';
+    const vncToken = jwt.sign(payload, secret);
+    // Respond with token and helper fields for the client
+    return res.json({
+      vncToken,
+      expiresAt: new Date(exp * 1000).toISOString(),
+      sessionId,
+      vncPassword: 'password',
+      workerUrl: process.env.WORKER_PUBLIC_URL || 'https://worker-production-6480.up.railway.app'
+    });
   } catch (e) {
     console.error('❌ VNC auth error:', e?.message || e);
     return res.status(500).json({ error: 'VNC auth failed', message: e?.message || String(e) });
