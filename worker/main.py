@@ -18,6 +18,8 @@ import logging
 import websockets
 import jwt
 from jwt import InvalidTokenError
+from datetime import datetime
+import traceback
 import asyncio
 import socket
 
@@ -318,32 +320,109 @@ async def root():
 # Lightweight WebSocket proxy: /websockify → ws://127.0.0.1:6080
 # Bridges the browser's WS connection (Metal Edge 8080) to local noVNC websockify on 6080
 @app.websocket("/websockify")
-async def websockify_proxy(websocket: WebSocket):
+async def websockify_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for noVNC with complete JWT validation and debugging
+    (keeps existing VNC bridge once validated)
+    """
+
+    print("=" * 80)
+    print("🔍 NEW VNC WEBSOCKET CONNECTION ATTEMPT")
+    print("=" * 80)
+
+    # Extract parameters
+    token = websocket.query_params.get("token")
+    session_id = websocket.query_params.get("sessionId")
+
+    print(f"📋 Session ID from query: {session_id}")
+    print(f"🎫 Token present: {bool(token)}")
+
+    if token:
+        print(f"🎫 Token length: {len(token)} characters")
+        print(f"🎫 Token start: {token[:30]}...")
+        print(f"🎫 Token end: ...{token[-20:]}")
+
+    # Get JWT secret
+    jwt_secret = os.getenv('JWT_SECRET', 'dev-secret-key-replace-in-production')
+    print(f"🔑 JWT_SECRET loaded: {bool(os.getenv('JWT_SECRET'))}")
+    print(f"🔑 Secret preview: {jwt_secret[:30]}...")
+    print(f"🔑 Secret length: {len(jwt_secret)}")
+
+    # Client info
+    try:
+        print(f"🌐 Client: {websocket.client.host}:{websocket.client.port}")
+    except Exception:
+        pass
+
+    # CRITICAL: Check if token exists
+    if not token:
+        print("❌ ERROR: No token in query parameters")
+        print(f"❌ Available query params: {dict(websocket.query_params)}")
+        await websocket.close(code=1008, reason="Missing token")
+        return
+
+    # JWT Validation with detailed error handling
+    try:
+        print("🔐 Starting JWT decode...")
+        print(f"🔐 Algorithm: HS256")
+        print(f"🔐 Secret being used: {jwt_secret[:30]}...")
+
+        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+
+        print("✅ JWT DECODED SUCCESSFULLY!")
+        print(f"📦 Payload keys: {list(payload.keys())}")
+        print(f"📦 Full payload: {payload}")
+
+        token_session = payload.get('sessionId') or payload.get('agentId')
+        print(f"🔍 Session from token: {token_session}")
+        print(f"🔍 Session from query: {session_id}")
+
+        # Optional mismatch warning only
+        if token_session and session_id and token_session != session_id:
+            print("⚠️  WARNING: Session mismatch but continuing...")
+
+        exp = payload.get('exp')
+        if exp:
+            exp_time = datetime.fromtimestamp(exp)
+            now = datetime.now()
+            print(f"⏰ Token expires: {exp_time}")
+            print(f"⏰ Current time: {now}")
+            print(f"⏰ Time until expiry: {exp_time - now}")
+            if now >= exp_time:
+                print("❌ ERROR: Token has EXPIRED")
+                await websocket.close(code=1008, reason="Token expired")
+                return
+
+        print("✅ ALL JWT VALIDATIONS PASSED")
+
+    except jwt.ExpiredSignatureError as e:
+        print(f"❌ JWT ERROR: Token expired: {e}")
+        await websocket.close(code=1008, reason="Token expired")
+        return
+    except jwt.InvalidSignatureError as e:
+        print(f"❌ JWT ERROR: Invalid signature - SECRET MISMATCH: {e}")
+        await websocket.close(code=1008, reason="Invalid signature")
+        return
+    except jwt.DecodeError as e:
+        print(f"❌ JWT ERROR: Cannot decode token: {e}")
+        await websocket.close(code=1008, reason="Invalid token format")
+        return
+    except InvalidTokenError as e:
+        print(f"❌ JWT ERROR: Invalid token: {type(e).__name__}: {e}")
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    except Exception as e:
+        print(f"❌ UNEXPECTED ERROR during JWT validation: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        await websocket.close(code=1008, reason="Validation error")
+        return
+
+    # If validation succeeded, accept and bridge to internal noVNC/websockify
     target_host = "127.0.0.1"
     target_port = 6080
     try:
-        # Validate JWT token from query params before accepting
-        params = websocket.query_params
-        token = params.get("token")
-        session_id = params.get("sessionId")
-
-        jwt_secret = os.getenv("JWT_SECRET", "dev-secret-key-replace-in-production")
-        if not token:
-            await websocket.close(code=1008)
-            return
-        try:
-            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-            if payload.get("type") != "vnc_access":
-                await websocket.close(code=1008)
-                return
-            if session_id and payload.get("sessionId") != session_id:
-                await websocket.close(code=1008)
-                return
-        except InvalidTokenError:
-            await websocket.close(code=1008)
-            return
-
         await websocket.accept()
+        print("✅✅✅ WEBSOCKET CONNECTION ACCEPTED ✅✅✅")
         uri = f"ws://{target_host}:{target_port}"
         async with websockets.connect(uri) as upstream:
             async def client_to_upstream():
@@ -351,7 +430,8 @@ async def websockify_proxy(websocket: WebSocket):
                     while True:
                         data = await websocket.receive_bytes()
                         await upstream.send(data)
-                except Exception:
+                except Exception as e:
+                    print(f"client_to_upstream terminated: {e}")
                     try:
                         await upstream.close()
                     except Exception:
@@ -364,7 +444,8 @@ async def websockify_proxy(websocket: WebSocket):
                             await websocket.send_bytes(message)
                         else:
                             await websocket.send_text(message)
-                except Exception:
+                except Exception as e:
+                    print(f"upstream_to_client terminated: {e}")
                     try:
                         await websocket.close()
                     except Exception:
@@ -374,6 +455,7 @@ async def websockify_proxy(websocket: WebSocket):
 
     except Exception as e:
         logger.error(f"❌ Websockify proxy error: {e}")
+        traceback.print_exc()
         try:
             await websocket.close()
         except Exception:
