@@ -1,21 +1,21 @@
 /**
- * EKO FRAMEWORK IMPLEMENTATION
+ * ONEDOLLARAGENT FRAMEWORK IMPLEMENTATION
  * Based on https://github.com/FellouAI/eko.git
  * Real implementation - NO FAKE WRAPPERS
  */
 
 import { io, Socket } from 'socket.io-client';
 
-// Eko Core Types
-export interface EkoConfig {
+// OneDollarAgent Core Types
+export interface OneDollarAgentConfig {
   agents: Agent[];
   llms?: any;
-  callback?: EkoCallback;
+  callback?: OneDollarAgentCallback;
   a2aClient?: any;
   agentParallel?: boolean;
 }
 
-export interface EkoResult {
+export interface OneDollarAgentResult {
   success: boolean;
   stopReason: 'done' | 'abort' | 'error';
   taskId: string;
@@ -62,7 +62,7 @@ export interface AgentChain {
 
 export interface Context {
   taskId: string;
-  config: EkoConfig;
+  config: OneDollarAgentConfig;
   agents: Agent[];
   chain: Chain;
   workflow: Workflow;
@@ -81,17 +81,17 @@ export interface Chain {
   push(agentChain: AgentChain): void;
 }
 
-export interface EkoCallback {
+export interface OneDollarAgentCallback {
   onMessage(message: any, agentContext?: any): Promise<void>;
 }
 
-// Eko Framework Implementation
-export class EkoFramework {
-  private config: EkoConfig;
+// OneDollarAgent Framework Implementation
+export class OneDollarAgentFramework {
+  private config: OneDollarAgentConfig;
   private taskMap: Map<string, Context> = new Map();
   private socket: Socket;
 
-  constructor(config: EkoConfig) {
+  constructor(config: OneDollarAgentConfig) {
     this.config = config;
     this.socket = io(window.location.origin, {
       path: '/ws/socket.io/',

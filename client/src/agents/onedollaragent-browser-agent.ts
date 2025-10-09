@@ -1,10 +1,10 @@
 /**
- * EKO BROWSER AGENT
- * Real implementation based on Eko framework
+ * ONEDOLLARAGENT BROWSER AGENT
+ * Real implementation based on OneDollarAgent framework
  * NO FAKE WRAPPERS - ACTUAL BROWSER AUTOMATION
  */
 
-import { Agent, AgentContext, AgentChain } from '../core/eko-framework';
+import { Agent, AgentContext, AgentChain } from '../core/onedollaragent-framework';
 import { 
   navigateTo, 
   clickElement, 
@@ -16,22 +16,22 @@ import {
 } from '../utils/domActions';
 import { showCursor, hideCursor, highlightElement, removeHighlight } from '../utils/visualFeedback';
 
-export class EkoBrowserAgent implements Agent {
-  public Name = "BrowserAgent";
+export class OneDollarAgentBrowserAgent implements Agent {
+  public Name = "OneDollarAgentBrowserAgent";
   public Description = "Real browser automation agent with visual feedback";
   public AgentContext?: any;
 
   async run(context: AgentContext, agentChain: AgentChain): Promise<string> {
-    console.log('🤖 EKO BROWSER AGENT: Starting real browser automation');
+    console.log('🤖 ONEDOLLARAGENT BROWSER AGENT: Starting real browser automation');
     
     try {
       // Get task prompt from context
       const taskPrompt = context.context.chain.taskPrompt;
-      console.log('🎯 EKO BROWSER AGENT: Task:', taskPrompt);
+      console.log('🎯 ONEDOLLARAGENT BROWSER AGENT: Task:', taskPrompt);
       
       // Parse natural language into browser actions
       const actions = await this.parseTaskToActions(taskPrompt);
-      console.log('📋 EKO BROWSER AGENT: Parsed actions:', actions);
+      console.log('📋 ONEDOLLARAGENT BROWSER AGENT: Parsed actions:', actions);
       
       // Execute actions with visual feedback
       const results: string[] = [];

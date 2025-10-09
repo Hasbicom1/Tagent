@@ -1,37 +1,37 @@
 /**
- * EKO ORCHESTRATOR
+ * ONEDOLLARAGENT ORCHESTRATOR
  * Real implementation based on Eko framework
  * Coordinates multiple agents and natural language processing
  */
 
-import { EkoFramework, EkoConfig, EkoResult } from './eko-framework';
-import { EkoBrowserAgent } from '../agents/eko-browser-agent';
-import { EkoFileAgent } from '../agents/eko-file-agent';
+import { OneDollarAgentFramework, OneDollarAgentConfig, OneDollarAgentResult } from './onedollaragent-framework';
+import { OneDollarAgentBrowserAgent } from '../agents/onedollaragent-browser-agent';
+import { OneDollarAgentFileAgent } from '../agents/onedollaragent-file-agent';
 import { io, Socket } from 'socket.io-client';
 
-export class EkoOrchestrator {
-  private eko: EkoFramework;
+export class OneDollarAgentOrchestrator {
+  private framework: OneDollarAgentFramework;
   private socket: Socket;
   private isRunning: boolean = false;
   private currentTaskId: string | null = null;
 
   constructor() {
-    // Initialize Eko framework with real agents
-    const config: EkoConfig = {
+    // Initialize OneDollarAgent framework with real agents
+    const config: OneDollarAgentConfig = {
       agents: [
-        new EkoBrowserAgent(),
-        new EkoFileAgent()
+        new OneDollarAgentBrowserAgent(),
+        new OneDollarAgentFileAgent()
       ],
       callback: {
         onMessage: async (message) => {
-          console.log('📨 EKO CALLBACK:', message);
+          console.log('📨 ONEDOLLARAGENT CALLBACK:', message);
           this.handleAgentMessage(message);
         }
       },
       agentParallel: false // Sequential execution for better control
     };
 
-    this.eko = new EkoFramework(config);
+    this.framework = new OneDollarAgentFramework(config);
     
     // Initialize Socket.IO connection
     this.socket = io(window.location.origin, {

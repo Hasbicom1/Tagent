@@ -1,27 +1,27 @@
 /**
- * EKO FILE AGENT
- * Real implementation based on Eko framework
+ * ONEDOLLARAGENT FILE AGENT
+ * Real implementation based on OneDollarAgent framework
  * NO FAKE WRAPPERS - ACTUAL FILE OPERATIONS
  */
 
-import { Agent, AgentContext, AgentChain } from '../core/eko-framework';
+import { Agent, AgentContext, AgentChain } from '../core/onedollaragent-framework';
 
-export class EkoFileAgent implements Agent {
-  public Name = "FileAgent";
+export class OneDollarAgentFileAgent implements Agent {
+  public Name = "OneDollarAgentFileAgent";
   public Description = "Real file operations agent";
   public AgentContext?: any;
 
   async run(context: AgentContext, agentChain: AgentChain): Promise<string> {
-    console.log('📁 EKO FILE AGENT: Starting real file operations');
+    console.log('📁 ONEDOLLARAGENT FILE AGENT: Starting real file operations');
     
     try {
       // Get task prompt from context
       const taskPrompt = context.context.chain.taskPrompt;
-      console.log('🎯 EKO FILE AGENT: Task:', taskPrompt);
+      console.log('🎯 ONEDOLLARAGENT FILE AGENT: Task:', taskPrompt);
       
       // Parse natural language into file actions
       const actions = await this.parseTaskToActions(taskPrompt);
-      console.log('📋 EKO FILE AGENT: Parsed actions:', actions);
+      console.log('📋 ONEDOLLARAGENT FILE AGENT: Parsed actions:', actions);
       
       // Execute actions
       const results: string[] = [];

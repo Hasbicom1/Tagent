@@ -8,6 +8,8 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { OneDollarAgentOrchestrator } from '@/core/onedollaragent-orchestrator';
+import { OneDollarAgentNLP } from '@/core/onedollaragent-nlp';
 import { 
   Terminal, 
   Zap, 
@@ -67,6 +69,11 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [precisionMode, setPrecisionMode] = useState(true); // PRECISION ENHANCEMENT: Enable by default
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
+
+  // OneDollarAgent Framework Integration
+  const [orchestrator] = useState(() => new OneDollarAgentOrchestrator());
+  const [nlp] = useState(() => new OneDollarAgentNLP());
+  const [isBrowserAutomationActive, setIsBrowserAutomationActive] = useState(false);
 
   // FIXED: Fetch session info with proper expiry validation
   const { data: sessionInfo, error: sessionError } = useQuery({
@@ -196,34 +203,65 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
 
   const messages = getCurrentMessages();
 
-  // Send message mutation
+  // Send message mutation with OneDollarAgent integration
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      console.log('🚀 mutationFn called with content:', content);
-      console.log('🚀 Sending POST to:', `/api/session/${agentId}/message`);
+      console.log('🚀 OneDollarAgent: Processing message:', content);
       
-      // Add timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      // Analyze user input with NLP
+      const analysis = await nlp.analyze(content);
+      console.log('🧠 OneDollarAgent NLP Analysis:', analysis);
       
-      try {
-        const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
-        clearTimeout(timeoutId);
-        console.log('🚀 Response status:', response.status);
-        if (!response.ok) {
-          const error = await response.json();
-          console.error('❌ Response error:', error);
-          throw new Error(error.error || 'Neural link transmission failed - message not delivered');
+      // Check if this requires browser automation
+      if (analysis.requiresBrowserAutomation) {
+        console.log('🌐 OneDollarAgent: Browser automation required');
+        setIsBrowserAutomationActive(true);
+        
+        // Execute browser automation with OneDollarAgent framework
+        try {
+          const result = await orchestrator.executeCommand(content);
+          console.log('✅ OneDollarAgent: Browser automation completed:', result);
+          
+          // Update browser view with automation result
+          setBrowserView(result.screenshot || 'Browser automation completed');
+          setExecutionLog(prev => [...prev, `Browser automation: ${result.result}`]);
+          
+          return {
+            userMessage: content,
+            agentMessage: `I've completed the browser automation: ${result.result}`,
+            hasExecutableTask: true,
+            taskDescription: analysis.intent
+          };
+        } catch (error) {
+          console.error('❌ OneDollarAgent: Browser automation failed:', error);
+          setIsBrowserAutomationActive(false);
+          throw new Error(`Browser automation failed: ${error}`);
         }
-        const data = await response.json();
-        console.log('✅ Response data:', data);
-        return data;
-      } catch (err: any) {
-        clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
-          throw new Error('Request timed out after 30 seconds');
+      } else {
+        // Regular chat - use existing Groq integration
+        console.log('💬 OneDollarAgent: Regular chat response');
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        try {
+          const response = await apiRequest('POST', `/api/session/${agentId}/message`, { content });
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Neural link transmission failed');
+          }
+          
+          const data = await response.json();
+          return data;
+        } catch (err: any) {
+          clearTimeout(timeoutId);
+          if (err.name === 'AbortError') {
+            throw new Error('Request timed out after 30 seconds');
+          }
+          throw err;
         }
-        throw err;
       }
     },
     onSuccess: (data) => {
@@ -779,10 +817,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                           <Activity className="w-8 h-8 text-chart-2 animate-pulse" />
                         </div>
                         <div className="text-sm font-mono text-muted-foreground">
-                          IN-BROWSER_AUTOMATION_ACTIVE
+                          {isBrowserAutomationActive ? 'ONEDOLLARAGENT_ACTIVE' : 'IN-BROWSER_AUTOMATION_ACTIVE'}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          AI controls your browser directly
+                          {isBrowserAutomationActive ? 'OneDollarAgent controlling browser' : 'AI controls your browser directly'}
                         </div>
                       </div>
                     </div>
@@ -823,12 +861,15 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                         in-browser automation (no VNC required)
                       </div>
                       <Button 
-                        onClick={() => window.location.href = '/automation-demo'}
+                        onClick={() => {
+                          setCurrentMessage('navigate to google.com');
+                          handleSendMessage();
+                        }}
                         className="font-mono"
                         variant="outline"
                       >
                         <Monitor className="w-4 h-4 mr-2" />
-                        TRY_DEMO
+                        START_AUTOMATION
                       </Button>
                     </div>
                   </div>

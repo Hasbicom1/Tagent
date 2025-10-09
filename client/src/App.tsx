@@ -18,10 +18,7 @@ import AgentChat from "@/pages/agent-chat";
 import BrowserChatPage from "@/pages/browser-chat";
 import InvisibleAutomationPage from "@/pages/invisible-automation";
 import AutomationSessionPage from "@/pages/automation-session";
-import AutomationDemo from "@/pages/automation-demo";
-import AutomationTest from "@/pages/automation-test";
 import VNCTestPage from "@/pages/vnc-test";
-import { EkoDemo } from "@/pages/EkoDemo";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -273,38 +270,8 @@ function Router() {
         </div>
       )} />
       
-      {/* Automation Demo Route */}
-      <Route path="/automation-demo" component={() => (
-        <div>
-          <div className="fixed top-4 right-4 z-50">
-            <ThemeToggle />
-          </div>
-          <AutomationDemo />
-        </div>
-      )} />
-      
-      {/* Automation Test Route */}
-      <Route path="/automation-test" component={() => (
-        <div>
-          <div className="fixed top-4 right-4 z-50">
-            <ThemeToggle />
-          </div>
-          <AutomationTest />
-        </div>
-      )} />
-      
       {/* VNC Security Test Route */}
       <Route path="/vnc-test" component={VNCTestPage} />
-      
-      {/* Eko Framework Demo Route */}
-      <Route path="/eko-demo" component={() => (
-        <div>
-          <div className="fixed top-4 right-4 z-50">
-            <ThemeToggle />
-          </div>
-          <EkoDemo />
-        </div>
-      )} />
       
       {/* Existing Routes */}
       <Route path="/success" component={CheckoutSuccess} />
