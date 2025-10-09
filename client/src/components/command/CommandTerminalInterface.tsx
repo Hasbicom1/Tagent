@@ -75,8 +75,21 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
+  const [activePopup, setActivePopup] = useState<string | null>(null);
+  const [matrixEffect, setMatrixEffect] = useState(false);
+  const [typewriterText, setTypewriterText] = useState('');
+  const [showSkipButton, setShowSkipButton] = useState(false);
+  const [customColor, setCustomColor] = useState('');
+  const [showColorInput, setShowColorInput] = useState(false);
+  const [showColorChoice, setShowColorChoice] = useState(false);
+  const [textReady, setTextReady] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [fontSize, setFontSize] = useState('text-base');
+  const [fontStyle, setFontStyle] = useState('font-mono');
+  const [showSettings, setShowSettings] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Focus input on mount and keep focus
   useEffect(() => {
@@ -366,6 +379,253 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
     const filled = Math.floor(progress / 5);
     const blocks = Array.from({ length: 20 }, (_, i) => i < filled ? '█' : '▒');
     return <span className="font-mono">{blocks.join('')}</span>;
+  };
+
+  // About Section with 3 Hacker Windows
+  const AboutSection = () => {
+    const handleCardClick = (cardType: string) => {
+      setActivePopup(cardType);
+      setMatrixEffect(true);
+      setTypewriterText('');
+      setShowSkipButton(false);
+      setShowColorChoice(true);
+      setTextReady(false);
+      setCustomColor('');
+      setShowSettings(false);
+      
+      // Start matrix effect
+      setTimeout(() => {
+        setMatrixEffect(false);
+        setShowColorChoice(true);
+      }, 2000);
+    };
+
+    const handleSettingsClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowSettings(!showSettings);
+    };
+
+    const startTypewriterEffect = (cardType: string) => {
+      // Clear any existing typewriter interval
+      if (typewriterIntervalRef.current) {
+        clearInterval(typewriterIntervalRef.current);
+        typewriterIntervalRef.current = null;
+      }
+
+      const texts = {
+        project: `$ ./announce_project --whitelist
+// 🚀 PROJECT ANNOUNCEMENT 🚀
+// ==========================
+
+🎉 BREAKING: Revolutionary AI Platform Launched!
+// =============================================
+
+🔥 EXCLUSIVE WHITELIST ACCESS 🔥
+// =============================
+• Early access to cutting-edge AI technology
+• Priority support and exclusive features
+• Limited spots available - first come, first served
+• Join the future of AI before everyone else
+
+💎 PREMIUM FEATURES UNLOCKED
+// ==========================
+• Advanced AI agent capabilities
+• Real-time browser automation
+• Multi-modal AI interactions
+• Enterprise-grade security
+
+🚀 GET STARTED NOW
+// ================
+Ready to revolutionize your workflow? Join the whitelist today!`,
+        concept: `$ ./explain_concept --ai-revolution
+// 🧠 CONCEPT EXPLANATION 🧠
+// =========================
+
+🌟 THE AI REVOLUTION IS HERE
+// ===========================
+We're not just building another AI tool - we're creating a movement.
+
+💡 CORE PHILOSOPHY
+// ================
+• AI should be accessible to everyone
+• Technology should empower, not exclude
+• Innovation should serve humanity
+• The future is collaborative, not competitive
+
+🎯 OUR MISSION
+// ============
+To democratize AI technology and make it available to anyone,
+regardless of their technical background or financial resources.
+
+🌍 IMPACT VISION
+// ==============
+Imagine a world where:
+• Every small business has AI assistance
+• Every student can access advanced AI tools
+• Every creative can leverage AI for their art
+• Every dreamer can build with AI
+
+This is the world we're building.`,
+        collaboration: `$ ./collaborate --dream-team
+// 🤝 COLLABORATION INVITATION 🤝
+// ==============================
+
+🌟 JOIN THE DREAM TEAM
+// ====================
+We're not just building a product - we're building a community.
+
+👥 WHO WE'RE LOOKING FOR
+// ======================
+• Visionaries who see AI's potential
+• Builders who want to create impact
+• Dreamers who believe in accessibility
+• Innovators who think differently
+
+🚀 COLLABORATION OPPORTUNITIES
+// ============================
+• Technical partnerships
+• Community building
+• Content creation
+• Feedback and testing
+• Strategic advisory
+
+💫 TOGETHER WE BUILD
+// =================
+The future of AI is collaborative. Join us in making AI
+accessible to everyone, everywhere, for just $1.
+
+Ready to change the world? Let's build together!`
+      };
+
+      setTypewriterText(texts[activePopup as keyof typeof texts] || '');
+      setShowSkipButton(false);
+      
+      let index = 0;
+      typewriterIntervalRef.current = setInterval(() => {
+        setTypewriterText(texts[cardType as keyof typeof texts].slice(0, index + 1));
+        index++;
+        
+        if (index >= texts[cardType as keyof typeof texts].length) {
+          if (typewriterIntervalRef.current) {
+            clearInterval(typewriterIntervalRef.current);
+            typewriterIntervalRef.current = null;
+          }
+          setShowSkipButton(true);
+        }
+      }, 30);
+    };
+
+    const skipTypewriter = () => {
+      if (typewriterIntervalRef.current) {
+        clearInterval(typewriterIntervalRef.current);
+        typewriterIntervalRef.current = null;
+      }
+      setShowSkipButton(false);
+      setTextReady(true);
+    };
+
+    const handleColorSelect = (color: string) => {
+      setCustomColor(color);
+      setShowColorChoice(false);
+      setTextReady(true);
+      startTypewriterEffect(activePopup!);
+    };
+
+    const handleColorConfirm = () => {
+      setShowColorChoice(false);
+      setTextReady(true);
+      startTypewriterEffect(activePopup!);
+    };
+
+    const handleColorInput = (color: string) => {
+      setCustomColor(color);
+      setShowColorInput(false);
+    };
+
+    const handleColorInputConfirm = (color: string) => {
+      setCustomColor(color);
+      setShowColorChoice(false);
+      setTextReady(true);
+      startTypewriterEffect(activePopup!);
+    };
+
+    const getTextColor = () => {
+      if (customColor) {
+        const colorMap: { [key: string]: string } = {
+          'red': 'text-red-400',
+          'green': 'text-green-400',
+          'blue': 'text-blue-400',
+          'yellow': 'text-yellow-400',
+          'purple': 'text-purple-400',
+          'cyan': 'text-cyan-400',
+          'pink': 'text-pink-400',
+          'orange': 'text-orange-400'
+        };
+        return colorMap[customColor.toLowerCase()] || 'text-primary';
+      }
+      return 'text-primary';
+    };
+
+    return (
+      <div className="space-y-8">
+        <div className="text-center space-y-4">
+          <h2 className="text-3xl font-bold text-primary">About the Project</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Discover the revolutionary AI platform that's changing how we interact with technology
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Project Card */}
+          <div 
+            className="bg-card/50 border border-primary/20 rounded-lg p-6 cursor-pointer hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10"
+            onClick={() => handleCardClick('project')}
+          >
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto">
+                <Zap className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold">Project</h3>
+              <p className="text-sm text-muted-foreground">
+                Revolutionary AI platform with exclusive whitelist access
+              </p>
+            </div>
+          </div>
+
+          {/* Concept Card */}
+          <div 
+            className="bg-card/50 border border-primary/20 rounded-lg p-6 cursor-pointer hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10"
+            onClick={() => handleCardClick('concept')}
+          >
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto">
+                <Bot className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold">Concept</h3>
+              <p className="text-sm text-muted-foreground">
+                The AI revolution philosophy and mission
+              </p>
+            </div>
+          </div>
+
+          {/* Collaboration Card */}
+          <div 
+            className="bg-card/50 border border-primary/20 rounded-lg p-6 cursor-pointer hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10"
+            onClick={() => handleCardClick('collaboration')}
+          >
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto">
+                <Settings className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold">Collaboration</h3>
+              <p className="text-sm text-muted-foreground">
+                Join the dream team and build the future
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -831,913 +1091,6 @@ function ContactSection() {
           <div>Built by dreamers who believe $1 can change a life</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// About Section with 3 Hacker Windows
-function AboutSection() {
-  const [activePopup, setActivePopup] = useState<string | null>(null);
-  const [matrixEffect, setMatrixEffect] = useState(false);
-  const [typewriterText, setTypewriterText] = useState('');
-  const [showSkipButton, setShowSkipButton] = useState(false);
-  const [customColor, setCustomColor] = useState('');
-  const [showColorInput, setShowColorInput] = useState(false);
-  const [showColorChoice, setShowColorChoice] = useState(false);
-  const [textReady, setTextReady] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [fontSize, setFontSize] = useState('text-base');
-  const [fontStyle, setFontStyle] = useState('font-mono');
-  const [showSettings, setShowSettings] = useState(false);
-  const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-
-  const handleCardClick = (cardType: string) => {
-    setActivePopup(cardType);
-    setMatrixEffect(true);
-    setTypewriterText('');
-    setShowSkipButton(false);
-    setShowColorChoice(true);
-    setTextReady(false);
-    setCustomColor('');
-    setShowSettings(false);
-    
-    // Start matrix effect
-    setTimeout(() => {
-      setMatrixEffect(false);
-      setShowColorChoice(true);
-    }, 2000);
-  };
-
-  const handleSettingsClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowSettings(!showSettings);
-  };
-
-  const startTypewriterEffect = (cardType: string) => {
-    // Clear any existing typewriter interval
-    if (typewriterIntervalRef.current) {
-      clearInterval(typewriterIntervalRef.current);
-      typewriterIntervalRef.current = null;
-    }
-
-    const texts = {
-      project: `$ ./announce_project --whitelist
-// 🚀 PROJECT ANNOUNCEMENT 🚀
-// ==========================
-
-🎉 BREAKING: Revolutionary AI Platform Launched!
-// =============================================
-
-🔥 EXCLUSIVE WHITELIST ACCESS 🔥
-// =============================
-• Early access to cutting-edge AI technology
-• Priority support and exclusive features
-• Limited spots available - first come, first served
-• Join the future of AI before everyone else
-
-💎 PREMIUM FEATURES UNLOCKED
-// ==========================
-• Advanced AI agent integration
-• Real-time browser automation
-• VNC streaming capabilities
-• Multi-agent orchestration
-• Enterprise-grade security
-
-🎯 WHY JOIN OUR WHITELIST?
-// ========================
-• Be among the first to experience next-gen AI
-• Exclusive access to beta features
-• Direct feedback channel to developers
-• Early bird pricing advantages
-• Community of AI pioneers
-
-⚡ LIMITED TIME OFFER ⚡
-// ====================
-• Only 1000 whitelist spots available
-• Registration closes in 48 hours
-• Don't miss your chance to be part of history
-
-// Ready to revolutionize your workflow?
-// Join the whitelist now!`,
-      concept: `$ ./reveal_vision --revolutionary
-// 🌟 REVOLUTIONARY VISION 🌟
-// ==========================
-
-🚀 THE FUTURE OF AI IS HERE!
-// ==========================
-
-💡 BREAKTHROUGH TECHNOLOGY
-// ========================
-• First-of-its-kind AI agent platform
-• Revolutionary browser automation
-• Real-time AI-human collaboration
-• Next-generation workflow optimization
-• Game-changing productivity boost
-
-🎯 MISSION: DEMOCRATIZE AI
-// ========================
-• Make advanced AI accessible to everyone
-• Break down barriers to AI adoption
-• Empower individuals and businesses
-• Create equal opportunities
-• Transform how we work and live
-
-⚡ REVOLUTIONARY FEATURES
-// =======================
-• Multi-agent AI orchestration
-• Real-time browser control
-• VNC streaming integration
-• Advanced automation capabilities
-• Enterprise-grade security
-
-🌟 WHY THIS CHANGES EVERYTHING
-// =============================
-• No more complex AI setup
-• Instant productivity gains
-• Seamless human-AI collaboration
-• Revolutionary user experience
-• The future is now
-
-// Join the AI revolution!
-// Be part of something bigger!`,
-      collaboration: `$ ./join_community --exclusive
-// 🤝 EXCLUSIVE COMMUNITY ACCESS 🤝
-// =================================
-
-🎉 JOIN THE ELITE WHITELIST COMMUNITY!
-// ====================================
-
-🔥 EXCLUSIVE BENEFITS FOR WHITELIST MEMBERS
-// ========================================
-• Direct access to development team
-• Early access to new features
-• Exclusive community channels
-• Priority customer support
-• Special pricing and discounts
-
-💎 PREMIUM COMMUNITY FEATURES
-// ===========================
-• Private Discord server access
-• Monthly AMA sessions with founders
-• Exclusive beta testing opportunities
-• Community-driven feature requests
-• Networking with like-minded innovators
-
-🚀 PARTNERSHIP OPPORTUNITIES
-// ===========================
-• Strategic business partnerships
-• Joint venture possibilities
-• Revenue sharing programs
-• Co-marketing opportunities
-• Technical collaboration projects
-
-🌟 WHY JOIN OUR COMMUNITY?
-// ========================
-• Connect with AI pioneers
-• Shape the future of technology
-• Access to exclusive resources
-• Be part of something revolutionary
-• Network with industry leaders
-
-⚡ LIMITED SPOTS AVAILABLE
-// =======================
-• Only 1000 community members
-• Exclusive whitelist access
-• First-come, first-served basis
-• Don't miss your chance!
-
-// Ready to join the revolution?
-// Apply for whitelist access now!
-
-// 🎨 PROJECT DISCOVERED:
-// ======================
-// NAME: tokensclubhouse
-// VISION: NFT Revival Technology
-// MISSION: Transform static images → Living characters
-// INTEGRATION: Mobile + AI technology
-// REVOLUTION: Your NFTs will breathe, move, and interact
-
-// 🚀 TECHNOLOGY BREAKTHROUGH:
-// ===========================
-// • Static NFT images → Living characters
-// • AI-powered animation system
-// • Mobile-first experience
-// • Real-time character interaction
-// • Blockchain + AI integration
-
-// 🎁 DISCOVERY REWARDS:
-// =====================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎪 PUZZLE SOLVED! 🎉
-// ====================
-// You've discovered the future of NFTs!
-// Ready to bring your digital art to life?
-
-// 🔗 DISCOVER THE PROJECT:
-// ========================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎮 GAME COMPLETE! 🎉
-// ===================
-// You've unlocked the mystery!
-// Ready to bring your NFTs to life?
-
-// 🎨 PROJECT DISCOVERED:
-// ======================
-// NAME: tokensclubhouse
-// VISION: NFT Revival Technology
-// MISSION: Transform static images → Living characters
-// INTEGRATION: Mobile + AI technology
-// REVOLUTION: Your NFTs will breathe, move, and interact
-
-// 🚀 TECHNOLOGY BREAKTHROUGH:
-// ===========================
-// • Static NFT images → Living characters
-// • AI-powered animation system
-// • Mobile-first experience
-// • Real-time character interaction
-// • Blockchain + AI integration
-
-// 🎁 DISCOVERY REWARDS:
-// =====================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎪 PUZZLE SOLVED! 🎉
-// ====================
-// You've discovered the future of NFTs!
-// Ready to bring your digital art to life?
-// 🔗 DISCOVER THE PROJECT:
-// ========================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎮 GAME COMPLETE! 🎉
-// ===================
-// You've unlocked the mystery!
-// Ready to bring your NFTs to life?`
-    };
-
-    const text = texts[cardType as keyof typeof texts] || '';
-    let index = 0;
-    setShowSkipButton(true);
-    
-    typewriterIntervalRef.current = setInterval(() => {
-      if (index < text.length) {
-        setTypewriterText(text.slice(0, index + 1));
-        index++;
-      } else {
-        if (typewriterIntervalRef.current) {
-          clearInterval(typewriterIntervalRef.current);
-          typewriterIntervalRef.current = null;
-        }
-      }
-    }, 30);
-  };
-
-  const skipTypewriter = () => {
-    // Clear any existing typewriter interval
-    if (typewriterIntervalRef.current) {
-      clearInterval(typewriterIntervalRef.current);
-      typewriterIntervalRef.current = null;
-    }
-
-    const texts = {
-      project: `$ ./announce_project --whitelist
-// 🚀 PROJECT ANNOUNCEMENT 🚀
-// ==========================
-
-🎉 BREAKING: Revolutionary AI Platform Launched!
-// =============================================
-
-🔥 EXCLUSIVE WHITELIST ACCESS 🔥
-// =============================
-• Early access to cutting-edge AI technology
-• Priority support and exclusive features
-• Limited spots available - first come, first served
-• Join the future of AI before everyone else
-
-💎 PREMIUM FEATURES UNLOCKED
-// ==========================
-• Advanced AI agent integration
-• Real-time browser automation
-• VNC streaming capabilities
-• Multi-agent orchestration
-• Enterprise-grade security
-
-🎯 WHY JOIN OUR WHITELIST?
-// ========================
-• Be among the first to experience next-gen AI
-• Exclusive access to beta features
-• Direct feedback channel to developers
-• Early bird pricing advantages
-• Community of AI pioneers
-
-⚡ LIMITED TIME OFFER ⚡
-// ====================
-• Only 1000 whitelist spots available
-• Registration closes in 48 hours
-• Don't miss your chance to be part of history
-
-// Ready to revolutionize your workflow?
-// Join the whitelist now!`,
-      concept: `$ ./reveal_vision --revolutionary
-// 🌟 REVOLUTIONARY VISION 🌟
-// ==========================
-
-🚀 THE FUTURE OF AI IS HERE!
-// ==========================
-
-💡 BREAKTHROUGH TECHNOLOGY
-// ========================
-• First-of-its-kind AI agent platform
-• Revolutionary browser automation
-• Real-time AI-human collaboration
-• Next-generation workflow optimization
-• Game-changing productivity boost
-
-🎯 MISSION: DEMOCRATIZE AI
-// ========================
-• Make advanced AI accessible to everyone
-• Break down barriers to AI adoption
-• Empower individuals and businesses
-• Create equal opportunities
-• Transform how we work and live
-
-⚡ REVOLUTIONARY FEATURES
-// =======================
-• Multi-agent AI orchestration
-• Real-time browser control
-• VNC streaming integration
-• Advanced automation capabilities
-• Enterprise-grade security
-
-🌟 WHY THIS CHANGES EVERYTHING
-// =============================
-• No more complex AI setup
-• Instant productivity gains
-• Seamless human-AI collaboration
-• Revolutionary user experience
-• The future is now
-
-// Join the AI revolution!
-// Be part of something bigger!`,
-      collaboration: `$ ./join_community --exclusive
-// 🤝 EXCLUSIVE COMMUNITY ACCESS 🤝
-// =================================
-
-🎉 JOIN THE ELITE WHITELIST COMMUNITY!
-// ====================================
-
-🔥 EXCLUSIVE BENEFITS FOR WHITELIST MEMBERS
-// ========================================
-• Direct access to development team
-• Early access to new features
-• Exclusive community channels
-• Priority customer support
-• Special pricing and discounts
-
-💎 PREMIUM COMMUNITY FEATURES
-// ===========================
-• Private Discord server access
-• Monthly AMA sessions with founders
-• Exclusive beta testing opportunities
-• Community-driven feature requests
-• Networking with like-minded innovators
-
-🚀 PARTNERSHIP OPPORTUNITIES
-// ===========================
-• Strategic business partnerships
-• Joint venture possibilities
-• Revenue sharing programs
-• Co-marketing opportunities
-• Technical collaboration projects
-
-🌟 WHY JOIN OUR COMMUNITY?
-// ========================
-• Connect with AI pioneers
-• Shape the future of technology
-• Access to exclusive resources
-• Be part of something revolutionary
-• Network with industry leaders
-
-⚡ LIMITED SPOTS AVAILABLE
-// =======================
-• Only 1000 community members
-• Exclusive whitelist access
-• First-come, first-served basis
-• Don't miss your chance!
-
-// Ready to join the revolution?
-// Apply for whitelist access now!
-
-// 🎨 PROJECT DISCOVERED:
-// ======================
-// NAME: tokensclubhouse
-// VISION: NFT Revival Technology
-// MISSION: Transform static images → Living characters
-// INTEGRATION: Mobile + AI technology
-// REVOLUTION: Your NFTs will breathe, move, and interact
-
-// 🚀 TECHNOLOGY BREAKTHROUGH:
-// ===========================
-// • Static NFT images → Living characters
-// • AI-powered animation system
-// • Mobile-first experience
-// • Real-time character interaction
-// • Blockchain + AI integration
-
-// 🎁 DISCOVERY REWARDS:
-// =====================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎪 PUZZLE SOLVED! 🎉
-// ====================
-// You've discovered the future of NFTs!
-// Ready to bring your digital art to life?
-
-// 🔗 DISCOVER THE PROJECT:
-// ========================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎮 GAME COMPLETE! 🎉
-// ===================
-// You've unlocked the mystery!
-// Ready to bring your NFTs to life?
-
-// 🎨 PROJECT DISCOVERED:
-// ======================
-// NAME: tokensclubhouse
-// VISION: NFT Revival Technology
-// MISSION: Transform static images → Living characters
-// INTEGRATION: Mobile + AI technology
-// REVOLUTION: Your NFTs will breathe, move, and interact
-
-// 🚀 TECHNOLOGY BREAKTHROUGH:
-// ===========================
-// • Static NFT images → Living characters
-// • AI-powered animation system
-// • Mobile-first experience
-// • Real-time character interaction
-// • Blockchain + AI integration
-
-// 🎁 DISCOVERY REWARDS:
-// =====================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎪 PUZZLE SOLVED! 🎉
-// ====================
-// You've discovered the future of NFTs!
-// Ready to bring your digital art to life?
-// 🔗 DISCOVER THE PROJECT:
-// ========================
-// 🌐 Website: www.tokensclubhouse.com
-// 🐦 Twitter: @tokensclubhouse
-// 📱 Mobile integration ready
-// 🤖 AI character system active
-
-// 🎮 GAME COMPLETE! 🎉
-// ===================
-// You've unlocked the mystery!
-// Ready to bring your NFTs to life?`
-    };
-    
-    setTypewriterText(texts[activePopup as keyof typeof texts] || '');
-    setShowSkipButton(false);
-  };
-
-  const closePopup = () => {
-    // Clear any existing typewriter interval
-    if (typewriterIntervalRef.current) {
-      clearInterval(typewriterIntervalRef.current);
-      typewriterIntervalRef.current = null;
-    }
-    
-    setActivePopup(null);
-    setMatrixEffect(false);
-    setTypewriterText('');
-    setShowSkipButton(false);
-    setShowColorInput(false);
-    setShowColorChoice(false);
-    setTextReady(false);
-    setCustomColor('');
-  };
-
-  const handleColorInput = (color: string) => {
-    setCustomColor(color);
-    setShowColorInput(false);
-  };
-
-  const handleColorChoice = (color: string) => {
-    setCustomColor(color);
-    setShowColorChoice(false);
-    setTextReady(true);
-    startTypewriterEffect(activePopup!);
-  };
-
-
-  const handleSkipColorChoice = () => {
-    setShowColorChoice(false);
-    setTextReady(true);
-    startTypewriterEffect(activePopup!);
-  };
-
-  const handleStartReading = () => {
-    setShowColorChoice(false);
-    setTextReady(true);
-    startTypewriterEffect(activePopup!);
-  };
-
-  const getTextColor = () => {
-    // Simple color mapping for text
-    if (customColor) {
-      const colorMap: { [key: string]: string } = {
-        'red': 'text-red-400',
-        'blue': 'text-blue-400',
-        'green': 'text-green-400',
-        'yellow': 'text-yellow-400',
-        'purple': 'text-purple-400',
-        'pink': 'text-pink-400',
-        'cyan': 'text-cyan-400',
-        'orange': 'text-orange-400',
-        'white': 'text-white',
-        'black': 'text-black',
-        'gray': 'text-gray-400'
-      };
-      return colorMap[customColor.toLowerCase()] || 'text-primary';
-    }
-    return 'text-primary';
-  };
-
-
-
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-primary mb-2">ABOUT_SECTION</h2>
-        <p className="text-muted-foreground font-mono">Three information windows available</p>
-      </div>
-
-      {/* 3 Hacker Windows - Organized Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
-        
-        {/* Window 1: Project Whitepaper */}
-        <Card 
-          className="bg-black/50 border-primary/20 hover:border-primary/40 hover:bg-black/60 cursor-pointer transition-all duration-300 hover:scale-105 h-64"
-          onClick={() => handleCardClick('project')}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-mono text-primary ml-2 font-bold">project_info.exe</span>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="space-y-2">
-              <div className="font-mono text-xs">
-                <div className="text-primary font-semibold mb-2">$ ./view_whitepaper --details</div>
-                <div className="space-y-1">
-                  <div className="text-chart-2 font-medium">// Technical documentation</div>
-                  <div className="text-chart-2 font-medium">// Architecture overview</div>
-                  <div className="text-chart-2 font-medium">// Implementation details</div>
-                  <div className="text-chart-2 font-medium">// API specifications</div>
-                  <div className="text-chart-2 font-medium">// Deployment guide</div>
-                </div>
-                <div className="text-muted-foreground text-xs mt-3 font-medium">// Comprehensive project info</div>
-                <div className="text-primary text-xs mt-2 font-bold">Click to view →</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Window 2: Project Concept */}
-        <Card 
-          className="bg-black/50 border-primary/20 hover:border-primary/40 hover:bg-black/60 cursor-pointer transition-all duration-300 hover:scale-105 h-64"
-          onClick={() => handleCardClick('concept')}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-mono text-primary ml-2 font-bold">concept_info.exe</span>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="space-y-2">
-              <div className="font-mono text-xs">
-                <div className="text-primary font-semibold mb-2">$ ./view_concept --overview</div>
-                <div className="space-y-1">
-                  <div className="text-chart-2 font-medium">// Project vision</div>
-                  <div className="text-chart-2 font-medium">// Core principles</div>
-                  <div className="text-chart-2 font-medium">// Mission statement</div>
-                  <div className="text-chart-2 font-medium">// Target audience</div>
-                  <div className="text-chart-2 font-medium">// Value proposition</div>
-                </div>
-                <div className="text-muted-foreground text-xs mt-3 font-medium">// Project concept details</div>
-                <div className="text-primary text-xs mt-2 font-bold">Click to view →</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Window 3: Collaboration */}
-        <Card 
-          className="bg-black/50 border-primary/20 hover:border-primary/40 hover:bg-black/60 cursor-pointer transition-all duration-300 hover:scale-105 h-64"
-          onClick={() => handleCardClick('collaboration')}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-mono text-primary ml-2 font-bold">collaboration_info.exe</span>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="space-y-2">
-              <div className="font-mono text-xs">
-                <div className="text-primary font-semibold mb-2">$ ./view_collaboration --partners</div>
-                <div className="space-y-1">
-                  <div className="text-chart-2 font-medium">// Partner network</div>
-                  <div className="text-chart-2 font-medium">// Collaboration opportunities</div>
-                  <div className="text-chart-2 font-medium">// Integration possibilities</div>
-                  <div className="text-chart-2 font-medium">// Partnership benefits</div>
-                  <div className="text-chart-2 font-medium">// Contact information</div>
-                </div>
-                <div className="text-muted-foreground text-xs mt-3 font-medium">// Collaboration details</div>
-                <div className="text-primary text-xs mt-2 font-bold">Click to view →</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Footer */}
-      <div className="text-center space-y-2 text-sm font-mono text-muted-foreground">
-        <div>ABOUT_SECTION_READY • <span className="text-primary">Three information windows available</span></div>
-        <div>Click any card to view detailed information</div>
-      </div>
-
-      {/* Popup Windows */}
-      {activePopup && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          {/* Matrix Effect Overlay */}
-          {matrixEffect && (
-            <div className="absolute inset-0 bg-green-500/10 animate-pulse">
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-green-500/20 to-transparent animate-pulse"></div>
-            </div>
-          )}
-          
-          {/* Popup Window */}
-          <div className={`relative w-full ${isExpanded ? 'max-w-none w-screen h-screen fixed inset-0 z-50' : 'max-w-6xl mx-4'} bg-black/95 border border-primary/30 rounded-lg overflow-hidden`}>
-            {/* Window Header */}
-            <div className="flex items-center justify-between p-4 border-b border-primary/20">
-              <div className="flex items-center gap-2">
-                {activePopup === 'project' && (
-                  <>
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-mono text-primary ml-2">project_analysis.exe</span>
-                  </>
-                )}
-                {activePopup === 'concept' && (
-                  <>
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-mono text-primary ml-2">concept_analysis.exe</span>
-                  </>
-                )}
-                {activePopup === 'collaboration' && (
-                  <>
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-mono text-primary ml-2">collaboration_analysis.exe</span>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                {/* Settings Button */}
-                <button
-                  onClick={handleSettingsClick}
-                  className="px-2 py-1 text-xs font-mono bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded text-primary transition-colors"
-                  title="Settings"
-                >
-                  ⚙️
-                </button>
-                
-                {/* Social Media Icons */}
-                <a href="https://www.website.com" target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-xs font-mono bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded text-primary transition-colors" title="Website">
-                  🌐
-                </a>
-                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-xs font-mono bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded text-primary transition-colors" title="Twitter">
-                  🐦
-                </a>
-                <a href="https://t.me" target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-xs font-mono bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded text-primary transition-colors" title="Telegram">
-                  📱
-                </a>
-                
-                {/* Simple Control Buttons */}
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="px-2 py-1 text-xs font-mono bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded text-primary transition-colors"
-                >
-                  {isExpanded ? '⤓' : '⤢'}
-                </button>
-                <button
-                  onClick={closePopup}
-                  className="text-muted-foreground hover:text-primary transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            
-            {/* Window Content */}
-            <div className={`p-8 ${isExpanded ? 'h-full' : 'max-h-[600px]'} overflow-y-auto`}>
-              {/* Color Selection */}
-              {showColorChoice && !textReady && (
-                <div className="text-center space-y-6">
-                  <div className="text-lg font-mono text-primary mb-6">Choose Text Color</div>
-                  
-                  <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
-                    {['pink', 'red', 'white', 'blue', 'green', 'yellow', 'purple', 'cyan', 'orange'].map(color => (
-                      <button
-                        key={color}
-                        onClick={() => handleColorChoice(color)}
-                        className="px-6 py-3 rounded text-sm font-mono transition-colors border bg-black/30 text-muted-foreground hover:bg-primary/20 hover:text-primary border-primary/30 hover:border-primary/50"
-                      >
-                        {color}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-4 justify-center mt-8">
-                    <button
-                      onClick={handleSkipColorChoice}
-                      className="bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded px-6 py-2 text-sm font-mono text-primary transition-colors"
-                    >
-                      $ continue
-                    </button>
-                    <button
-                      onClick={closePopup}
-                      className="bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/30 rounded px-6 py-2 text-sm font-mono text-gray-400 transition-colors"
-                    >
-                      $ cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-               {/* Settings Panel */}
-               {showSettings && (
-                 <div className="bg-gray-100 border border-gray-300 rounded mb-4 shadow-lg w-full">
-                   <div className="bg-gray-200 border-b border-gray-300 px-3 py-2">
-                     <div className="flex items-center gap-4 text-sm flex-wrap">
-                       {/* Font Size Section */}
-                       <div className="flex items-center gap-2 flex-shrink-0">
-                         <span className="text-gray-700 font-medium">Size:</span>
-                         <div className="flex gap-1 flex-wrap">
-                           {['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl'].map((size) => (
-                             <button
-                               key={size}
-                               onClick={() => setFontSize(size)}
-                               className={`px-2 py-1 text-xs rounded border ${
-                                 fontSize === size 
-                                   ? 'bg-blue-100 border-blue-300 text-blue-700' 
-                                   : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                               }`}
-                             >
-                               {size.replace('text-', '').toUpperCase()}
-                             </button>
-                           ))}
-                         </div>
-                       </div>
-                       
-                       {/* Font Style Section */}
-                       <div className="flex items-center gap-2 flex-shrink-0">
-                         <span className="text-gray-700 font-medium">Style:</span>
-                         <div className="flex gap-1 flex-wrap">
-                           {[
-                             { value: 'font-mono', label: 'Mono' },
-                             { value: 'font-sans font-medium', label: 'Sans' },
-                             { value: 'font-serif font-medium', label: 'Serif' },
-                             { value: 'font-mono font-bold', label: 'Bold' }
-                           ].map((style) => (
-                             <button
-                               key={style.value}
-                               onClick={() => setFontStyle(style.value)}
-                               className={`px-2 py-1 text-xs rounded border ${
-                                 fontStyle === style.value 
-                                   ? 'bg-blue-100 border-blue-300 text-blue-700' 
-                                   : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                               }`}
-                             >
-                               {style.label}
-                             </button>
-                           ))}
-                         </div>
-                       </div>
-                       
-                       {/* Color Section */}
-                       <div className="flex items-center gap-2 flex-shrink-0">
-                         <span className="text-gray-700 font-medium">Color:</span>
-                         <div className="flex gap-1 flex-wrap">
-                           {['red', 'blue', 'green', 'yellow', 'purple', 'pink', 'cyan', 'orange', 'white'].map((color) => (
-                             <button
-                               key={color}
-                               onClick={() => setCustomColor(color)}
-                               className={`px-2 py-1 text-xs rounded border ${
-                                 customColor === color 
-                                   ? 'bg-blue-100 border-blue-300 text-blue-700' 
-                                   : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                               }`}
-                             >
-                               {color.charAt(0).toUpperCase() + color.slice(1)}
-                             </button>
-                           ))}
-                         </div>
-                       </div>
-                       
-                       {/* Action Buttons */}
-                       <div className="flex gap-2 ml-auto flex-shrink-0">
-                         <button
-                           onClick={() => setShowSettings(false)}
-                           className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 text-xs rounded border border-blue-600 transition-colors"
-                         >
-                           Apply
-                         </button>
-                         <button
-                           onClick={() => setShowSettings(false)}
-                           className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-1 text-xs rounded border border-gray-400 transition-colors"
-                         >
-                           Cancel
-                         </button>
-                       </div>
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {/* Text Content */}
-               {textReady && (
-                 <>
-                   <div className={`${fontStyle} ${fontSize} whitespace-pre-wrap leading-relaxed antialiased ${getTextColor()} tracking-wide`}>
-                     {typewriterText}
-                   </div>
-                   
-                   {/* Controls */}
-                   <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                     {showSkipButton && (
-                       <button
-                         onClick={skipTypewriter}
-                         className="bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded px-3 py-1 text-xs font-mono text-primary transition-colors"
-                       >
-                         $ skip
-                       </button>
-                     )}
-                     
-                     <button
-                       onClick={closePopup}
-                       className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded px-3 py-1 text-xs font-mono text-red-400 transition-colors"
-                     >
-                       $ exit
-                     </button>
-                   </div>
-                 </>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

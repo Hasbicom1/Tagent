@@ -74,7 +74,6 @@ export default function BrowserChatPage() {
             <Card className="h-[calc(100vh-8rem)]">
               <UnifiedChatInterface
                 sessionId={sessionId}
-                onSessionChange={handleSessionChange}
               />
             </Card>
           </div>

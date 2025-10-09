@@ -10,6 +10,7 @@ interface SessionData {
   sessionId: string;
   agentId: string;
   expiresAt: string;
+  automationUrl?: string;
 }
 
 export default function Success() {

@@ -18,6 +18,7 @@ import {
   Database,
   Navigation,
   Eye,
+  User,
   Play,
   Pause,
   Square,
