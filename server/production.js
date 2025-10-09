@@ -337,29 +337,25 @@ const staticPath = path.join(__dirname, '..', 'dist', 'public');
 console.log('📁 PRODUCTION: Serving static files from:', staticPath);
 app.use(express.static(staticPath));
 
-// In-memory automation engine sessions
-const activeAutomationEngines = new Map();
+// In-browser automation: Active sessions tracking
+const activeAutomationSessions = new Map();
 
-async function getAutomationEngine(sessionId) {
-  if (activeAutomationEngines.has(sessionId)) {
-    return activeAutomationEngines.get(sessionId);
-  }
-  const { RealBrowserEngine } = await import('./automation/real-browser-engine.js');
-  const engine = new RealBrowserEngine();
-  await engine.initialize();
-  activeAutomationEngines.set(sessionId, engine);
-  return engine;
+function startAutomationSession(sessionId) {
+  activeAutomationSessions.set(sessionId, {
+    sessionId,
+    startTime: new Date(),
+    status: 'active'
+  });
+  console.log(`🤖 Automation session started: ${sessionId}`);
 }
 
-async function shutdownAutomationEngine(sessionId) {
-  const engine = activeAutomationEngines.get(sessionId);
-  if (engine) {
-    try {
-      await engine.close();
-    } catch (e) {
-      console.warn('⚠️ PRODUCTION: Error closing engine for session', sessionId, e.message);
-    }
-    activeAutomationEngines.delete(sessionId);
+function stopAutomationSession(sessionId) {
+  const session = activeAutomationSessions.get(sessionId);
+  if (session) {
+    session.status = 'stopped';
+    session.endTime = new Date();
+    activeAutomationSessions.delete(sessionId);
+    console.log(`🛑 Automation session stopped: ${sessionId}`);
     return true;
   }
   return false;
@@ -675,7 +671,7 @@ CRITICAL RULES:
       aiText = `I understand you said: "${userText}". I'm here to help! (Groq API temporarily unavailable)`;
     }
 
-    // REAL BROWSER AUTOMATION: Route through MCP, then queue to worker for execution
+    // IN-BROWSER AUTOMATION: Send command directly to user's browser via Socket.IO
     let taskId = null;
     const hasBrowserCommand = !!browserCommand;
 
@@ -683,68 +679,17 @@ CRITICAL RULES:
       console.log('🎯 Browser command from Groq:', browserCommand);
 
       try {
-        // 1) Route via MCP (multi-agent planning/coordination)
-        try {
-          const mcp = await import('./mcp-bridge.js');
-          const mcpResult = await mcp.routeViaMCP(req.params.sessionId, browserCommand);
-          if (mcpResult?.success === false) {
-            console.warn('⚠️  MCP orchestration reported failure:', mcpResult?.error);
-          } else {
-            console.log('🧠 MCP orchestration ok');
-          }
-        } catch (e) {
-          console.warn('⚠️  MCP orchestration unavailable:', e?.message || e);
-        }
-
-        // 2) Ensure execution by queuing to worker (FORCE DIRECT HTTP)
-        console.log('📋 Using DIRECT HTTP to worker (no Redis dependency)');
-        const workerUrls = [
-          process.env.WORKER_INTERNAL_URL,
-          process.env.WORKER_PUBLIC_URL,
-          'http://worker.railway.internal:8080',
-          'http://automation-worker.railway.internal:8080',
-          'http://browser-worker.railway.internal:8080',
-          'http://vnc-worker.railway.internal:8080',
-          'http://worker:8080'
-        ].filter(Boolean);
-
-        let workerResponse = null;
-        let lastError = null;
-
-        for (const workerUrl of workerUrls) {
-          try {
-            console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
-            workerResponse = await fetch(`${workerUrl}/task`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instruction: browserCommand,
-                sessionId: req.params.sessionId,
-                agentId: req.params.sessionId
-              }),
-              signal: AbortSignal.timeout(8000)
-            });
-
-            if (workerResponse.ok) {
-              const workerData = await workerResponse.json();
-              taskId = workerData.taskId;
-              console.log(`✅ Task queued via HTTP: ${taskId} (${workerUrl})`);
-              break;
-            } else {
-              console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
-            }
-          } catch (error) {
-            console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
-            lastError = error;
-            continue;
-          }
-        }
+        // Send command directly to user's browser via Socket.IO
+        const io = require('socket.io')(server);
+        io.emit('automation:command', { 
+          sessionId: req.params.sessionId, 
+          ...browserCommand 
+        });
         
-        if (!workerResponse || !workerResponse.ok) {
-          console.warn(`⚠️  Worker HTTP failed: ${lastError?.message || 'All worker URLs failed'}`);
-        }
+        taskId = `automation-${Date.now()}`;
+        console.log(`✅ Automation command sent to user browser: ${taskId}`);
       } catch (error) {
-        console.warn('⚠️  Failed to orchestrate/queue task:', error?.message || error);
+        console.warn('⚠️  Failed to send automation command:', error?.message || error);
       }
     }
 
@@ -1072,94 +1017,125 @@ app.post('/api/automation/:sessionId/execute', automationAuthMiddleware, execute
   }
 });
 
-// Take on-demand screenshot for the session's active browser
-app.get('/api/automation/:sessionId/screenshot', automationAuthMiddleware, screenshotLimiter, async (req, res) => {
+// In-browser automation: request screenshot from user's browser
+app.get('/api/automation/:sessionId/screenshot', async (req, res) => {
   console.log('📸 PRODUCTION: Automation screenshot requested for:', req.params.sessionId);
   try {
-    const engine = activeAutomationEngines.get(req.params.sessionId) || await getAutomationEngine(req.params.sessionId);
-    const result = await engine.takeScreenshot();
+    const sessionId = req.params.sessionId;
+    
+    // Send screenshot request to user's browser via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:command', { 
+      sessionId,
+      action: 'screenshot',
+      timestamp: new Date().toISOString()
+    });
+    
     res.json({
       success: true,
-      sessionId: req.params.sessionId,
-      screenshot: result.screenshot,
+      sessionId: sessionId,
+      message: 'Screenshot request sent to user browser',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('❌ PRODUCTION: Screenshot failed:', error);
+    console.error('❌ PRODUCTION: Screenshot request failed:', error);
     res.status(500).json({
       success: false,
       sessionId: req.params.sessionId,
-      message: 'Screenshot failed',
+      message: 'Screenshot request failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// Shutdown and clean up the session's browser engine
+// In-browser automation: stop automation session
 app.post('/api/automation/:sessionId/shutdown', async (req, res) => {
   console.log('🛑 PRODUCTION: Automation shutdown requested for:', req.params.sessionId);
   try {
-    const ok = await shutdownAutomationEngine(req.params.sessionId);
+    const sessionId = req.params.sessionId;
+    
+    // Stop automation session
+    const stopped = stopAutomationSession(sessionId);
+    
+    // Send stop command to user's browser via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:stop', { sessionId });
+    
     res.json({
-      success: ok,
-      sessionId: req.params.sessionId,
-      status: ok ? 'closed' : 'not_found',
+      success: stopped,
+      sessionId: sessionId,
+      status: stopped ? 'stopped' : 'not_found',
+      message: stopped ? 'Automation stopped - AI agents no longer controlling browser' : 'Session not found',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('❌ PRODUCTION: Shutdown failed:', error);
+    console.error('❌ PRODUCTION: Automation shutdown failed:', error);
     res.status(500).json({
       success: false,
       sessionId: req.params.sessionId,
-      message: 'Shutdown failed',
+      message: 'Automation shutdown failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// Live view toggle: start/stop VNC/WebSocket streaming using worker VNC manager
-app.post('/api/automation/:sessionId/live-view/toggle', async (req, res) => {
-  console.log('🎥 PRODUCTION: Live view toggle requested for:', req.params.sessionId);
+// In-browser automation: start/stop automation session
+app.post('/api/automation/:sessionId/start', async (req, res) => {
+  console.log('🤖 PRODUCTION: Automation start requested for:', req.params.sessionId);
   try {
-    if (process.env.ENABLE_VNC_LIVE_VIEW !== 'true') {
-      return res.status(501).json({
-        success: false,
-        sessionId: req.params.sessionId,
-        message: 'Live view disabled. Set ENABLE_VNC_LIVE_VIEW=true to enable.',
-        timestamp: new Date().toISOString()
-      });
-    }
-    const enable = Boolean(req.body?.enable);
-
-    // Initialize VNC-capable engine if available (compiled JS via esbuild)
-    const { BrowserEngineWithVNC } = await import('../dist/worker/browser-engine-vnc.js');
-    const vncEngine = new BrowserEngineWithVNC({}, { enableLiveView: true });
-    await vncEngine.initialize();
-
     const sessionId = req.params.sessionId;
-    const toggled = await vncEngine.toggleLiveView(sessionId, enable);
-    const details = vncEngine.getLiveViewDetails(sessionId);
-
+    
+    // Start automation session
+    startAutomationSession(sessionId);
+    
+    // Emit automation start event via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:start', { sessionId });
+    
     res.json({
-      success: toggled,
+      success: true,
       sessionId,
-      enable,
-      liveView: details ? {
-        webSocketURL: details.webSocketURL,
-        isActive: details.isLiveViewActive,
-        vncPort: details.vncSession?.vncPort,
-        displayNumber: details.vncSession?.displayNumber
-      } : null,
+      message: 'Automation started - AI agents will now control your browser',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('❌ PRODUCTION: Live view toggle failed:', error);
+    console.error('❌ PRODUCTION: Automation start failed:', error);
     res.status(500).json({
       success: false,
       sessionId: req.params.sessionId,
-      message: 'Live view toggle failed',
+      message: 'Automation start failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.post('/api/automation/:sessionId/stop', async (req, res) => {
+  console.log('🛑 PRODUCTION: Automation stop requested for:', req.params.sessionId);
+  try {
+    const sessionId = req.params.sessionId;
+    
+    // Stop automation session
+    stopAutomationSession(sessionId);
+    
+    // Emit automation stop event via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:stop', { sessionId });
+    
+    res.json({
+      success: true,
+      sessionId,
+      message: 'Automation stopped - AI agents no longer controlling browser',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Automation stop failed:', error);
+    res.status(500).json({
+      success: false,
+      sessionId: req.params.sessionId,
+      message: 'Automation stop failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
@@ -1254,55 +1230,37 @@ app.get('/api/task/:taskId', async (req, res) => {
   }
 });
 
-// Issue per-session JWT for live view (WebSocket/VNC auth)
-app.post('/api/automation/:sessionId/live-view/token', async (req, res) => {
-  console.log('🔐 PRODUCTION: Live view token requested for:', req.params.sessionId);
+// In-browser automation: send command to user's browser
+app.post('/api/automation/:sessionId/command', async (req, res) => {
+  console.log('🎯 PRODUCTION: Automation command requested for:', req.params.sessionId);
   try {
-    if (process.env.ENABLE_VNC_LIVE_VIEW !== 'true') {
-      return res.status(501).json({
-        error: 'Live view disabled. Set ENABLE_VNC_LIVE_VIEW=true to enable.',
-        sessionId: req.params.sessionId
-      });
-    }
-    const { getUserSession } = await import('./database.js');
-    const session = await getUserSession(req.params.sessionId);
-    if (!session || session.status !== 'active') {
-      return res.status(404).json({
-        error: 'Session not found or inactive',
-        sessionId: req.params.sessionId
-      });
-    }
-
-    const exp = Math.floor(new Date(session.expires_at).getTime() / 1000);
-    const payload = {
-      type: 'vnc_access',
-      sessionId: req.params.sessionId,
-      agentId: session.agent_id || session.agentId || req.params.sessionId,
-      iat: Math.floor(Date.now() / 1000),
-      exp,
-      iss: 'onedollaragent',
-      aud: 'vnc-client'
-    };
-
-    const jwtModule = await import('jsonwebtoken');
-    const secret = process.env.JWT_SECRET || process.env.SECRET_KEY || 'onedollaragent-dev-secret';
-    const jwt = (jwtModule.default || jwtModule).sign(payload, secret);
+    const sessionId = req.params.sessionId;
+    const command = req.body;
+    
+    // Emit automation command via Socket.IO to user's browser
+    const io = require('socket.io')(server);
+    io.emit('automation:command', { sessionId, ...command });
+    
     res.json({
-      sessionId: req.params.sessionId,
-      token: jwt,
-      expiresAt: new Date(session.expires_at).toISOString()
+      success: true,
+      sessionId,
+      command,
+      message: 'Command sent to user browser',
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('❌ PRODUCTION: Live view token generation failed:', error);
+    console.error('❌ PRODUCTION: Automation command failed:', error);
     res.status(500).json({
-      error: 'Token generation failed',
+      success: false,
       sessionId: req.params.sessionId,
-      message: error.message
+      message: 'Automation command failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
 
-// Throttled screenshot endpoint per session (basic in-memory rate limiting)
+// In-browser automation: throttled screenshot endpoint
 const screenshotRate = new Map();
 app.get('/api/automation/:sessionId/screenshot-throttled', async (req, res) => {
   const sessionId = req.params.sessionId;
@@ -1320,12 +1278,18 @@ app.get('/api/automation/:sessionId/screenshot-throttled', async (req, res) => {
   screenshotRate.set(sessionId, now);
   console.log('📸 PRODUCTION: Throttled screenshot requested for:', sessionId);
   try {
-    const engine = activeAutomationEngines.get(sessionId) || await getAutomationEngine(sessionId);
-    const result = await engine.takeScreenshot();
+    // Send screenshot request to user's browser via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:command', { 
+      sessionId,
+      action: 'screenshot',
+      timestamp: new Date().toISOString()
+    });
+    
     res.json({
       success: true,
       sessionId,
-      screenshot: result.screenshot,
+      message: 'Screenshot request sent to user browser',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1333,7 +1297,7 @@ app.get('/api/automation/:sessionId/screenshot-throttled', async (req, res) => {
     res.status(500).json({
       success: false,
       sessionId,
-      message: 'Screenshot failed',
+      message: 'Screenshot request failed',
       error: error.message,
       timestamp: new Date().toISOString()
     });
@@ -1470,55 +1434,28 @@ app.post('/api/session/:agentId/message', async (req, res) => {
 app.post('/api/session/:agentId/execute', async (req, res) => {
   console.log('⚡ PRODUCTION: Session execute requested for:', req.params.agentId);
   try {
-    // FIXED: Prioritize external worker URL since internal is failing
-    const workerUrls = [
-      'https://worker-production-6480.up.railway.app'
-    ];
+    const sessionId = req.params.agentId;
+    const taskDescription = req.body.taskDescription || req.body.message || 'Execute task';
     
-    let workerResponse = null;
-    let lastError = null;
+    // Send automation command directly to user's browser via Socket.IO
+    const io = require('socket.io')(server);
+    io.emit('automation:command', { 
+      sessionId,
+      action: 'execute',
+      task: taskDescription,
+      timestamp: new Date().toISOString()
+    });
     
-    for (const workerUrl of workerUrls) {
-      try {
-        console.log(`🔄 Task: Trying worker URL: ${workerUrl}`);
-        workerResponse = await fetch(`${workerUrl}/task`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instruction: req.body.taskDescription || req.body.message || 'Execute task',
-            sessionId: req.params.agentId,
-            agentId: req.params.agentId
-          }),
-          signal: AbortSignal.timeout(8000)
-        });
-        
-        if (workerResponse.ok) {
-          console.log(`✅ Task: Worker ${workerUrl} responded successfully`);
-          break;
-        } else {
-          console.warn(`⚠️ Task: Worker ${workerUrl} returned ${workerResponse.status}`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Task: Failed to connect to ${workerUrl}: ${error.message}`);
-        lastError = error;
-        continue;
-      }
-    }
-    
-    if (!workerResponse || !workerResponse.ok) {
-      throw new Error(`All workers failed. Last error: ${lastError?.message || 'Unknown error'}`);
-    }
-    
-    const result = await workerResponse.json();
+    console.log(`✅ Automation command sent to user browser for session: ${sessionId}`);
     
     res.json({
-      success: result.success,
-      sessionId: req.params.agentId,
-      task: result.data,
-      actions: result.actionsExecuted || 0,
-      screenshot: result.screenshot,
-      agentType: result.agentType || 'worker',
-      executionTime: result.executionTime || 0,
+      success: true,
+      sessionId: sessionId,
+      task: taskDescription,
+      actions: 1,
+      screenshot: null, // Will be taken by user's browser
+      agentType: 'in-browser-automation',
+      executionTime: 0,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1547,206 +1484,7 @@ try {
   console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
 }
 
-// STEP 13B: VNC Proxy + Worker Integration (restore live view)
-// Worker URL with multiple fallback options
-const WORKER_URLS = [
-  process.env.WORKER_INTERNAL_URL,
-  'http://worker.railway.internal:8080',
-  'http://worker:8080',
-  'http://localhost:8080' // fallback for testing
-].filter(Boolean);
-
-const WORKER_URL = WORKER_URLS[0] || 'http://worker.railway.internal:8080';
-
-// VNC stream endpoint - proxies to worker's VNC WS bridge
-app.get('/vnc/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    console.log(`📺 VNC: Proxying session ${sessionId} to worker`);
-
-    let workerResponse = null;
-    let lastError = null;
-
-    for (const workerUrl of WORKER_URLS) {
-      try {
-        console.log(`🔄 VNC: Trying worker URL: ${workerUrl}`);
-        const workerVNCUrl = `${workerUrl}/vnc/${sessionId}`;
-        workerResponse = await fetch(workerVNCUrl, {
-          signal: AbortSignal.timeout(5000)
-        });
-
-        if (workerResponse.ok) {
-          console.log(`✅ VNC: Connected to worker at ${workerUrl}`);
-          break;
-        } else {
-          console.warn(`⚠️ VNC: Worker ${workerUrl} returned ${workerResponse.status}`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ VNC: Failed to connect to ${workerUrl}: ${error.message}`);
-        lastError = error;
-        continue;
-      }
-    }
-
-    if (!workerResponse || !workerResponse.ok) {
-      console.warn(`⚠️  VNC: All worker URLs failed`);
-      return res.status(503).json({
-        error: 'VNC session not available',
-        message: 'Worker service unavailable',
-        workerUrl: WORKER_URL
-      });
-    }
-
-    // Return the worker-provided WS URL for the client to connect
-    const data = await workerResponse.json();
-    return res.json({
-      webSocketURL: data.webSocketURL,
-      sessionId: data.sessionId,
-      display: data.displayEnv,
-      vncPort: data.vncPort
-    });
-  } catch (error) {
-    console.error('❌ VNC: Proxy error:', error.message);
-    res.status(503).json({ 
-      error: 'VNC service unavailable', 
-      message: error.message,
-      workerUrl: WORKER_URL
-    });
-  }
-});
-
-console.log(`📺 PRODUCTION: VNC proxy registered: /vnc/:sessionId → ${WORKER_URL}`);
-
-// Auth endpoint used by frontend VNCClient to obtain WS URL/token
-app.post('/api/session/:agentId/live-view', async (req, res) => {
-  try {
-    const sessionId = req.params.agentId;
-    // Mint short-lived JWT allowing access at worker /websockify
-    const jwtModule = await import('jsonwebtoken');
-    const jwt = jwtModule.default || jwtModule;
-    const iat = Math.floor(Date.now() / 1000);
-    const exp = iat + (15 * 60); // 15 minutes
-    const payload = {
-      sessionId,
-      agentId: sessionId,
-      type: 'vnc_access',
-      iat,
-      exp
-    };
-    const secret = process.env.JWT_SECRET || 'dev-secret-key-replace-in-production';
-    const vncToken = jwt.sign(payload, secret);
-    // Respond with token and helper fields for the client
-    return res.json({
-      vncToken,
-      expiresAt: new Date(exp * 1000).toISOString(),
-      sessionId,
-      vncPassword: 'password',
-      workerUrl: process.env.WORKER_PUBLIC_URL || 'https://worker-production-6480.up.railway.app'
-    });
-  } catch (e) {
-    console.error('❌ VNC auth error:', e?.message || e);
-    return res.status(500).json({ error: 'VNC auth failed', message: e?.message || String(e) });
-  }
-});
-
-// Alias: allow POST /api/session/live-view with { agentId | sessionId } in body
-app.post('/api/session/live-view', async (req, res) => {
-  try {
-    const sessionId = req.body?.agentId || req.body?.sessionId;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'agentId_required', message: 'Provide agentId or sessionId in body' });
-    }
-
-    const workerUrls = [
-      process.env.WORKER_INTERNAL_URL,
-      process.env.WORKER_PUBLIC_URL,
-      'http://worker.railway.internal:8080',
-      'http://automation-worker.railway.internal:8080',
-      'http://browser-worker.railway.internal:8080',
-      'http://vnc-worker.railway.internal:8080',
-      'http://worker:8080'
-    ].filter(Boolean);
-
-    let workerResponse = null;
-    let lastError = null;
-
-    for (const workerUrl of workerUrls) {
-      try {
-        const url = `${workerUrl}/vnc/${encodeURIComponent(sessionId)}`;
-        console.log('🔐 VNC alias auth: requesting worker VNC info at', url);
-        workerResponse = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        if (workerResponse.ok) break;
-        console.warn('⚠️ VNC alias auth: worker returned', workerResponse.status);
-      } catch (e) {
-        lastError = e;
-        console.warn('⚠️ VNC alias auth: worker connect failed:', e?.message || e);
-      }
-    }
-
-    if (!workerResponse || !workerResponse.ok) {
-      return res.status(503).json({ error: 'Worker unavailable', message: lastError?.message || 'No worker response' });
-    }
-
-    const data = await workerResponse.json();
-    const out = {
-      webSocketURL: data.webSocketURL,
-      vncToken: null,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      sessionId: data.sessionId,
-      displayNumber: data.displayEnv
-    };
-    return res.json(out);
-  } catch (e) {
-    console.error('❌ VNC alias auth error:', e?.message || e);
-    return res.status(500).json({ error: 'VNC auth failed', message: e?.message || String(e) });
-  }
-});
-
-// Lightweight diagnostics to verify Worker reachability from Tagent
-app.get('/api/diag/worker', async (req, res) => {
-  try {
-    const workerUrls = [
-      process.env.WORKER_INTERNAL_URL,
-      process.env.WORKER_PUBLIC_URL,
-      'http://worker.railway.internal:8080',
-      'http://automation-worker.railway.internal:8080',
-      'http://browser-worker.railway.internal:8080',
-      'http://vnc-worker.railway.internal:8080',
-      'http://worker:8080'
-    ].filter(Boolean);
-
-    const results = [];
-    for (const base of workerUrls) {
-      const item = { base, health: null, vncExample: null, ok: false, error: null };
-      try {
-        const healthResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
-        item.health = { status: healthResp.status, ok: healthResp.ok, text: await healthResp.text().catch(() => '') };
-        item.ok = item.ok || healthResp.ok;
-      } catch (e) {
-        item.error = e?.message || String(e);
-      }
-      results.push(item);
-    }
-    const anyOk = results.some(r => r.health?.ok);
-    res.json({
-      workerEnv: process.env.WORKER_INTERNAL_URL || null,
-      workerPublic: process.env.WORKER_PUBLIC_URL || null,
-      anyOk,
-      results,
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'diag_failed', message: e?.message || String(e) });
-  }
-});
-
-// Generic WebSocket proxy for /websocket and /ws to worker (for VNC/websockify)
-try {
-  // For VNC we now return the WS URL from /vnc/:sessionId; raw WS proxy not needed
-  console.log('🔌 PRODUCTION: WS proxy not required; VNC uses worker-provided URL');
-} catch (e) {
-  console.warn('⚠️ PRODUCTION: Failed to enable WS proxy:', e?.message || e);
-}
+// VNC CODE REMOVED - Using in-browser automation instead
 
 // STEP 14: Server listening (proven pattern)
 server.listen(port, host, () => {

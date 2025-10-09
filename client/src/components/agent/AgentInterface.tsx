@@ -318,24 +318,34 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
     }
   });
 
-  // Execute task mutation
+  // Execute task mutation - In-Browser Automation
   const executeTaskMutation = useMutation({
     mutationFn: async (taskDescription: string) => {
       const response = await apiRequest('POST', `/api/session/${agentId}/execute`, { taskDescription });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Task execution protocol aborted - automation sequence failed');
+        throw new Error(error.error || 'In-browser automation failed - task execution aborted');
       }
       return response.json();
     },
     onSuccess: (data) => {
       setIsExecuting(true);
       setBrowserView('active');
-      setExecutionLog(['INITIALIZING BROWSER ENGINE...']);
+      setExecutionLog([
+        'INITIALIZING IN-BROWSER AUTOMATION...',
+        'CONNECTING TO USER BROWSER...',
+        'AI AGENT READY FOR DIRECT CONTROL...'
+      ]);
+      
+      // Show success message
+      toast({
+        title: "IN-BROWSER AUTOMATION ACTIVE",
+        description: "AI agent is now controlling your browser directly",
+      });
     },
     onError: (error: any) => {
       toast({
-        title: "AUTOMATION_PROTOCOL_FAILURE",
+        title: "AUTOMATION_FAILURE",
         description: error.message,
         variant: "destructive",
       });
@@ -729,17 +739,17 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             </div>
           </Card>
 
-          {/* Execution Monitor */}
+          {/* In-Browser Automation Monitor */}
           <Card className="flex flex-col bg-card/50 border-primary/20">
             <div className="p-4 border-b border-primary/10 bg-chart-2/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Monitor className="w-5 h-5 text-chart-2" />
-                  <h3 className="font-bold text-lg font-mono">EXECUTION_MONITOR</h3>
+                  <h3 className="font-bold text-lg font-mono">IN-BROWSER_AUTOMATION</h3>
                 </div>
                 {isExecuting && (
                   <Badge variant="destructive" className="animate-pulse font-mono text-xs">
-                    ● LIVE_EXECUTION
+                    ● LIVE_AUTOMATION
                   </Badge>
                 )}
               </div>
@@ -748,39 +758,42 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             <div className="flex-1 p-6">
               {browserView ? (
                 <div className="h-full space-y-4">
-                  {/* Browser Simulation */}
+                  {/* In-Browser Automation Status */}
                   <Card className="bg-background border-primary/20 h-72">
                     <div className="bg-card border-b border-primary/10 p-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-destructive" />
-                        <div className="w-3 h-3 rounded-full bg-chart-3" />
                         <div className="w-3 h-3 rounded-full bg-chart-2" />
+                        <div className="w-3 h-3 rounded-full bg-chart-3" />
+                        <div className="w-3 h-3 rounded-full bg-chart-1" />
                         <div className="ml-3 bg-background/80 px-3 py-1 rounded text-xs font-mono border border-primary/20">
-                          agent://execution_environment
+                          user://browser_automation
                         </div>
                         <Badge variant="secondary" className="ml-auto text-xs font-mono">
-                          SANDBOXED
+                          DIRECT_CONTROL
                         </Badge>
                       </div>
                     </div>
                     <div className="p-6 h-full flex items-center justify-center">
                       <div className="text-center space-y-3">
-                        <div className="w-16 h-16 bg-primary/20 rounded-lg flex items-center justify-center mx-auto">
-                          <Activity className="w-8 h-8 text-primary animate-pulse" />
+                        <div className="w-16 h-16 bg-chart-2/20 rounded-lg flex items-center justify-center mx-auto">
+                          <Activity className="w-8 h-8 text-chart-2 animate-pulse" />
                         </div>
                         <div className="text-sm font-mono text-muted-foreground">
-                          BROWSER_ENGINE_ACTIVE
+                          IN-BROWSER_AUTOMATION_ACTIVE
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          AI controls your browser directly
                         </div>
                       </div>
                     </div>
                   </Card>
                   
-                  {/* Execution Log */}
+                  {/* Automation Log */}
                   <Card className="bg-background/80 border-primary/20">
                     <div className="p-3 border-b border-primary/10 bg-primary/5">
                       <div className="flex items-center gap-2">
                         <Code className="w-4 h-4 text-primary" />
-                        <div className="text-sm font-mono font-medium">EXECUTION_LOG</div>
+                        <div className="text-sm font-mono font-medium">AUTOMATION_LOG</div>
                       </div>
                     </div>
                     <ScrollArea className="h-40 p-4">
@@ -804,11 +817,19 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                       <Monitor className="w-10 h-10 text-muted-foreground" />
                     </div>
                     <div className="space-y-3">
-                      <div className="font-mono text-lg">AWAITING_EXECUTION</div>
+                      <div className="font-mono text-lg">AWAITING_AUTOMATION</div>
                       <div className="text-sm text-muted-foreground font-mono max-w-sm">
                         Submit a command to the agent and execute to begin 
-                        live browser automation monitoring
+                        in-browser automation (no VNC required)
                       </div>
+                      <Button 
+                        onClick={() => window.location.href = '/automation-demo'}
+                        className="font-mono"
+                        variant="outline"
+                      >
+                        <Monitor className="w-4 h-4 mr-2" />
+                        TRY_DEMO
+                      </Button>
                     </div>
                   </div>
                 </div>
