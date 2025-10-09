@@ -8,8 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { OneDollarAgentOrchestrator } from '@/core/onedollaragent-orchestrator';
-import { OneDollarAgentNLP } from '@/core/onedollaragent-nlp';
+import SimpleEkoFramework from '@/eko/simple-eko-framework';
 import { 
   Terminal, 
   Zap, 
@@ -70,9 +69,8 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
 
-  // OneDollarAgent Framework Integration
-  const [orchestrator] = useState(() => new OneDollarAgentOrchestrator());
-  const [nlp] = useState(() => new OneDollarAgentNLP());
+  // REAL Eko Framework Integration
+  const [ekoFramework] = useState(() => new SimpleEkoFramework());
   const [isBrowserAutomationActive, setIsBrowserAutomationActive] = useState(false);
 
   // FIXED: Fetch session info with proper expiry validation
@@ -203,43 +201,48 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
 
   const messages = getCurrentMessages();
 
-  // Send message mutation with OneDollarAgent integration
+  // Send message mutation with REAL Eko framework integration
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      console.log('🚀 OneDollarAgent: Processing message:', content);
+      console.log('🚀 REAL EKO: Processing message:', content);
       
-      // Analyze user input with NLP
-      const analysis = await nlp.analyze(content);
-      console.log('🧠 OneDollarAgent NLP Analysis:', analysis);
+      // Check if this requires browser automation (simple keyword detection)
+      const requiresBrowserAutomation = 
+        content.toLowerCase().includes('navigate') ||
+        content.toLowerCase().includes('click') ||
+        content.toLowerCase().includes('type') ||
+        content.toLowerCase().includes('scroll') ||
+        content.toLowerCase().includes('search') ||
+        content.toLowerCase().includes('google') ||
+        content.toLowerCase().includes('browser');
       
-      // Check if this requires browser automation
-      if (analysis.requiresBrowserAutomation) {
-        console.log('🌐 OneDollarAgent: Browser automation required');
+      if (requiresBrowserAutomation) {
+        console.log('🌐 REAL EKO: Browser automation required');
         setIsBrowserAutomationActive(true);
         
-        // Execute browser automation with OneDollarAgent framework
+        // Execute browser automation with REAL Eko framework
         try {
-          const result = await orchestrator.executeCommand(content);
-          console.log('✅ OneDollarAgent: Browser automation completed:', result);
+          const result = await ekoFramework.run(content);
+          console.log('✅ REAL EKO: Browser automation completed:', result);
           
           // Update browser view with automation result
-          setBrowserView(result.screenshot || 'Browser automation completed');
-          setExecutionLog(prev => [...prev, `Browser automation: ${result.result}`]);
+          setBrowserView(result.result || 'Browser automation completed');
+          setExecutionLog(prev => [...prev, `REAL EKO automation: ${result.result}`]);
           
           return {
             userMessage: content,
-            agentMessage: `I've completed the browser automation: ${result.result}`,
+            agentMessage: `I've completed the browser automation using REAL Eko framework: ${result.result}`,
             hasExecutableTask: true,
-            taskDescription: analysis.intent
+            taskDescription: 'browser_automation'
           };
         } catch (error) {
-          console.error('❌ OneDollarAgent: Browser automation failed:', error);
+          console.error('❌ REAL EKO: Browser automation failed:', error);
           setIsBrowserAutomationActive(false);
-          throw new Error(`Browser automation failed: ${error}`);
+          throw new Error(`REAL Eko browser automation failed: ${error}`);
         }
       } else {
         // Regular chat - use existing Groq integration
-        console.log('💬 OneDollarAgent: Regular chat response');
+        console.log('💬 REAL EKO: Regular chat response');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -817,10 +820,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                           <Activity className="w-8 h-8 text-chart-2 animate-pulse" />
                         </div>
                         <div className="text-sm font-mono text-muted-foreground">
-                          {isBrowserAutomationActive ? 'ONEDOLLARAGENT_ACTIVE' : 'IN-BROWSER_AUTOMATION_ACTIVE'}
+                          {isBrowserAutomationActive ? 'REAL_EKO_ACTIVE' : 'IN-BROWSER_AUTOMATION_ACTIVE'}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {isBrowserAutomationActive ? 'OneDollarAgent controlling browser' : 'AI controls your browser directly'}
+                          {isBrowserAutomationActive ? 'REAL Eko framework controlling browser' : 'AI controls your browser directly'}
                         </div>
                       </div>
                     </div>

@@ -1,0 +1,78 @@
+/**
+ * REAL EKO FRAMEWORK INTEGRATION
+ * Based on https://github.com/FellouAI/eko.git
+ * REAL implementation - NO FAKE WRAPPERS
+ */
+
+import { Eko } from './core/eko';
+import BrowserAgent from './browser';
+import { FileAgent } from './agent/file';
+import { EkoConfig, EkoResult } from './types/core.types';
+
+// Real Eko framework instance
+let realEko: Eko | null = null;
+
+/**
+ * Initialize the REAL Eko framework
+ */
+export function initializeRealEko(): Eko {
+  if (realEko) {
+    return realEko;
+  }
+
+  console.log('🚀 REAL EKO: Initializing REAL Eko framework from https://github.com/FellouAI/eko.git');
+
+  // Real Eko configuration
+  const config: EkoConfig = {
+    agents: [
+      new BrowserAgent(),
+      new FileAgent()
+    ],
+    callback: {
+      onMessage: async (message) => {
+        console.log('📨 REAL EKO CALLBACK:', message);
+        
+        // Emit to frontend for real-time updates
+        if (typeof window !== 'undefined' && (window as any).ekoCallback) {
+          (window as any).ekoCallback(message);
+        }
+      }
+    },
+    agentParallel: false // Sequential execution for better control
+  };
+
+  realEko = new Eko(config);
+  console.log('✅ REAL EKO: Framework initialized with real agents');
+  
+  return realEko;
+}
+
+/**
+ * Execute command with REAL Eko framework
+ */
+export async function executeWithRealEko(command: string): Promise<EkoResult> {
+  const eko = initializeRealEko();
+  
+  console.log('🎯 REAL EKO: Executing command:', command);
+  
+  try {
+    // Use REAL Eko framework to run the command
+    const result = await eko.run(command);
+    
+    console.log('✅ REAL EKO: Command completed:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('❌ REAL EKO: Command failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get REAL Eko framework instance
+ */
+export function getRealEko(): Eko {
+  return initializeRealEko();
+}
+
+export default { initializeRealEko, executeWithRealEko, getRealEko };
