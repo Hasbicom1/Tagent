@@ -8,7 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import SimpleEkoFramework from '@/eko/simple-eko-framework';
+import { initializeRealEko, executeWithRealEko } from '@/eko/real-eko-integration';
 import { 
   Terminal, 
   Zap, 
@@ -70,7 +70,6 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
   const [isSending, setIsSending] = useState(false);
 
   // REAL Eko Framework Integration
-  const [ekoFramework] = useState(() => new SimpleEkoFramework());
   const [isBrowserAutomationActive, setIsBrowserAutomationActive] = useState(false);
 
   // FIXED: Fetch session info with proper expiry validation
@@ -222,7 +221,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         
         // Execute browser automation with REAL Eko framework
         try {
-          const result = await ekoFramework.run(content);
+          const result = await executeWithRealEko(content);
           console.log('✅ REAL EKO: Browser automation completed:', result);
           
           // Update browser view with automation result

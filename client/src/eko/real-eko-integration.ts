@@ -6,7 +6,7 @@
 
 import { Eko } from './core/eko';
 import BrowserAgent from './browser';
-import { FileAgent } from './agent/file';
+import { FileAgent } from './agent/file-concrete';
 import { EkoConfig, EkoResult } from './types/core.types';
 
 // Real Eko framework instance
@@ -22,8 +22,15 @@ export function initializeRealEko(): Eko {
 
   console.log('🚀 REAL EKO: Initializing REAL Eko framework from https://github.com/FellouAI/eko.git');
 
-  // Real Eko configuration
+  // Real Eko configuration with required LLMs
   const config: EkoConfig = {
+    llms: {
+      default: {
+        provider: "groq",
+        model: "llama-3.1-70b-versatile",
+        apiKey: process.env.GROQ_API_KEY || "gsk_placeholder"
+      }
+    },
     agents: [
       new BrowserAgent(),
       new FileAgent()
@@ -37,8 +44,7 @@ export function initializeRealEko(): Eko {
           (window as any).ekoCallback(message);
         }
       }
-    },
-    agentParallel: false // Sequential execution for better control
+    }
   };
 
   realEko = new Eko(config);
