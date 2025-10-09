@@ -9,7 +9,7 @@ import http from 'http';
 // Socket.IO realtime automation (events only; not used for VNC streaming)
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { WebSocketManager } from './websocket.js';
+import { WebSocketManager } from './websocket.ts';
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -1704,48 +1704,4 @@ app.get('/api/health/details', async (req, res) => {
   }
 });
 
-// Start the server
-const port = process.env.PORT || 5000;
-const server = http.createServer(app);
-
-// Initialize Socket.IO server
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ["http://localhost:3000", "https://www.onedollaragent.ai"],
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  path: '/ws/socket.io/'
-});
-
-// Initialize real-time automation socket
-const realTimeAutomation = new RealTimeAutomationSocket(io);
-
-// Initialize WebSocket server for raw WebSocket connections
-const wsManager = new WebSocketManager();
-await wsManager.initialize(server);
-
-// Start server
-server.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 PRODUCTION: Server running on port ${port}`);
-  console.log(`🔌 PRODUCTION: Socket.IO available at /ws/socket.io/`);
-  console.log(`🔌 PRODUCTION: Raw WebSocket available at /ws`);
-  console.log(`🌐 PRODUCTION: Environment: ${process.env.NODE_ENV}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🔄 SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('🔄 SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
+// DUPLICATE SERVER INITIALIZATION REMOVED - Server already created and listening above
