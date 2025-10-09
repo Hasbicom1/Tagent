@@ -1,26 +1,25 @@
 /**
  * REAL EKO FRAMEWORK INTEGRATION
- * Based on https://github.com/FellouAI/eko.git
- * REAL implementation - NO FAKE WRAPPERS
+ * Using ACTUAL npm packages from https://github.com/FellouAI/eko.git
+ * NO COPIED IMPLEMENTATION - REAL PACKAGES ONLY
  */
 
-import { Eko } from './core/eko';
-import BrowserAgent from './browser';
-import { FileAgent } from './agent/file-concrete';
-import { EkoConfig, EkoResult } from './types/core.types';
+import { Eko } from '@eko-ai/eko';
+import { BrowserAgent } from '@eko-ai/eko-web';
+import { EkoConfig, EkoResult } from '@eko-ai/eko/types';
 
 // Real Eko framework instance
 let realEko: Eko | null = null;
 
 /**
- * Initialize the REAL Eko framework
+ * Initialize the REAL Eko framework using actual npm packages
  */
 export function initializeRealEko(): Eko {
   if (realEko) {
     return realEko;
   }
 
-  console.log('🚀 REAL EKO: Initializing REAL Eko framework from https://github.com/FellouAI/eko.git');
+  console.log('🚀 REAL EKO: Initializing REAL Eko framework from npm packages @eko-ai/eko');
 
   // Real Eko configuration with required LLMs
   const config: EkoConfig = {
@@ -32,8 +31,7 @@ export function initializeRealEko(): Eko {
       }
     },
     agents: [
-      new BrowserAgent(),
-      new FileAgent()
+      new BrowserAgent()
     ],
     callback: {
       onMessage: async (message) => {
@@ -48,7 +46,7 @@ export function initializeRealEko(): Eko {
   };
 
   realEko = new Eko(config);
-  console.log('✅ REAL EKO: Framework initialized with real agents');
+  console.log('✅ REAL EKO: Framework initialized with REAL npm packages');
   
   return realEko;
 }

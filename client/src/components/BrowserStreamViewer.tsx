@@ -5,7 +5,7 @@
  * AI agents control the user's browser directly via JavaScript
  */
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface BrowserStreamViewerProps {
   sessionId: string;

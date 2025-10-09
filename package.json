@@ -24,6 +24,9 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
+    "@eko-ai/eko": "^3.0.9-alpha.1",
+    "@eko-ai/eko-nodejs": "^3.0.9-alpha.1",
+    "@eko-ai/eko-web": "^3.0.9-alpha.1",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
