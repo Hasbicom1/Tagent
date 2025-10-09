@@ -149,6 +149,32 @@ class AutomationAgent {
     showAutomationStatus('▶️ Automation Resumed', 'success');
   }
 
+  // Test automation functionality
+  async testAutomation() {
+    console.log('🧪 Testing automation functionality');
+    
+    try {
+      // Test basic automation commands
+      const testCommands = [
+        { action: 'screenshot', description: 'Taking test screenshot' },
+        { action: 'scroll', y: 100, description: 'Testing scroll' }
+      ];
+      
+      for (const command of testCommands) {
+        console.log(`🧪 Testing: ${command.description}`);
+        await this.executeCommand(command);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait between commands
+      }
+      
+      console.log('✅ Automation test completed successfully');
+      showAutomationStatus('✅ Test completed successfully', 'success');
+      
+    } catch (error) {
+      console.error('❌ Automation test failed:', error);
+      showAutomationStatus('❌ Test failed', 'error');
+    }
+  }
+
   // Execute single command
   async executeCommand(command) {
     if (!this.isRunning) {
