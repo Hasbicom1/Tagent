@@ -38,7 +38,7 @@ class LiveBrowserAgent {
     this.commandQueue = [];
     this.currentUrl = 'https://google.com';
     this.browserFrame = null;
-    this.setupEventListeners();
+    // setupEventListeners will be called in init() method
   }
 
   // Initialize live browser agent
@@ -46,6 +46,7 @@ class LiveBrowserAgent {
     console.log('🤖 Live Browser Agent initialized');
     this.setupWebSocketListeners();
     this.setupKeyboardShortcuts();
+    this.setupEventListeners();
     this.initializeBrowserFrame();
   }
 
@@ -122,6 +123,27 @@ class LiveBrowserAgent {
       if (event.ctrlKey && event.shiftKey && event.key === 'T') {
         event.preventDefault();
         this.startRealAutomation();
+      }
+    });
+  }
+
+  // Setup DOM event listeners
+  setupEventListeners() {
+    // Listen for page navigation
+    window.addEventListener('beforeunload', () => {
+      if (this.isRunning) {
+        this.stopSession();
+      }
+    });
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.isRunning) {
+        console.log('⚠️ Page hidden, pausing automation');
+        this.pauseSession();
+      } else if (!document.hidden && this.isRunning) {
+        console.log('▶️ Page visible, resuming automation');
+        this.resumeSession();
       }
     });
   }
@@ -417,6 +439,31 @@ class LiveBrowserAgent {
       console.error('❌ Live Browser: REAL automation failed to start:', error);
       showAutomationStatus(`❌ Automation failed: ${error.message}`, 'error');
       throw error;
+    }
+  }
+
+  // Toggle agent on/off
+  toggleAgent() {
+    if (this.isRunning) {
+      this.stopSession();
+    } else {
+      this.startSession();
+    }
+  }
+
+  // Pause session
+  pauseSession() {
+    if (this.isRunning) {
+      console.log('⏸️ Live Browser: Session paused');
+      showAutomationStatus('⏸️ Session paused', 'info');
+    }
+  }
+
+  // Resume session
+  resumeSession() {
+    if (this.isRunning) {
+      console.log('▶️ Live Browser: Session resumed');
+      showAutomationStatus('▶️ Session resumed', 'info');
     }
   }
 }

@@ -407,7 +407,7 @@ export class RealSessionManager extends EventEmitter {
    * Start session expiration monitoring with 24-hour TTL enforcement
    */
   private startSessionExpirationMonitoring(): void {
-    // Check for expired sessions every 5 minutes
+    // Check for expired sessions every 1 minute for strict enforcement
     setInterval(async () => {
       try {
         const now = new Date();
@@ -420,10 +420,12 @@ export class RealSessionManager extends EventEmitter {
         }
         
         if (expiredSessions.length > 0) {
-          logger.info(`⏰ REAL SESSION: Found ${expiredSessions.length} expired sessions`);
+          logger.info(`⏰ REAL SESSION: Found ${expiredSessions.length} expired sessions - enforcing 24-hour TTL`);
           
           for (const session of expiredSessions) {
+            // Enforce 24-hour TTL - revoke session immediately
             await this.revokeSession(session.id);
+            logger.info(`⏰ REAL SESSION: Session ${session.id} revoked due to 24-hour TTL expiration`);
           }
           
           this.updateMetrics();
@@ -431,9 +433,9 @@ export class RealSessionManager extends EventEmitter {
       } catch (error) {
         logger.error('❌ REAL SESSION: Session expiration monitoring failed', { error });
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
+    }, 1 * 60 * 1000); // Check every 1 minute for strict enforcement
     
-    logger.info('⏰ REAL SESSION: Session expiration monitoring started (24-hour TTL)');
+    logger.info('⏰ REAL SESSION: Session expiration monitoring started (24-hour TTL enforcement)');
   }
 
   /**

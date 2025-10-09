@@ -1105,32 +1105,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let session = await storage.getSessionByAgentId(agentId);
       
-      // ✅ DEVELOPMENT MODE: Allow demo access for real browser automation testing  
-      if (!session && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
-        console.log(`🔄 DEV MODE: Creating and persisting demo session for agent ${agentId} to enable REAL browser automation`);
-        const devSessionData = {
-          id: `dev-session-${agentId}`,
-          agentId: agentId,
-          checkoutSessionId: `dev-checkout-${agentId}`,
-          stripePaymentIntentId: `dev-payment-${agentId}`,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
-          isActive: true,
-          createdAt: new Date()
-        };
-        // ✅ PERSIST to database so foreign key constraints work
-        try {
-          session = await storage.createSession(devSessionData);
-          console.log(`✅ DEV MODE: Session ${session.id} persisted to database for REAL browser automation`);
-        } catch (createError: any) {
-          console.error(`❌ DEV MODE: Failed to persist session to database:`, createError.message);
-          // Fall back to in-memory session for now
-          session = devSessionData;
-          console.log(`⚠️ DEV MODE: Using in-memory session as fallback`);
-        }
-      }
-      
+      // ❌ NO DEVELOPMENT MODE - REAL SESSIONS ONLY
       if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+        console.error(`❌ REAL SESSION REQUIRED: No session found for agent ${agentId}`);
+        return res.status(404).json({ error: "REAL session required - no development mode allowed" });
       }
 
       if (new Date() > session.expiresAt) {

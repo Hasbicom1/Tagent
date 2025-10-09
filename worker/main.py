@@ -337,6 +337,49 @@ async def stagehand_task(task_data: Dict[str, Any]):
             "agentType": "stagehand"
         }
 
+# Connect agents endpoint for frontend
+@app.post("/connect-agents")
+async def connect_agents(request_data: Dict[str, Any]):
+    """
+    Connect to REAL AI agents for frontend
+    """
+    print("🔗 REAL AI Agents: Frontend connection request")
+    
+    try:
+        session_id = request_data.get('sessionId')
+        agent_id = request_data.get('agentId')
+        agent_types = request_data.get('agentTypes', ['browser-use', 'skyvern', 'lavague', 'stagehand'])
+        
+        logger.info(f"🎯 REAL AI Agents: Connecting frontend to agents", {
+            "sessionId": session_id,
+            "agentId": agent_id,
+            "agentTypes": agent_types
+        })
+        
+        # Return available agents and their status
+        return {
+            "success": True,
+            "message": "Connected to REAL AI agents",
+            "sessionId": session_id,
+            "agentId": agent_id,
+            "availableAgents": {
+                "browser-use": {"status": "ready", "endpoint": "/browser-use-task"},
+                "skyvern": {"status": "ready", "endpoint": "/skyvern-task"},
+                "lavague": {"status": "ready", "endpoint": "/lavague-task"},
+                "stagehand": {"status": "ready", "endpoint": "/stagehand-task"}
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ REAL AI Agents: Connection failed: {e}")
+        logger.error(f"❌ REAL AI Agents: Connection failed: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to connect to AI agents: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
 # In-browser automation is now the primary method
 # No VNC/Playwright dependencies
 

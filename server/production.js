@@ -1121,13 +1121,13 @@ app.post('/api/automation/:sessionId/start', async (req, res) => {
   } catch (error) {
     console.error('❌ PRODUCTION: Automation start failed:', error);
     res.status(500).json({
-      success: false,
-      sessionId: req.params.sessionId,
+        success: false,
+        sessionId: req.params.sessionId,
       message: 'Automation start failed',
       error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
+        timestamp: new Date().toISOString()
+      });
+    }
 });
 
 app.post('/api/automation/:sessionId/stop', async (req, res) => {
@@ -1141,7 +1141,7 @@ app.post('/api/automation/:sessionId/stop', async (req, res) => {
     // Emit automation stop event via Socket.IO
     const io = require('socket.io')(server);
     io.emit('automation:stop', { sessionId });
-    
+
     res.json({
       success: true,
       sessionId,
@@ -1328,21 +1328,23 @@ console.log('✅ PRODUCTION: Missing API endpoints added');
 console.log('🔧 PRODUCTION: REAL session management endpoints available but not active');
 console.log('ℹ️ PRODUCTION: Real session endpoints can be enabled for production deployment');
 
-// STEP 8: Initialize Database (TRULY NON-BLOCKING)
-console.log('🔧 PRODUCTION: Scheduling database initialization...');
+// STEP 8: Initialize REAL Database (NO MOCK FALLBACKS)
+console.log('🔧 PRODUCTION: Initializing REAL PostgreSQL database...');
 setTimeout(async () => {
 try {
-  const db = initializeDatabase();
-  if (db) {
+  const db = await initializeDatabase();
+  if (db && db.connected) {
     await createTables();
-    console.log('✅ PRODUCTION: Database initialized and tables created');
+    console.log('✅ PRODUCTION: REAL PostgreSQL database initialized and tables created');
   } else {
-    console.log('⚠️ PRODUCTION: Database not available - using mock storage');
+    console.error('❌ PRODUCTION: REAL Database initialization failed - NO MOCK FALLBACKS ALLOWED');
+    process.exit(1); // Exit if database fails - no mock fallbacks
   }
 } catch (error) {
-  console.warn('⚠️ PRODUCTION: Database initialization failed (non-blocking):', error.message);
+  console.error('❌ PRODUCTION: REAL Database initialization failed:', error);
+  process.exit(1); // Exit if database fails - no mock fallbacks
 }
-}, 0);
+}, 1000);
 
 // STEP 9: REAL session management (available but not initialized to avoid startup errors)
 console.log('🔧 PRODUCTION: REAL session management available but not initialized');
@@ -1507,16 +1509,16 @@ async function initializeServer() {
 
   // VNC CODE REMOVED - Using in-browser automation instead
 
-  // STEP 14: Server listening (proven pattern)
-  server.listen(port, host, () => {
-    console.log('🌐 PRODUCTION: Server listening on port', port);
-    console.log('🌐 PRODUCTION: Server listening on host', host);
-    console.log('🌐 PRODUCTION: Server ready for Railway health checks');
-    console.log('🌐 PRODUCTION: Health endpoint: http://localhost:' + port + '/health');
-    console.log('🌐 PRODUCTION: Root endpoint: http://localhost:' + port + '/');
-    console.log('🌐 PRODUCTION: API health endpoint: http://localhost:' + port + '/api/health');
-    console.log('✅ PRODUCTION: Server started successfully');
-    console.log('✅ PRODUCTION: Redis status:', redisConnected ? 'connected' : 'disconnected');
+// STEP 14: Server listening (proven pattern)
+server.listen(port, host, () => {
+  console.log('🌐 PRODUCTION: Server listening on port', port);
+  console.log('🌐 PRODUCTION: Server listening on host', host);
+  console.log('🌐 PRODUCTION: Server ready for Railway health checks');
+  console.log('🌐 PRODUCTION: Health endpoint: http://localhost:' + port + '/health');
+  console.log('🌐 PRODUCTION: Root endpoint: http://localhost:' + port + '/');
+  console.log('🌐 PRODUCTION: API health endpoint: http://localhost:' + port + '/api/health');
+  console.log('✅ PRODUCTION: Server started successfully');
+  console.log('✅ PRODUCTION: Redis status:', redisConnected ? 'connected' : 'disconnected');
   console.log('🔌 PRODUCTION: Socket.IO available at /ws/socket.io/');
   });
 }
@@ -1712,7 +1714,7 @@ app.get('/api/health/details', async (req, res) => {
       port: port
     });
   } catch (error) {
-    res.status(500).json({ status: 'unhealthy', error: error.message });        
+    res.status(500).json({ status: 'unhealthy', error: error.message });
   }
 });
 

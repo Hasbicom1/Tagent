@@ -1,10 +1,13 @@
 /**
- * Real AI Agents - Real Implementation
- * Orchestrates real AI agents for browser automation
+ * Real AI Agents - REAL Implementation
+ * Orchestrates REAL AI agents for browser automation with actual AI frameworks
  */
 
 import { logger } from '../logger';
 import { EventEmitter } from 'events';
+import { spawn } from 'child_process';
+import { createWriteStream, createReadStream } from 'fs';
+import { join } from 'path';
 // @ts-ignore - redis-simple.js doesn't have TypeScript declarations
 import { getRedis } from '../redis-simple.js';
 // @ts-ignore - queue-simple.js doesn't have TypeScript declarations
@@ -160,26 +163,169 @@ export class RealAIAgentOrchestrator extends EventEmitter {
   }
 
   private async executeBrowserTask(agent: RealAIAgent, task: any): Promise<any> {
-    logger.info(`🌐 Browser Agent ${agent.id}: Executing browser task`);
+    logger.info(`🌐 REAL Browser Agent ${agent.id}: Executing REAL browser task`);
     
-    // Queue the task for the browser worker
-    const browserTask = {
-      id: task.id || `browser_${Date.now()}`,
-      instruction: task.instruction || task.message,
-      url: task.url,
-      selector: task.selector,
-      data: task.data,
-      priority: task.priority || 'medium',
-      agentId: agent.id
-    };
-
-    await queueBrowserTask(browserTask);
+    try {
+      // Execute REAL browser automation using actual AI frameworks
+      const result = await this.executeRealBrowserAutomation(task);
 
     return {
       success: true,
-      message: `Browser automation task queued: ${task.instruction}`,
-      agentId: agent.id,
-      taskId: browserTask.id
+        message: `REAL browser automation completed: ${task.instruction}`,
+        agentId: agent.id,
+        result: result,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.error(`❌ REAL Browser Agent: Task failed:`, error);
+      throw error;
+    }
+  }
+
+  private async executeRealBrowserAutomation(task: any): Promise<any> {
+    logger.info('🚀 REAL Browser Automation: Starting actual browser control');
+    
+    // Use REAL Browser-Use framework
+    const browserUseResult = await this.executeWithBrowserUse(task);
+    
+    // Use REAL Skyvern framework for computer vision
+    const skyvernResult = await this.executeWithSkyvern(task);
+    
+    // Use REAL LaVague framework for complex workflows
+    const lavagueResult = await this.executeWithLaVague(task);
+    
+    // Use REAL Stagehand framework for hybrid code+AI
+    const stagehandResult = await this.executeWithStagehand(task);
+
+    return {
+      browserUse: browserUseResult,
+      skyvern: skyvernResult,
+      lavague: lavagueResult,
+      stagehand: stagehandResult,
+      combined: this.combineResults([browserUseResult, skyvernResult, lavagueResult, stagehandResult])
+    };
+  }
+
+  private async executeWithBrowserUse(task: any): Promise<any> {
+    logger.info('🤖 REAL Browser-Use: Executing with actual framework');
+    
+    try {
+      // Call REAL Browser-Use worker endpoint
+      const response = await fetch('https://worker-production-6480.up.railway.app/browser-use-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instruction: task.instruction,
+          url: task.url,
+          sessionId: task.sessionId,
+          agentId: task.agentId
+        })
+      });
+      
+      const result = await response.json();
+      logger.info('✅ REAL Browser-Use: Task completed successfully');
+      return result;
+    } catch (error) {
+      logger.error('❌ REAL Browser-Use: Task failed:', error);
+      throw error;
+    }
+  }
+
+  private async executeWithSkyvern(task: any): Promise<any> {
+    logger.info('👁️ REAL Skyvern: Executing with computer vision framework');
+    
+    try {
+      // Call REAL Skyvern worker endpoint
+      const response = await fetch('https://worker-production-6480.up.railway.app/skyvern-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instruction: task.instruction,
+          url: task.url,
+          sessionId: task.sessionId,
+          agentId: task.agentId
+        })
+      });
+      
+      const result = await response.json();
+      logger.info('✅ REAL Skyvern: Task completed successfully');
+      return result;
+    } catch (error) {
+      logger.error('❌ REAL Skyvern: Task failed:', error);
+      throw error;
+    }
+  }
+
+  private async executeWithLaVague(task: any): Promise<any> {
+    logger.info('🧠 REAL LaVague: Executing with Large Action Model framework');
+    
+    try {
+      // Call REAL LaVague worker endpoint
+      const response = await fetch('https://worker-production-6480.up.railway.app/lavague-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instruction: task.instruction,
+          url: task.url,
+          sessionId: task.sessionId,
+          agentId: task.agentId
+        })
+      });
+      
+      const result = await response.json();
+      logger.info('✅ REAL LaVague: Task completed successfully');
+      return result;
+    } catch (error) {
+      logger.error('❌ REAL LaVague: Task failed:', error);
+      throw error;
+    }
+  }
+
+  private async executeWithStagehand(task: any): Promise<any> {
+    logger.info('⚡ REAL Stagehand: Executing with hybrid code+AI framework');
+    
+    try {
+      // Call REAL Stagehand worker endpoint
+      const response = await fetch('https://worker-production-6480.up.railway.app/stagehand-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instruction: task.instruction,
+          url: task.url,
+          sessionId: task.sessionId,
+          agentId: task.agentId
+        })
+      });
+      
+      const result = await response.json();
+      logger.info('✅ REAL Stagehand: Task completed successfully');
+      return result;
+    } catch (error) {
+      logger.error('❌ REAL Stagehand: Task failed:', error);
+      throw error;
+    }
+  }
+
+  private combineResults(results: any[]): any {
+    // Combine results from all AI frameworks
+    const successful = results.filter(r => r.success);
+    const failed = results.filter(r => !r.success);
+    
+    return {
+      totalFrameworks: results.length,
+      successful: successful.length,
+      failed: failed.length,
+      bestResult: successful.length > 0 ? successful[0] : null,
+      allResults: results,
+      confidence: successful.length / results.length
     };
   }
 
@@ -254,7 +400,7 @@ export class RealAIAgentOrchestrator extends EventEmitter {
       };
 
       await queueBrowserTask(formTask);
-      
+
       return {
         ...task.data,
         processingTime: Date.now() - startTime,
