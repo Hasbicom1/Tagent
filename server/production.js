@@ -1342,8 +1342,7 @@ app.use((err, req, res, next) => {
 });
 
 // IMPORTANT: Define API routes BEFORE SPA catch-all so they don't 404
-// Live view auth: fetch VNC URL from worker and return to client
-// (moved earlier – duplicates removed below)
+// VNC CODE REMOVED - Using in-browser automation instead
 
 // STEP 12: Catch-all handler for React Router (SPA routing)
 app.get('*', (req, res) => {
@@ -1541,7 +1540,7 @@ function automationAuthMiddleware(req, res, next) {
       if (!decoded || decoded.sessionId !== req.params.sessionId) {
         return res.status(403).json({ error: 'Invalid token sessionId' });
       }
-      if (!['vnc_access', 'automation_access'].includes(decoded.type)) {
+      if (!['automation_access'].includes(decoded.type)) {
         return res.status(403).json({ error: 'Invalid token type' });
       }
       req.sessionAuth = decoded;
