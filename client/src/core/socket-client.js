@@ -1,7 +1,15 @@
 import { io } from "socket.io-client";
 
 // WebSocket client for automation communication
-export const socket = io(import.meta.env.VITE_SOCKET_URL || 'ws://localhost:3000', {
+const getSocketUrl = () => {
+  // Use current host for Socket.IO connection
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  return `${protocol}//${host}`;
+};
+
+export const socket = io(getSocketUrl(), {
+  path: '/ws/socket.io/',
   transports: ["websocket", "polling"],
   autoConnect: true,
   reconnection: true,

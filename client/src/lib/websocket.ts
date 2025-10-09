@@ -96,8 +96,8 @@ export class WebSocketClient {
     if (!this.config.url) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      // Try multiple WebSocket endpoints
-      this.config.url = `${protocol}//${host}/ws`;
+      // Use Socket.IO WebSocket endpoint
+      this.config.url = `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`;
       console.log('🔌 WS: Using WebSocket URL:', this.config.url);
     }
   }
@@ -116,12 +116,12 @@ export class WebSocketClient {
       this.log('🔌 Connecting to WebSocket...');
 
       try {
-        // FIXED: Use only raw WebSocket endpoint, not Socket.IO
+        // FIXED: Use Socket.IO WebSocket endpoint
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const endpoints = [
-          // Use raw WebSocket endpoint (not Socket.IO)
-          `${protocol}//${host}/ws`
+          // Use Socket.IO WebSocket endpoint
+          `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`
         ];
         
         let currentEndpoint = 0;
