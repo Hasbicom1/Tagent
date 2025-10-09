@@ -21,6 +21,7 @@ import AutomationSessionPage from "@/pages/automation-session";
 import AutomationDemo from "@/pages/automation-demo";
 import AutomationTest from "@/pages/automation-test";
 import VNCTestPage from "@/pages/vnc-test";
+import { EkoDemo } from "@/pages/EkoDemo";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -294,6 +295,16 @@ function Router() {
       
       {/* VNC Security Test Route */}
       <Route path="/vnc-test" component={VNCTestPage} />
+      
+      {/* Eko Framework Demo Route */}
+      <Route path="/eko-demo" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <EkoDemo />
+        </div>
+      )} />
       
       {/* Existing Routes */}
       <Route path="/success" component={CheckoutSuccess} />
