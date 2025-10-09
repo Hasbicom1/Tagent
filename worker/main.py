@@ -10,6 +10,7 @@ print("🚨 NO VNC - NO PLAYWRIGHT - DIRECT BROWSER CONTROL 🚨")
 import os
 import asyncio
 import json
+from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,21 @@ logger = logging.getLogger(__name__)
 # Environment variables
 REDIS_URL = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
 PORT = int(os.getenv('PORT', '8080'))
+
+# Define lifespan function BEFORE using it
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize in-browser automation service"""
+    logger.info("🚀 In-Browser Automation Worker starting...")
+    logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
+    logger.info(f"📊 Port: {PORT}")
+    logger.info("✅ In-browser automation ready - NO VNC/PLAYWRIGHT")
+    yield
+    # Shutdown
+    logger.info("🔄 Shutting down worker...")
+    logger.info("✅ In-browser automation worker shutdown")
 
 # Initialize FastAPI with lifespan
 app = FastAPI(title="Browser Agent Worker", version="1.0.0", lifespan=lifespan)
@@ -67,21 +83,6 @@ async def process_inbrowser_command(command: Dict[str, Any]) -> Dict[str, Any]:
         "command": command,
         "timestamp": datetime.now().isoformat()
     }
-
-
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize in-browser automation service"""
-    logger.info("🚀 In-Browser Automation Worker starting...")
-    logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
-    logger.info(f"📊 Port: {PORT}")
-    logger.info("✅ In-browser automation ready - NO VNC/PLAYWRIGHT")
-    yield
-    # Shutdown
-    logger.info("🔄 Shutting down worker...")
-    logger.info("✅ In-browser automation worker shutdown")
 
 
 @app.get("/health")
