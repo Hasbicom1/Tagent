@@ -1,45 +1,206 @@
 /**
- * Database Module - Real Implementation
- * Handles database operations for sessions and payments
+ * Database Module - REAL Implementation
+ * Handles database operations for sessions and payments using PostgreSQL
  */
 
-export async function getUserSession(sessionId) {
-  // Mock implementation - replace with real database logic
-  return {
-    session_id: sessionId,
-    agent_id: `agent_${sessionId}`,
-    checkout_session_id: `cs_${sessionId}`,
-    payment_intent_id: `pi_${sessionId}`,
-    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    status: 'active'
-  };
-}
+import { Pool } from 'pg';
 
-export async function updateSessionStatus(sessionId, status) {
-  // Mock implementation - replace with real database logic
-  console.log(`Updating session ${sessionId} to status: ${status}`);
-  return true;
-}
+// Real PostgreSQL connection pool
+let pool: Pool | null = null;
 
 export async function initializeDatabase() {
-  // Mock implementation - replace with real database initialization
-  console.log('Initializing database...');
-  return { connected: true };
+  try {
+    console.log('🔧 REAL Database: Initializing PostgreSQL connection...');
+    
+    // Real PostgreSQL connection
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/onedollaragent',
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+
+    // Test connection
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    
+    console.log('✅ REAL Database: PostgreSQL connected successfully');
+    return { connected: true, pool };
+  } catch (error) {
+    console.error('❌ REAL Database: Connection failed:', error);
+    return { connected: false, error: error.message };
+  }
 }
 
 export async function createTables() {
-  // Mock implementation - replace with real table creation
-  console.log('Creating database tables...');
-  return true;
+  try {
+    if (!pool) {
+      throw new Error('Database not initialized');
+    }
+
+    console.log('🔧 REAL Database: Creating tables...');
+    
+    const client = await pool.connect();
+    
+    // Real table creation
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        session_id VARCHAR(255) PRIMARY KEY,
+        agent_id VARCHAR(255) NOT NULL,
+        checkout_session_id VARCHAR(255),
+        payment_intent_id VARCHAR(255),
+        expires_at TIMESTAMP NOT NULL,
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS automation_tasks (
+        task_id VARCHAR(255) PRIMARY KEY,
+        session_id VARCHAR(255) REFERENCES user_sessions(session_id),
+        instruction TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        result JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_activity (
+        activity_id SERIAL PRIMARY KEY,
+        session_id VARCHAR(255) REFERENCES user_sessions(session_id),
+        agent_type VARCHAR(100) NOT NULL,
+        action_type VARCHAR(100) NOT NULL,
+        details JSONB,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    client.release();
+    console.log('✅ REAL Database: Tables created successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ REAL Database: Table creation failed:', error);
+    return false;
+  }
+}
+
+export async function getUserSession(sessionId) {
+  try {
+    if (!pool) {
+      throw new Error('Database not initialized');
+    }
+
+    const client = await pool.connect();
+    const result = await client.query(
+      'SELECT * FROM user_sessions WHERE session_id = $1',
+      [sessionId]
+    );
+    client.release();
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('❌ REAL Database: getUserSession failed:', error);
+    return null;
+  }
+}
+
+export async function updateSessionStatus(sessionId, status) {
+  try {
+    if (!pool) {
+      throw new Error('Database not initialized');
+    }
+
+    const client = await pool.connect();
+    const result = await client.query(
+      'UPDATE user_sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_id = $2',
+      [status, sessionId]
+    );
+    client.release();
+
+    console.log(`✅ REAL Database: Updated session ${sessionId} to status: ${status}`);
+    return result.rowCount > 0;
+  } catch (error) {
+    console.error('❌ REAL Database: updateSessionStatus failed:', error);
+    return false;
+  }
+}
+
+export async function createUserSession(sessionData) {
+  try {
+    if (!pool) {
+      throw new Error('Database not initialized');
+    }
+
+    const client = await pool.connect();
+    const result = await client.query(
+      `INSERT INTO user_sessions (session_id, agent_id, checkout_session_id, payment_intent_id, expires_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (session_id) DO UPDATE SET
+       status = EXCLUDED.status,
+       updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        sessionData.session_id,
+        sessionData.agent_id,
+        sessionData.checkout_session_id,
+        sessionData.payment_intent_id,
+        sessionData.expires_at,
+        sessionData.status || 'active'
+      ]
+    );
+    client.release();
+
+    console.log(`✅ REAL Database: Created/updated session ${sessionData.session_id}`);
+    return result.rows[0];
+  } catch (error) {
+    console.error('❌ REAL Database: createUserSession failed:', error);
+    return null;
+  }
+}
+
+export async function logAgentActivity(sessionId, agentType, actionType, details = {}) {
+  try {
+    if (!pool) {
+      throw new Error('Database not initialized');
+    }
+
+    const client = await pool.connect();
+    await client.query(
+      'INSERT INTO agent_activity (session_id, agent_type, action_type, details) VALUES ($1, $2, $3, $4)',
+      [sessionId, agentType, actionType, JSON.stringify(details)]
+    );
+    client.release();
+
+    console.log(`✅ REAL Database: Logged activity for session ${sessionId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ REAL Database: logAgentActivity failed:', error);
+    return false;
+  }
 }
 
 export function getDatabase() {
-  // Mock implementation - replace with real database connection
-  console.log('Getting database connection...');
-  return {
-    query: async (sql) => {
-      console.log(`Executing query: ${sql}`);
-      return { rowCount: 1 };
-    }
-  };
+  if (!pool) {
+    console.warn('⚠️ REAL Database: Pool not initialized');
+    return null;
+  }
+  return pool;
+}
+
+export async function closeDatabase() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+    console.log('✅ REAL Database: Connection closed');
+  }
 }

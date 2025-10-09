@@ -1,28 +1,12 @@
 /**
- * Production VNC loader with real noVNC integration
+ * REAL VNC loader with actual noVNC integration
  * Implements live browser streaming with full VNC functionality
  * This ensures reliable production-ready browser automation streaming
  */
 
-// VNC library will be loaded at runtime only when needed
+// Real VNC library will be loaded at runtime
 let RFBClass: any = null;
 let loadingPromise: Promise<any> | null = null;
-
-// Mock RFB class for when VNC is not available
-class MockRFB {
-  constructor(container: HTMLElement, url: string, options: any) {
-    console.log('🔧 Mock VNC RFB created - VNC not available');
-  }
-  addEventListener() {}
-  sendCredentials() {}
-  disconnect() {}
-  get scaleViewport() { return false; }
-  set scaleViewport(value: boolean) { console.log('Mock scaleViewport:', value); }
-  get resizeSession() { return false; }
-  set resizeSession(value: boolean) { console.log('Mock resizeSession:', value); }
-  get showDotCursor() { return false; }
-  set showDotCursor(value: boolean) { console.log('Mock showDotCursor:', value); }
-}
 
 export interface VNCConnectionConfig {
   url: string;
@@ -46,7 +30,7 @@ export interface VNCDisplayOptions {
 // Real noVNC RFB implementation - no mock needed
 
 /**
- * Load the real noVNC RFB library (production implementation)
+ * Load the REAL noVNC RFB library (production implementation)
  */
 export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
   if (RFBClass) {
@@ -59,17 +43,41 @@ export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
 
   loadingPromise = (async () => {
     try {
-      console.log('🔄 Loading VNC RFB library...');
+      console.log('🔄 Loading REAL noVNC RFB library...');
       
-      // For now, always use mock to avoid build issues
-      // VNC will be implemented when needed
-      console.log('🔧 Using mock VNC RFB to avoid build issues');
-      RFBClass = MockRFB;
-      return RFBClass;
+      // Load REAL noVNC library from CDN
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js';
+      script.type = 'module';
+      
+      return new Promise((resolve, reject) => {
+        script.onload = () => {
+          try {
+            // Access the RFB class from the loaded module
+            const RFB = (window as any).RFB;
+            if (RFB) {
+              RFBClass = RFB;
+              console.log('✅ REAL noVNC RFB library loaded successfully');
+              resolve(RFBClass);
+            } else {
+              throw new Error('RFB class not found in loaded module');
+            }
     } catch (error) {
-      console.error('❌ Failed to load VNC RFB:', error);
-      RFBClass = MockRFB;
-      return RFBClass;
+            console.error('❌ Failed to access RFB class:', error);
+            reject(error);
+          }
+        };
+        
+        script.onerror = (error) => {
+          console.error('❌ Failed to load noVNC script:', error);
+          reject(error);
+        };
+        
+        document.head.appendChild(script);
+      });
+    } catch (error) {
+      console.error('❌ Failed to load REAL VNC RFB:', error);
+      throw error;
     }
   })();
 

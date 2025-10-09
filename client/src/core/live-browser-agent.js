@@ -121,7 +121,7 @@ class LiveBrowserAgent {
       // Ctrl+Shift+T: Test automation
       if (event.ctrlKey && event.shiftKey && event.key === 'T') {
         event.preventDefault();
-        this.testAutomation();
+        this.startRealAutomation();
       }
     });
   }
@@ -398,30 +398,24 @@ class LiveBrowserAgent {
     }
   }
 
-  // Test automation functionality
-  async testAutomation() {
-    console.log('🧪 Live Browser: Testing automation functionality');
+  // REAL automation functionality - no test mode
+  async startRealAutomation() {
+    console.log('🚀 Live Browser: Starting REAL browser automation');
     
     try {
-      // Test basic automation commands
-      const testCommands = [
-        { action: 'navigate', target: 'https://google.com', description: 'Navigate to Google' },
-        { action: 'screenshot', description: 'Take test screenshot' },
-        { action: 'scroll', y: 100, description: 'Test scroll' }
-      ];
-      
-      for (const command of testCommands) {
-        console.log(`🧪 Live Browser: Testing: ${command.description}`);
-        await this.executeCommand(command);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      
-      console.log('✅ Live Browser: Test completed successfully');
-      showAutomationStatus('✅ Test completed successfully', 'success');
+      // Connect to real AI agents via WebSocket
+      socket.emit('automation:start', {
+        sessionId: this.currentSession?.sessionId,
+        agentId: this.currentSession?.agentId,
+        type: 'real_automation'
+      });
+
+      showAutomationStatus('🚀 REAL browser automation started', 'success');
+      console.log('✅ Live Browser: REAL automation started successfully');
       
     } catch (error) {
-      console.error('❌ Live Browser: Test failed:', error);
-      showAutomationStatus(`❌ Test failed: ${error.message}`, 'error');
+      console.error('❌ Live Browser: REAL automation failed to start:', error);
+      showAutomationStatus(`❌ Automation failed: ${error.message}`, 'error');
       throw error;
     }
   }

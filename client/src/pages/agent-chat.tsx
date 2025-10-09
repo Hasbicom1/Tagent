@@ -20,7 +20,7 @@ import {
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
-import { LiveBrowserView } from '@/components/LiveBrowserView';
+import { RealBrowserAutomation } from '@/components/RealBrowserAutomation';
 
 interface Message {
   id: string;
@@ -318,7 +318,7 @@ export default function AgentChat() {
       {/* FULLSCREEN BROWSER VIEW */}
       <div className="flex-1 relative overflow-hidden">
         {sessionInfo?.sessionId ? (
-          <LiveBrowserView
+          <RealBrowserAutomation
             sessionId={sessionInfo.sessionId}
             agentId={agentId}
             workerUrl="https://worker-production-6480.up.railway.app"
