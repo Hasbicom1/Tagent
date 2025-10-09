@@ -13,8 +13,8 @@ import {
   waitForElement,
   getElementText,
   takeScreenshot 
-} from '../utils/domActions';
-import { showCursor, hideCursor, highlightElement, removeHighlight } from '../utils/visualFeedback';
+} from '../utils/domActions.js';
+import { showCursor, hideCursor, highlightElement, removeHighlight } from '../utils/visualFeedback.js';
 
 export class OneDollarAgentBrowserAgent implements Agent {
   public Name = "OneDollarAgentBrowserAgent";
@@ -37,7 +37,7 @@ export class OneDollarAgentBrowserAgent implements Agent {
       const results: string[] = [];
       
       for (const action of actions) {
-        console.log('🎬 EKO BROWSER AGENT: Executing action:', action);
+        console.log('🎬 ONEDOLLARAGENT BROWSER AGENT: Executing action:', action);
         
         let result: any;
         
@@ -71,12 +71,12 @@ export class OneDollarAgentBrowserAgent implements Agent {
       }
       
       const finalResult = results.join('\n');
-      console.log('✅ EKO BROWSER AGENT: Completed with results:', finalResult);
+      console.log('✅ ONEDOLLARAGENT BROWSER AGENT: Completed with results:', finalResult);
       
       return finalResult;
       
     } catch (error) {
-      console.error('❌ EKO BROWSER AGENT: Error:', error);
+      console.error('❌ ONEDOLLARAGENT BROWSER AGENT: Error:', error);
       return `Browser automation failed: ${error}`;
     }
   }

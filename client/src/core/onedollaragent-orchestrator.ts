@@ -46,21 +46,21 @@ export class OneDollarAgentOrchestrator {
    * Execute natural language command
    */
   public async executeCommand(command: string): Promise<OneDollarAgentResult> {
-    console.log('🎯 EKO ORCHESTRATOR: Executing command:', command);
+    console.log('🎯 ONEDOLLARAGENT ORCHESTRATOR: Executing command:', command);
     
     try {
       this.isRunning = true;
       
       // Generate and execute workflow
-      const result = await this.eko.run(command);
+      const result = await this.framework.run(command);
       
       this.isRunning = false;
       this.currentTaskId = null;
       
-      console.log('✅ EKO ORCHESTRATOR: Command completed:', result);
+      console.log('✅ ONEDOLLARAGENT ORCHESTRATOR: Command completed:', result);
       
       // Emit completion event
-      this.socket.emit('eko:completed', {
+      this.socket.emit('onedollaragent:completed', {
         command,
         result,
         timestamp: Date.now()
@@ -72,10 +72,10 @@ export class OneDollarAgentOrchestrator {
       this.isRunning = false;
       this.currentTaskId = null;
       
-      console.error('❌ EKO ORCHESTRATOR: Command failed:', error);
+      console.error('❌ ONEDOLLARAGENT ORCHESTRATOR: Command failed:', error);
       
       // Emit error event
-      this.socket.emit('eko:error', {
+      this.socket.emit('onedollaragent:error', {
         command,
         error: error.message,
         timestamp: Date.now()
@@ -89,10 +89,10 @@ export class OneDollarAgentOrchestrator {
    * Handle agent messages and emit to frontend
    */
   private handleAgentMessage(message: any): void {
-    console.log('📨 EKO ORCHESTRATOR: Agent message:', message);
+    console.log('📨 ONEDOLLARAGENT ORCHESTRATOR: Agent message:', message);
     
     // Emit to frontend for real-time updates
-    this.socket.emit('eko:agent:message', message);
+    this.socket.emit('onedollaragent:agent:message', message);
     
     // Handle different message types
     switch (message.type) {
@@ -112,7 +112,7 @@ export class OneDollarAgentOrchestrator {
    * Handle agent start
    */
   private handleAgentStart(message: any): void {
-    console.log('🚀 EKO ORCHESTRATOR: Agent started:', message.agentName);
+    console.log('🚀 ONEDOLLARAGENT ORCHESTRATOR: Agent started:', message.agentName);
     
     // Show visual feedback
     this.showAgentStatus(`🤖 ${message.agentName} is starting...`, 'info');
@@ -122,7 +122,7 @@ export class OneDollarAgentOrchestrator {
    * Handle agent result
    */
   private handleAgentResult(message: any): void {
-    console.log('✅ EKO ORCHESTRATOR: Agent completed:', message.agentName);
+    console.log('✅ ONEDOLLARAGENT ORCHESTRATOR: Agent completed:', message.agentName);
     
     // Show visual feedback
     this.showAgentStatus(`✅ ${message.agentName} completed successfully`, 'success');
@@ -132,7 +132,7 @@ export class OneDollarAgentOrchestrator {
    * Handle agent error
    */
   private handleAgentError(message: any): void {
-    console.log('❌ EKO ORCHESTRATOR: Agent error:', message.agentName, message.error);
+    console.log('❌ ONEDOLLARAGENT ORCHESTRATOR: Agent error:', message.agentName, message.error);
     
     // Show visual feedback
     this.showAgentStatus(`❌ ${message.agentName} failed: ${message.error}`, 'error');
@@ -144,7 +144,7 @@ export class OneDollarAgentOrchestrator {
   private showAgentStatus(message: string, type: 'info' | 'success' | 'error'): void {
     // Create status element
     const status = document.createElement('div');
-    status.id = 'eko-agent-status';
+    status.id = 'onedollaragent-agent-status';
     status.style.cssText = `
       position: fixed;
       top: 20px;
@@ -178,41 +178,41 @@ export class OneDollarAgentOrchestrator {
   private setupEventListeners(): void {
     // Socket.IO events
     this.socket.on('connect', () => {
-      console.log('🔌 EKO ORCHESTRATOR: Connected to server');
+      console.log('🔌 ONEDOLLARAGENT ORCHESTRATOR: Connected to server');
     });
 
     this.socket.on('disconnect', () => {
-      console.log('🔌 EKO ORCHESTRATOR: Disconnected from server');
+      console.log('🔌 ONEDOLLARAGENT ORCHESTRATOR: Disconnected from server');
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('❌ EKO ORCHESTRATOR: Connection error:', error);
+      console.error('❌ ONEDOLLARAGENT ORCHESTRATOR: Connection error:', error);
     });
 
     // Listen for external commands
-    this.socket.on('eko:command', async (data) => {
-      console.log('📨 EKO ORCHESTRATOR: Received command:', data);
+    this.socket.on('onedollaragent:command', async (data) => {
+      console.log('📨 ONEDOLLARAGENT ORCHESTRATOR: Received command:', data);
       try {
         await this.executeCommand(data.command);
       } catch (error) {
-        console.error('❌ EKO ORCHESTRATOR: Command execution failed:', error);
+        console.error('❌ ONEDOLLARAGENT ORCHESTRATOR: Command execution failed:', error);
       }
     });
 
     // Listen for task control
-    this.socket.on('eko:abort', (data) => {
-      console.log('🛑 EKO ORCHESTRATOR: Aborting task:', data.taskId);
-      this.eko.abortTask(data.taskId, 'User requested abort');
+    this.socket.on('onedollaragent:abort', (data) => {
+      console.log('🛑 ONEDOLLARAGENT ORCHESTRATOR: Aborting task:', data.taskId);
+      this.framework.abortTask(data.taskId, 'User requested abort');
     });
 
-    this.socket.on('eko:pause', (data) => {
-      console.log('⏸️ EKO ORCHESTRATOR: Pausing task:', data.taskId);
-      this.eko.pauseTask(data.taskId, true, 'User requested pause');
+    this.socket.on('onedollaragent:pause', (data) => {
+      console.log('⏸️ ONEDOLLARAGENT ORCHESTRATOR: Pausing task:', data.taskId);
+      this.framework.pauseTask(data.taskId, true, 'User requested pause');
     });
 
-    this.socket.on('eko:resume', (data) => {
-      console.log('▶️ EKO ORCHESTRATOR: Resuming task:', data.taskId);
-      this.eko.pauseTask(data.taskId, false, 'User requested resume');
+    this.socket.on('onedollaragent:resume', (data) => {
+      console.log('▶️ ONEDOLLARAGENT ORCHESTRATOR: Resuming task:', data.taskId);
+      this.framework.pauseTask(data.taskId, false, 'User requested resume');
     });
   }
 
@@ -236,7 +236,7 @@ export class OneDollarAgentOrchestrator {
    */
   public abortCurrentTask(): boolean {
     if (this.currentTaskId) {
-      return this.eko.abortTask(this.currentTaskId, 'User requested abort');
+      return this.framework.abortTask(this.currentTaskId, 'User requested abort');
     }
     return false;
   }
@@ -246,7 +246,7 @@ export class OneDollarAgentOrchestrator {
    */
   public pauseCurrentTask(): boolean {
     if (this.currentTaskId) {
-      return this.eko.pauseTask(this.currentTaskId, true, 'User requested pause');
+      return this.framework.pauseTask(this.currentTaskId, true, 'User requested pause');
     }
     return false;
   }
@@ -256,7 +256,7 @@ export class OneDollarAgentOrchestrator {
    */
   public resumeCurrentTask(): boolean {
     if (this.currentTaskId) {
-      return this.eko.pauseTask(this.currentTaskId, false, 'User requested resume');
+      return this.framework.pauseTask(this.currentTaskId, false, 'User requested resume');
     }
     return false;
   }

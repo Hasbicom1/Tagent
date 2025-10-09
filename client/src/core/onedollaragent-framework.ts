@@ -107,7 +107,7 @@ export class OneDollarAgentFramework {
     taskId: string = this.uuidv4(),
     contextParams?: Record<string, any>
   ): Promise<Workflow> {
-    console.log('🎯 EKO: Generating workflow for:', taskPrompt);
+    console.log('🎯 ONEDOLLARAGENT: Generating workflow for:', taskPrompt);
     
     const agents = [...(this.config.agents || [])];
     const chain: Chain = new Chain(taskPrompt);
@@ -132,7 +132,7 @@ export class OneDollarAgentFramework {
       };
       
       context.workflow = workflow;
-      console.log('✅ EKO: Workflow generated with', workflow.agents.length, 'agents');
+      console.log('✅ ONEDOLLARAGENT: Workflow generated with', workflow.agents.length, 'agents');
       
       return workflow;
     } catch (e) {
@@ -150,12 +150,12 @@ export class OneDollarAgentFramework {
       throw new Error("The task does not exist");
     }
 
-    console.log('🚀 EKO: Executing workflow for task:', taskId);
+    console.log('🚀 ONEDOLLARAGENT: Executing workflow for task:', taskId);
     
     try {
       return await this.doRunWorkflow(context);
     } catch (e: any) {
-      console.error('❌ EKO: Execution error:', e);
+      console.error('❌ ONEDOLLARAGENT: Execution error:', e);
       return {
         taskId,
         success: false,

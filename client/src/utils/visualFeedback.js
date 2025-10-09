@@ -1,170 +1,205 @@
-// Visual feedback for automation actions
-let cursorElement = null;
-let highlightOverlay = null;
+/**
+ * VISUAL FEEDBACK - Real browser automation visual effects
+ * These functions provide visual feedback during automation
+ */
 
-// Create and show automation cursor
+/**
+ * Show cursor overlay
+ */
 export function showCursor() {
-  if (!cursorElement) {
-    cursorElement = document.createElement('div');
-    cursorElement.id = 'automation-cursor';
-    cursorElement.style.cssText = `
+  let cursor = document.getElementById('automation-cursor');
+  if (!cursor) {
+    cursor = document.createElement('div');
+    cursor.id = 'automation-cursor';
+    cursor.style.cssText = `
       position: fixed;
       width: 20px;
       height: 20px;
-      background: #ff4444;
-      border: 2px solid #ffffff;
+      background: #ff0000;
       border-radius: 50%;
-      pointer-events: none;
       z-index: 999999;
+      pointer-events: none;
       display: none;
-      box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
-      transition: all 0.1s ease;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+      transition: all 0.2s ease;
     `;
-    document.body.appendChild(cursorElement);
+    document.body.appendChild(cursor);
   }
-  
-  cursorElement.style.display = 'block';
+  cursor.style.display = 'block';
 }
 
-// Hide automation cursor
+/**
+ * Hide cursor overlay
+ */
 export function hideCursor() {
-  if (cursorElement) {
-    cursorElement.style.display = 'none';
+  const cursor = document.getElementById('automation-cursor');
+  if (cursor) {
+    cursor.style.display = 'none';
   }
 }
 
-// Highlight element with animation
+/**
+ * Move cursor to specific coordinates
+ */
+export async function moveCursorTo(x, y) {
+  const cursor = document.getElementById('automation-cursor');
+  if (cursor) {
+    cursor.style.left = x + 'px';
+    cursor.style.top = y + 'px';
+    cursor.style.display = 'block';
+    await delay(100);
+  }
+}
+
+/**
+ * Highlight an element
+ */
 export function highlightElement(element) {
-  if (!element) return;
-  
-  // Remove existing highlight
+  // Remove existing highlights
   removeHighlight();
   
-  // Create highlight overlay
-  highlightOverlay = document.createElement('div');
-  highlightOverlay.id = 'automation-highlight';
-  highlightOverlay.style.cssText = `
-    position: absolute;
-    border: 3px solid #00ff00;
-    background: rgba(0, 255, 0, 0.1);
-    pointer-events: none;
-    z-index: 999998;
-    border-radius: 4px;
-    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
-    animation: automation-pulse 0.5s ease-in-out;
-  `;
+  // Add highlight class
+  element.classList.add('automation-highlight');
   
-  // Add pulse animation
-  if (!document.getElementById('automation-styles')) {
+  // Add CSS for highlight
+  if (!document.getElementById('automation-highlight-style')) {
     const style = document.createElement('style');
-    style.id = 'automation-styles';
+    style.id = 'automation-highlight-style';
     style.textContent = `
-      @keyframes automation-pulse {
-        0% { transform: scale(1); opacity: 0.5; }
-        50% { transform: scale(1.05); opacity: 1; }
-        100% { transform: scale(1); opacity: 0.8; }
+      .automation-highlight {
+        outline: 3px solid #ff0000 !important;
+        outline-offset: 2px !important;
+        background-color: rgba(255, 0, 0, 0.1) !important;
+        animation: automation-pulse 1s infinite !important;
+        position: relative !important;
+        z-index: 999998 !important;
       }
       
-      @keyframes automation-cursor-move {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
+      @keyframes automation-pulse {
+        0% { outline-color: #ff0000; }
+        50% { outline-color: #ff6666; }
+        100% { outline-color: #ff0000; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+/**
+ * Remove highlight from elements
+ */
+export function removeHighlight() {
+  // Remove highlight class from all elements
+  const highlighted = document.querySelectorAll('.automation-highlight');
+  highlighted.forEach(el => el.classList.remove('automation-highlight'));
+}
+
+/**
+ * Show typing animation
+ */
+export async function showTypingAnimation(element, text) {
+  if (!element) return;
+  
+  // Focus element
+  element.focus();
+  
+  // Clear existing content
+  element.value = '';
+  
+  // Type character by character
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    element.value += char;
+    
+    // Trigger input event
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Random delay between characters
+    const delayMs = 50 + Math.random() * 100;
+    await delay(delayMs);
+  }
+  
+  // Trigger change event
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * Show click animation
+ */
+export async function showClickAnimation(element) {
+  if (!element) return;
+  
+  // Add click effect
+  element.classList.add('automation-click');
+  
+  // Add CSS for click effect
+  if (!document.getElementById('automation-click-style')) {
+    const style = document.createElement('style');
+    style.id = 'automation-click-style';
+    style.textContent = `
+      .automation-click {
+        transform: scale(0.95) !important;
+        transition: transform 0.1s ease !important;
       }
     `;
     document.head.appendChild(style);
   }
   
-  // Position highlight over element
-  const rect = element.getBoundingClientRect();
-  highlightOverlay.style.left = (rect.left + window.scrollX) + 'px';
-  highlightOverlay.style.top = (rect.top + window.scrollY) + 'px';
-  highlightOverlay.style.width = rect.width + 'px';
-  highlightOverlay.style.height = rect.height + 'px';
+  await delay(100);
   
-  document.body.appendChild(highlightOverlay);
-  
-  // Auto-remove after 2 seconds
-  setTimeout(() => {
-    removeHighlight();
-  }, 2000);
+  // Remove click effect
+  element.classList.remove('automation-click');
 }
 
-// Remove element highlight
-export function removeHighlight() {
-  if (highlightOverlay) {
-    highlightOverlay.remove();
-    highlightOverlay = null;
+/**
+ * Show scroll animation
+ */
+export async function showScrollAnimation(amount) {
+  // Smooth scroll
+  window.scrollBy({
+    top: amount,
+    behavior: 'smooth'
+  });
+  
+  // Wait for scroll to complete
+  await delay(500);
+}
+
+/**
+ * Show navigation animation
+ */
+export async function showNavigationAnimation(url) {
+  // Show loading state
+  const loading = document.createElement('div');
+  loading.id = 'automation-loading';
+  loading.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 999999;
+    font-family: monospace;
+    font-size: 14px;
+  `;
+  loading.textContent = `Navigating to ${url}...`;
+  document.body.appendChild(loading);
+  
+  // Wait a bit
+  await delay(1000);
+  
+  // Remove loading state
+  if (loading.parentNode) {
+    loading.parentNode.removeChild(loading);
   }
 }
 
-// Show typing animation
-export function showTypingAnimation(element, text) {
-  if (!element) return;
-  
-  // Create typing indicator
-  const typingIndicator = document.createElement('div');
-  typingIndicator.id = 'automation-typing';
-  typingIndicator.style.cssText = `
-    position: absolute;
-    background: #333;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    pointer-events: none;
-    z-index: 999997;
-    opacity: 0.8;
-  `;
-  
-  typingIndicator.textContent = `Typing: "${text}"`;
-  
-  const rect = element.getBoundingClientRect();
-  typingIndicator.style.left = (rect.left + window.scrollX) + 'px';
-  typingIndicator.style.top = (rect.top + window.scrollY - 30) + 'px';
-  
-  document.body.appendChild(typingIndicator);
-  
-  // Remove after animation
-  setTimeout(() => {
-    typingIndicator.remove();
-  }, 1000);
-}
-
-// Show automation status
-export function showAutomationStatus(message, type = 'info') {
-  const status = document.createElement('div');
-  status.id = 'automation-status';
-  status.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: ${type === 'error' ? '#ff4444' : type === 'success' ? '#00ff00' : '#333'};
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    z-index: 999999;
-    font-size: 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  `;
-  
-  status.textContent = message;
-  document.body.appendChild(status);
-  
-  // Auto-remove after 3 seconds
-  setTimeout(() => {
-    status.remove();
-  }, 3000);
-}
-
-// Clean up all visual elements
-export function cleanupVisuals() {
-  hideCursor();
-  removeHighlight();
-  
-  // Remove status messages
-  const status = document.getElementById('automation-status');
-  if (status) status.remove();
-  
-  const typing = document.getElementById('automation-typing');
-  if (typing) typing.remove();
+/**
+ * Utility function to delay execution
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

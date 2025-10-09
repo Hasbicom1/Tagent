@@ -121,7 +121,9 @@ export class WebSocketClient {
         const host = window.location.host;
         const endpoints = [
           // Use Socket.IO WebSocket endpoint
-          `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`
+          `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`,
+          // Fallback to raw WebSocket
+          `${protocol}//${host}/ws`
         ];
         
         let currentEndpoint = 0;

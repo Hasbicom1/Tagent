@@ -105,18 +105,40 @@ export function useRealtimeTaskStatus(agentId?: string, sessionId?: string) {
         return;
       }
 
-      // TEMPORARY: Disable WebSocket connection since server only has Socket.IO
-      // The VNC stream and chat functionality work via HTTP, so WebSocket is optional
-      console.log('⚠️ [WS] WebSocket temporarily disabled - using HTTP fallback mode');
-      console.log('ℹ️ [WS] VNC stream and chat work via HTTP endpoints');
+      // Connect to WebSocket server
+      console.log('🔌 [WS] Connecting to WebSocket server...');
       
-      setConnectionStatus(prev => ({
-        ...prev,
-        isConnected: false,
-        isAuthenticated: false,
-        connectionState: WSConnectionState.DISCONNECTED,
-        reconnectAttempts: 0
-      }));
+      try {
+        await wsClient.connect();
+        console.log('✅ [WS] WebSocket connected successfully');
+        
+        // Get JWT token for authentication
+        const token = await refreshToken();
+        if (token && token !== 'no-token-available') {
+          await wsClient.authenticate(token, agentId, refreshToken);
+          console.log('✅ [WS] WebSocket authenticated successfully');
+        } else {
+          console.warn('⚠️ [WS] No valid token available - WebSocket will be unauthenticated');
+        }
+        
+        setConnectionStatus(prev => ({
+          ...prev,
+          isConnected: true,
+          isAuthenticated: !!token && token !== 'no-token-available',
+          connectionState: WSConnectionState.AUTHENTICATED,
+          reconnectAttempts: 0
+        }));
+      } catch (error) {
+        console.error('❌ [WS] WebSocket connection failed:', error);
+        setConnectionStatus(prev => ({
+          ...prev,
+          isConnected: false,
+          isAuthenticated: false,
+          connectionState: WSConnectionState.ERROR,
+          reconnectAttempts: prev.reconnectAttempts + 1
+        }));
+        throw error;
+      }
 
     } catch (error: any) {
       console.error('Failed to connect to WebSocket:', error);
