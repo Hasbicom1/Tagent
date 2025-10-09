@@ -38,9 +38,10 @@ export interface UnifiedResponse {
 
 export class UnifiedAIAgent extends EventEmitter {
   private config: UnifiedAgentConfig;
-  private localAIEngine: LocalAIEngine;
-  private browserEngine: LocalBrowserAutomationEngine;
-  private visionEngine: LocalComputerVisionEngine;
+  private localAIEngine!: LocalAIEngine;
+  private browserEngine!: LocalBrowserAutomationEngine;
+  private visionEngine!: LocalComputerVisionEngine;
+  private specializedAgents: Map<string, any> = new Map();
   private isInitialized: boolean = false;
   private activeTasks: Map<string, any> = new Map();
   private conversationHistory: Map<string, any[]> = new Map();
@@ -433,15 +434,15 @@ export class UnifiedAIAgent extends EventEmitter {
 
     if (successfulResults.length > 0) {
       const bestResult = successfulResults.reduce((best, current) => 
-        (current.confidence || 0) > (best.confidence || 0) ? current : best
+        (current?.confidence || 0) > (best?.confidence || 0) ? current : best
       );
 
       return {
         success: true,
         results: results,
-        primaryAgent: bestResult.agent,
-        confidence: bestResult.confidence,
-        reasoning: `Successfully executed using ${bestResult.agent} agent (best of ${successfulResults.length} successful agents)`
+        primaryAgent: bestResult?.agent || 'unknown',
+        confidence: bestResult?.confidence || 0,
+        reasoning: `Successfully executed using ${bestResult?.agent || 'unknown'} agent (best of ${successfulResults.length} successful agents)`
       };
     }
 

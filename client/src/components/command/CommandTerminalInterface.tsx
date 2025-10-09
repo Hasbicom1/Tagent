@@ -15,7 +15,9 @@ import {
   Cpu,
   Zap,
   Minus,
-  Maximize2
+  Maximize2,
+  Bot,
+  Settings
 } from 'lucide-react';
 
 interface CommandTerminalInterfaceProps {

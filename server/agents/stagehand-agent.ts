@@ -313,7 +313,7 @@ export class StagehandAgent {
           const func = new Function('page', code);
           
           // Execute the function
-          await func(page);
+          await func(this.page);
           
           return {
             success: true,
@@ -326,7 +326,7 @@ export class StagehandAgent {
         } catch (error) {
           return {
             success: false,
-            error: error.message,
+            error: (error as Error).message,
             actions: [],
             performance: {
               memoryUsage: process.memoryUsage(),

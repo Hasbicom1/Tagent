@@ -96,8 +96,8 @@ export class WebSocketClient {
     if (!this.config.url) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      // Use Socket.IO WebSocket endpoint
-      this.config.url = `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`;
+      // Use raw WebSocket endpoint (not Socket.IO)
+      this.config.url = `${protocol}//${host}/ws`;
       console.log('🔌 WS: Using WebSocket URL:', this.config.url);
     }
   }

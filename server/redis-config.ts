@@ -180,17 +180,17 @@ export function createRedisClient(config: RedisConfig): Redis {
     lazyConnect: finalConfig.lazyConnect
   });
   
-  const redis = new Redis(url, finalConfig);
+  const redis = new Redis(url, finalConfig as any);
   
   // Enhanced error handling
   redis.on('error', (error) => {
     console.warn('⚠️  REDIS error (handled):', error.message.substring(0, 100));
     console.warn('⚠️  REDIS error details:', {
-      code: error.code,
-      errno: error.errno,
-      syscall: error.syscall,
-      address: error.address,
-      port: error.port,
+      code: (error as any).code,
+      errno: (error as any).errno,
+      syscall: (error as any).syscall,
+      address: (error as any).address,
+      port: (error as any).port,
       source: source,
       isRailway: isRailway,
       isInternal: isInternal
@@ -244,7 +244,7 @@ export async function testRedisConnection(redis: Redis, config: RedisConfig): Pr
       console.log('✅ REDIS: Connection test successful');
       return true;
     } catch (error) {
-      console.warn(`⚠️  REDIS: Connection attempt ${attempt} failed:`, error.message);
+      console.warn(`⚠️  REDIS: Connection attempt ${attempt} failed:`, (error as Error).message);
       
       if (attempt < maxAttempts) {
         const retryDelay = isRailway ? 2000 : 1000;
@@ -280,7 +280,7 @@ export async function initializeRedisWithFallback(): Promise<Redis | null> {
     return redis;
     
   } catch (error) {
-    console.error('❌ REDIS: Redis initialization failed:', error.message);
+    console.error('❌ REDIS: Redis initialization failed:', (error as Error).message);
     
     // Check if we're in development mode
     const isReplitDev = process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT_ID;

@@ -504,6 +504,16 @@ Return as JSON: { "summary": "result text", "success": true, "data": {...} }`;
       };
     }
   }
+
+  // MCP Server required methods
+  async createSession(sessionId: string): Promise<any> {
+    console.log(`🔧 BrowserAgent: Creating session ${sessionId}`);
+    return { sessionId, status: 'active' };
+  }
+
+  async closeSession(sessionId: string): Promise<void> {
+    console.log(`🔧 BrowserAgent: Closing session ${sessionId}`);
+  }
 }
 
 // Singleton instance for the application

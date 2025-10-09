@@ -198,7 +198,7 @@ export class BrowserMCPServer {
     });
 
     // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       const { name, arguments: args } = request.params;
 
       try {
@@ -268,7 +268,7 @@ export class BrowserMCPServer {
     });
 
     // Read resources
-    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request: any) => {
       const { uri } = request.params;
 
       switch (uri) {
@@ -487,7 +487,7 @@ export class BrowserMCPServer {
     }
     
     try {
-      const data = await session.page.evaluate((selectors) => {
+      const data = await session.page.evaluate((selectors: any) => {
         const result: any = {};
         
         if (selectors.length === 0) {
@@ -497,7 +497,7 @@ export class BrowserMCPServer {
           result.headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6')).map(h => h.textContent?.trim());
           result.links = Array.from(document.querySelectorAll('a[href]')).map(link => ({
             text: link.textContent?.trim(),
-            href: link.href
+            href: (link as HTMLAnchorElement).href
           }));
         } else {
           // Extract specific selectors
@@ -542,13 +542,13 @@ export class BrowserMCPServer {
         context: url ? { url } : undefined
       };
       
-      const result = await this.browserAgent.executeTask(sessionId, task);
+      const result = await this.browserAgent.executeTask(task);
       
       return {
         content: [
           {
             type: 'text',
-            text: `Task executed: ${result.success ? 'Success' : 'Failed'}\nActions: ${result.actions.length}\nExecution time: ${result.executionTime}ms`,
+            text: `Task executed: ${result.success ? 'Success' : 'Failed'}\nActions: ${result.result?.actions?.length || 0}\nExecution time: ${result.executionTime}ms`,
           },
         ],
       };

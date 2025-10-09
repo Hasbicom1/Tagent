@@ -43,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
     
     logger.info('📋 Agents requested', {
       count: agents.length,
-      agents: agents.map(a => a.name)
+      agents: agents.map((a: any) => a.name)
     });
 
     res.json({
@@ -175,7 +175,7 @@ router.get('/health', async (req: Request, res: Response) => {
       success: true,
       healthy: isHealthy,
       agents: agents.length,
-      availableAgents: agents.map(a => a.name),
+      availableAgents: agents.map((a: any) => a.name),
       timestamp: new Date().toISOString()
     });
   } catch (error) {

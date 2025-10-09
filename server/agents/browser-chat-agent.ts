@@ -770,6 +770,15 @@ export class BrowserChatAgent extends EventEmitter {
       logger.error('❌ Browser Chat: Error closing browser:', error);
     }
   }
+
+  async createSession(sessionId: string): Promise<any> {
+    logger.info(`🔧 Browser Chat: Creating session ${sessionId}`);
+    return { sessionId, status: 'active' };
+  }
+
+  async closeSession(sessionId: string): Promise<void> {
+    logger.info(`🔧 Browser Chat: Closing session ${sessionId}`);
+  }
 }
 
 export default BrowserChatAgent;

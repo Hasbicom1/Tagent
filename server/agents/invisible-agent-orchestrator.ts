@@ -85,8 +85,8 @@ export class InvisibleAgentOrchestrator extends EventEmitter {
 
   private async initializeAgents(): Promise<void> {
     const agentConfigs = [
-      { name: 'ui-tars', agent: new UITarsAgent() },
-      { name: 'local-manager', agent: new LocalAgentManager() },
+      { name: 'ui-tars', agent: new UITarsAgent({ apiEndpoint: '', model: '', maxRetries: 3, timeout: 30000 }) },
+      { name: 'local-manager', agent: new LocalAgentManager({ maxConcurrentAgents: 5, agentTimeout: 60000, retryAttempts: 3 }) },
       { name: 'browser-use', agent: new BrowserUseAgent() },
       { name: 'skyvern', agent: new SkyvernAgent() },
       { name: 'lavague', agent: new LaVagueAgent() },

@@ -187,6 +187,9 @@ export class CheerioExtractorAgent {
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
       }
     }
+    
+    // This should never be reached, but TypeScript requires it
+    throw new Error('Failed to fetch HTML after all retries');
   }
 
   private async extractData($: cheerio.CheerioAPI, task: CheerioExtractorTask): Promise<any[]> {
@@ -238,7 +241,7 @@ export class CheerioExtractorAgent {
 
       // If no specific instruction, extract common elements
       if (extractedData.length === 0) {
-        const commonData = this.extractCommonElements($);
+        const commonData = this.extractCommonanys($);
         extractedData.push(...commonData);
       }
 
@@ -253,13 +256,13 @@ export class CheerioExtractorAgent {
   private extractTitles($: cheerio.CheerioAPI): any[] {
     const titles: any[] = [];
     
-    $('h1, h2, h3, h4, h5, h6').each((index, element) => {
+    $('h1, h2, h3, h4, h5, h6').each((index: number, element: any) => {
       const $el = $(element);
       titles.push({
         type: 'title',
         level: element.tagName,
         text: $el.text().trim(),
-        selector: this.getElementSelector($el),
+        selector: this.getanySelector($el),
         index: index
       });
     });
@@ -270,14 +273,14 @@ export class CheerioExtractorAgent {
   private extractLinks($: cheerio.CheerioAPI): any[] {
     const links: any[] = [];
     
-    $('a[href]').each((index, element) => {
+    $('a[href]').each((index: number, element: any) => {
       const $el = $(element);
       links.push({
         type: 'link',
         text: $el.text().trim(),
         href: $el.attr('href'),
         title: $el.attr('title'),
-        selector: this.getElementSelector($el),
+        selector: this.getanySelector($el),
         index: index
       });
     });
@@ -288,7 +291,7 @@ export class CheerioExtractorAgent {
   private extractImages($: cheerio.CheerioAPI): any[] {
     const images: any[] = [];
     
-    $('img').each((index, element) => {
+    $('img').each((index: number, element: any) => {
       const $el = $(element);
       images.push({
         type: 'image',
@@ -297,7 +300,7 @@ export class CheerioExtractorAgent {
         title: $el.attr('title'),
         width: $el.attr('width'),
         height: $el.attr('height'),
-        selector: this.getElementSelector($el),
+        selector: this.getanySelector($el),
         index: index
       });
     });
@@ -308,7 +311,7 @@ export class CheerioExtractorAgent {
   private extractTexts($: cheerio.CheerioAPI): any[] {
     const texts: any[] = [];
     
-    $('p, div, span').each((index, element) => {
+    $('p, div, span').each((index: number, element: any) => {
       const $el = $(element);
       const text = $el.text().trim();
       
@@ -317,7 +320,7 @@ export class CheerioExtractorAgent {
           type: 'text',
           text: text,
           tag: element.tagName,
-          selector: this.getElementSelector($el),
+          selector: this.getanySelector($el),
           index: index
         });
       }
@@ -329,14 +332,14 @@ export class CheerioExtractorAgent {
   private extractForms($: cheerio.CheerioAPI): any[] {
     const forms: any[] = [];
     
-    $('form').each((index, formElement) => {
-      const $form = $(formElement);
+    $('form').each((index: number, formany: any) => {
+      const $form = $(formany);
       const inputs: any[] = [];
       
-      $form.find('input, textarea, select').each((inputIndex, inputElement) => {
-        const $input = $(inputElement);
+      $form.find('input, textarea, select').each((inputIndex: number, inputany: any) => {
+        const $input = $(inputany);
         inputs.push({
-          type: $input.attr('type') || inputElement.tagName,
+          type: $input.attr('type') || inputany.tagName,
           name: $input.attr('name'),
           id: $input.attr('id'),
           placeholder: $input.attr('placeholder'),
@@ -349,7 +352,7 @@ export class CheerioExtractorAgent {
         action: $form.attr('action'),
         method: $form.attr('method'),
         inputs: inputs,
-        selector: this.getElementSelector($form),
+        selector: this.getanySelector($form),
         index: index
       });
     });
@@ -360,16 +363,16 @@ export class CheerioExtractorAgent {
   private extractTables($: cheerio.CheerioAPI): any[] {
     const tables: any[] = [];
     
-    $('table').each((index, tableElement) => {
-      const $table = $(tableElement);
+    $('table').each((index: number, tableany: any) => {
+      const $table = $(tableany);
       const rows: any[] = [];
       
-      $table.find('tr').each((rowIndex, rowElement) => {
-        const $row = $(rowElement);
+      $table.find('tr').each((rowIndex: number, rowany: any) => {
+        const $row = $(rowany);
         const cells: string[] = [];
         
-        $row.find('td, th').each((cellIndex, cellElement) => {
-          cells.push($(cellElement).text().trim());
+        $row.find('td, th').each((cellIndex: number, cellany: any) => {
+          cells.push($(cellany).text().trim());
         });
         
         rows.push({
@@ -381,7 +384,7 @@ export class CheerioExtractorAgent {
       tables.push({
         type: 'table',
         rows: rows,
-        selector: this.getElementSelector($table),
+        selector: this.getanySelector($table),
         index: index
       });
     });
@@ -392,14 +395,14 @@ export class CheerioExtractorAgent {
   private extractMeta($: cheerio.CheerioAPI): any[] {
     const meta: any[] = [];
     
-    $('meta').each((index, element) => {
+    $('meta').each((index: number, element: any) => {
       const $el = $(element);
       meta.push({
         type: 'meta',
         name: $el.attr('name'),
         property: $el.attr('property'),
         content: $el.attr('content'),
-        selector: this.getElementSelector($el),
+        selector: this.getanySelector($el),
         index: index
       });
     });
@@ -413,7 +416,7 @@ export class CheerioExtractorAgent {
     for (const [key, selector] of Object.entries(selectors)) {
       try {
         const elements = $(selector);
-        elements.each((index, element) => {
+        elements.each((index: number, element: any) => {
           const $el = $(element);
           customData.push({
             type: 'custom',
@@ -421,7 +424,7 @@ export class CheerioExtractorAgent {
             selector: selector,
             text: $el.text().trim(),
             html: $el.html(),
-            attributes: this.getElementAttributes($el),
+            attributes: this.getanyAttributes($el),
             index: index
           });
         });
@@ -433,18 +436,18 @@ export class CheerioExtractorAgent {
     return customData;
   }
 
-  private extractCommonElements($: cheerio.CheerioAPI): any[] {
+  private extractCommonanys($: cheerio.CheerioAPI): any[] {
     const common: any[] = [];
     
     // Extract common elements
-    $('h1, h2, h3, p, a, img, button').each((index, element) => {
+    $('h1, h2, h3, p, a, img, button').each((index: number, element: any) => {
       const $el = $(element);
       common.push({
         type: 'element',
         tag: element.tagName,
         text: $el.text().trim(),
-        attributes: this.getElementAttributes($el),
-        selector: this.getElementSelector($el),
+        attributes: this.getanyAttributes($el),
+        selector: this.getanySelector($el),
         index: index
       });
     });
@@ -452,7 +455,7 @@ export class CheerioExtractorAgent {
     return common;
   }
 
-  private getElementSelector($el: cheerio.Cheerio<cheerio.Element>): string {
+  private getanySelector($el: cheerio.Cheerio<any>): string {
     // Generate a simple selector for the element
     const tag = $el.prop('tagName')?.toLowerCase();
     const id = $el.attr('id');
@@ -467,7 +470,7 @@ export class CheerioExtractorAgent {
     }
   }
 
-  private getElementAttributes($el: cheerio.Cheerio<cheerio.Element>): Record<string, string> {
+  private getanyAttributes($el: cheerio.Cheerio<any>): Record<string, string> {
     const attributes: Record<string, string> = {};
     
     if ($el.length > 0) {

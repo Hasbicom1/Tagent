@@ -45,8 +45,17 @@ export class RealSessionManager extends EventEmitter {
   constructor() {
     super();
     this.browserEngine = new RealBrowserAutomationEngine();
-    this.aiOrchestrator = new RealAIAgentOrchestrator();
-    this.vncEngine = new RealVNCStreamingEngine();
+    this.aiOrchestrator = new RealAIAgentOrchestrator({
+      maxConcurrentAgents: 3,
+      agentTimeout: 30000,
+      retryAttempts: 3
+    });
+    this.vncEngine = new RealVNCStreamingEngine({
+      host: 'localhost',
+      port: 5900,
+      quality: 8,
+      framerate: 30
+    });
     this.metrics = {
       totalSessions: 0,
       activeSessions: 0,
@@ -70,6 +79,9 @@ export class RealSessionManager extends EventEmitter {
 
       // Start cleanup interval
       this.startCleanupInterval();
+      
+      // Start session expiration monitoring with 24-hour TTL enforcement
+      this.startSessionExpirationMonitoring();
 
       logger.info('✅ REAL SESSION: Production session management ready');
     } catch (error) {
@@ -163,17 +175,15 @@ export class RealSessionManager extends EventEmitter {
       session.lastActivity = new Date();
 
       // Execute with real AI agent
-      const result = await this.aiOrchestrator.executeTaskWithRealAgent(
-        {
-          id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          instruction,
-          agentType: agentType || session.aiAgent || 'phoenix-7742',
-          sessionId,
-          priority: 1,
-          createdAt: new Date()
-        },
-        session.browserSession
-      );
+      const result = await this.aiOrchestrator.executeTaskWithRealAgent({
+        id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        instruction,
+        agentType: agentType || session.aiAgent || 'phoenix-7742',
+        sessionId,
+        priority: 1,
+        createdAt: new Date(),
+        browserSession: session.browserSession
+      });
 
       // Update session metrics
       this.updateMetrics();
@@ -391,6 +401,39 @@ export class RealSessionManager extends EventEmitter {
         count: expiredSessions.length 
       });
     }
+  }
+
+  /**
+   * Start session expiration monitoring with 24-hour TTL enforcement
+   */
+  private startSessionExpirationMonitoring(): void {
+    // Check for expired sessions every 5 minutes
+    setInterval(async () => {
+      try {
+        const now = new Date();
+        const expiredSessions: RealUserSession[] = [];
+        
+        for (const [sessionId, session] of this.sessions) {
+          if (session.status === 'active' && session.expiresAt <= now) {
+            expiredSessions.push(session);
+          }
+        }
+        
+        if (expiredSessions.length > 0) {
+          logger.info(`⏰ REAL SESSION: Found ${expiredSessions.length} expired sessions`);
+          
+          for (const session of expiredSessions) {
+            await this.revokeSession(session.id);
+          }
+          
+          this.updateMetrics();
+        }
+      } catch (error) {
+        logger.error('❌ REAL SESSION: Session expiration monitoring failed', { error });
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+    
+    logger.info('⏰ REAL SESSION: Session expiration monitoring started (24-hour TTL)');
   }
 
   /**

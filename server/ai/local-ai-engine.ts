@@ -29,6 +29,7 @@ export interface TaskAnalysis {
   complexity: 'simple' | 'moderate' | 'complex';
   estimatedTime: string;
   confidence: number;
+  reason?: string | null;
 }
 
 export class LocalAIEngine extends EventEmitter {
@@ -45,6 +46,11 @@ export class LocalAIEngine extends EventEmitter {
     this.ruleEngine = new RuleEngine();
     this.heuristicProcessor = new HeuristicProcessor();
     this.initializeKnowledgeBase();
+  }
+
+  async initialize(): Promise<void> {
+    // Initialize the AI engine
+    console.log('🔧 Local AI Engine: Initializing...');
   }
 
   /**
@@ -313,7 +319,7 @@ class PatternMatcher {
  */
 class RuleEngine {
   analyzeTask(message: string, taskType: string): any {
-    const analysis = {
+    const analysis: any = {
       isExecutable: false,
       taskDescription: null,
       complexity: 'simple',
@@ -345,7 +351,7 @@ class RuleEngine {
     return analysis;
   }
   
-  private extractTaskDescription(message: string): string {
+  private extractTaskDescription(message: string): string | null {
     // Extract the main action from the message
     const actionPatterns = [
       /(?:go to|navigate to|visit)\s+([^\s]+)/i,

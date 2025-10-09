@@ -323,15 +323,15 @@ export class LocalBrowserAutomationEngine extends EventEmitter {
     
     const strategies = [
       // By text content
-      () => this.page!.locator(`text=${task.target}`).first(),
+      () => this.page!.locator(`text=${instruction}`).first(),
       // By CSS selector
-      () => this.page!.locator(task.target!).first(),
+      () => this.page!.locator(instruction).first(),
       // By data attributes
-      () => this.page!.locator(`[data-testid="${task.target}"]`).first(),
+      () => this.page!.locator(`[data-testid="${instruction}"]`).first(),
       // By aria-label
-      () => this.page!.locator(`[aria-label*="${task.target}"]`).first(),
+      () => this.page!.locator(`[aria-label*="${instruction}"]`).first(),
       // By placeholder
-      () => this.page!.locator(`[placeholder*="${task.target}"]`).first()
+      () => this.page!.locator(`[placeholder*="${instruction}"]`).first()
     ];
     
     for (const strategy of strategies) {

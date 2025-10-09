@@ -161,7 +161,7 @@ export class PlaywrightVisionAgent {
     try {
       // Get all interactive elements
       const elements = await this.page.evaluate(() => {
-        const interactiveElements = [];
+        const interactiveElements: any[] = [];
         
         // Buttons
         const buttons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');

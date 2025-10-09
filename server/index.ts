@@ -914,7 +914,7 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
       try {
         if (redisInstance) {
           // Add timeout to prevent hanging
-          const pingPromise = redisInstance.ping();
+          const pingPromise = (redisInstance as any).ping();
           const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Redis ping timeout')), 5000)
           );

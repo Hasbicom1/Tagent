@@ -521,7 +521,7 @@ export class LocalComputerVisionEngine extends EventEmitter {
         }
       }
       
-      const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+      const tagName = await element.evaluate(el => (el as Element).tagName.toLowerCase());
       return tagName;
     } catch (error) {
       console.error('❌ LOCAL VISION: Selector generation failed:', error);

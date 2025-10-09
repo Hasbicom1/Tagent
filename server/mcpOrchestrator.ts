@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { browserAgent } from "./browserAutomation";
 import { LocalUnifiedAIAgent } from "./agents/local-unified-ai-agent";
+import { logger } from './logger';
 
 // MCP (Message Control Protocol) Orchestrator
 // Routes commands to appropriate AI agents transparently
@@ -205,9 +206,7 @@ Respond with JSON: { "selectedAgent": "agent-id", "reasoning": "brief explanatio
       this.unifiedAgent = new LocalUnifiedAIAgent({
         maxConcurrentTasks: 3,
         taskTimeout: 60000,
-        retries: 3,
-        enableScreenshots: true,
-        enableVideo: false
+        retryAttempts: 3
       });
 
       await this.unifiedAgent.initialize();
