@@ -233,6 +233,55 @@ export function showAutomationStatus(message, type = 'info') {
 }
 
 /**
+ * Show highlight on element
+ */
+export function showHighlight(selector) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.style.outline = '3px solid #00ff00';
+    element.style.outlineOffset = '2px';
+    element.style.transition = 'outline 0.3s ease';
+  }
+}
+
+
+/**
+ * Show typing animation
+ */
+export function showTyping(selector, text) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.style.border = '2px solid #00ff00';
+    element.style.boxShadow = '0 0 10px rgba(0, 255, 0, 0.5)';
+    element.style.transition = 'all 0.3s ease';
+  }
+}
+
+/**
+ * Hide typing animation
+ */
+export function hideTyping() {
+  const elements = document.querySelectorAll('[style*="border: 2px solid #00ff00"]');
+  elements.forEach(el => {
+    el.style.border = '';
+    el.style.boxShadow = '';
+  });
+}
+
+/**
+ * Move cursor to element
+ */
+export async function moveCursor(selector) {
+  const element = document.querySelector(selector);
+  if (element) {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    await moveCursorTo(x, y);
+  }
+}
+
+/**
  * Cleanup all visual elements
  */
 export function cleanupVisuals() {
