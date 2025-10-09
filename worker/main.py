@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 REDIS_URL = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
 PORT = int(os.getenv('PORT', '8080'))
 
-# Initialize FastAPI
-app = FastAPI(title="Browser Agent Worker", version="1.0.0")
+# Initialize FastAPI with lifespan
+app = FastAPI(title="Browser Agent Worker", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -69,18 +69,18 @@ async def process_inbrowser_command(command: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Initialize in-browser automation service"""
     logger.info("🚀 In-Browser Automation Worker starting...")
     logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
     logger.info(f"📊 Port: {PORT}")
     logger.info("✅ In-browser automation ready - NO VNC/PLAYWRIGHT")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
+    yield
+    # Shutdown
+    logger.info("🔄 Shutting down worker...")
     logger.info("✅ In-browser automation worker shutdown")
 
 

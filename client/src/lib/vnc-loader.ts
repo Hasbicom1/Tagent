@@ -4,9 +4,7 @@
  * This ensures reliable production-ready browser automation streaming
  */
 
-// @ts-ignore - noVNC doesn't have TypeScript declarations
-import RFB from '@novnc/novnc/core/rfb.js';
-
+// Dynamic import to avoid build issues
 let RFBClass: any = null;
 let loadingPromise: Promise<any> | null = null;
 
@@ -47,7 +45,8 @@ export async function loadVNCLibrary(strict: boolean = false): Promise<any> {
     try {
       console.log('🔄 Loading real noVNC RFB from npm package...');
       
-      // Use the imported RFB class directly
+      // Dynamic import to avoid build issues
+      const { default: RFB } = await import('@novnc/novnc/core/rfb.js');
       RFBClass = RFB;
       console.log('✅ Real noVNC RFB loaded successfully from npm package');
       return RFBClass;

@@ -127,6 +127,10 @@
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   },
+  "engines": {
+    "node": ">=20.18.1",
+    "npm": ">=10.0.0"
+  },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.3.0",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
