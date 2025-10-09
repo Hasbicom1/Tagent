@@ -198,6 +198,64 @@ export async function showNavigationAnimation(url) {
 }
 
 /**
+ * Show automation status message
+ */
+export function showAutomationStatus(message, type = 'info') {
+  // Remove existing status
+  cleanupVisuals();
+  
+  const status = document.createElement('div');
+  status.id = 'automation-status';
+  status.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: ${type === 'error' ? '#ff4444' : type === 'success' ? '#44ff44' : '#4444ff'};
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 999999;
+    font-family: monospace;
+    font-size: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    max-width: 300px;
+    word-wrap: break-word;
+  `;
+  status.textContent = message;
+  document.body.appendChild(status);
+  
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    if (status.parentNode) {
+      status.parentNode.removeChild(status);
+    }
+  }, 3000);
+}
+
+/**
+ * Cleanup all visual elements
+ */
+export function cleanupVisuals() {
+  // Remove status
+  const status = document.getElementById('automation-status');
+  if (status && status.parentNode) {
+    status.parentNode.removeChild(status);
+  }
+  
+  // Remove cursor
+  hideCursor();
+  
+  // Remove highlights
+  removeHighlight();
+  
+  // Remove loading
+  const loading = document.getElementById('automation-loading');
+  if (loading && loading.parentNode) {
+    loading.parentNode.removeChild(loading);
+  }
+}
+
+/**
  * Utility function to delay execution
  */
 function delay(ms) {
