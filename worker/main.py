@@ -84,6 +84,15 @@ async def init_browser():
                 '--disable-plugins',
                 '--disable-default-apps',
                 '--disable-component-extensions-with-background-pages',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-features=TranslateUI',
+                '--disable-ipc-flooding-protection',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-sync',
+                '--disable-background-networking',
                 f'--display={DISPLAY}',
             ]
         )
@@ -91,6 +100,33 @@ async def init_browser():
             viewport={'width': 1920, 'height': 1080}
         )
         page = await context.new_page()
+        
+        # Block MetaMask and other extension detection
+        await page.add_init_script("""
+            // Block MetaMask detection
+            if (typeof window.ethereum !== 'undefined') {
+                delete window.ethereum;
+            }
+            if (typeof window.web3 !== 'undefined') {
+                delete window.web3;
+            }
+            
+            // Override common extension detection
+            Object.defineProperty(window, 'ethereum', {
+                get: () => undefined,
+                configurable: false
+            });
+            
+            // Block extension-related errors
+            window.addEventListener('error', function(e) {
+                if (e.message && e.message.includes('MetaMask')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            });
+        """)
+        
         await page.goto('about:blank')
         logger.info("✅ Browser initialized successfully")
     except Exception as e:
