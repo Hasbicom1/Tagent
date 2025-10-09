@@ -221,4 +221,4 @@ interface ActionResult {
   error?: string;
 }
 
-export default EkoFileAgent;
+export default OneDollarAgentFileAgent;

@@ -45,7 +45,7 @@ export class OneDollarAgentOrchestrator {
   /**
    * Execute natural language command
    */
-  public async executeCommand(command: string): Promise<EkoResult> {
+  public async executeCommand(command: string): Promise<OneDollarAgentResult> {
     console.log('🎯 EKO ORCHESTRATOR: Executing command:', command);
     
     try {
@@ -263,6 +263,6 @@ export class OneDollarAgentOrchestrator {
 }
 
 // Global instance
-export const ekoOrchestrator = new EkoOrchestrator();
+export const oneDollarAgentOrchestrator = new OneDollarAgentOrchestrator();
 
-export default EkoOrchestrator;
+export default OneDollarAgentOrchestrator;

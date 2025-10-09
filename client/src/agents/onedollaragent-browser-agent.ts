@@ -406,4 +406,4 @@ interface ActionResult {
   error?: string;
 }
 
-export default EkoBrowserAgent;
+export default OneDollarAgentBrowserAgent;

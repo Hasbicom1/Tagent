@@ -144,7 +144,7 @@ export class OneDollarAgentFramework {
   /**
    * Execute workflow with real AI agents
    */
-  public async execute(taskId: string): Promise<EkoResult> {
+  public async execute(taskId: string): Promise<OneDollarAgentResult> {
     const context = this.getTask(taskId);
     if (!context) {
       throw new Error("The task does not exist");
@@ -173,7 +173,7 @@ export class OneDollarAgentFramework {
     taskPrompt: string,
     taskId: string = this.uuidv4(),
     contextParams?: Record<string, any>
-  ): Promise<EkoResult> {
+  ): Promise<OneDollarAgentResult> {
     await this.generate(taskPrompt, taskId, contextParams);
     return await this.execute(taskId);
   }
@@ -229,7 +229,7 @@ export class OneDollarAgentFramework {
   /**
    * Execute workflow with real agents
    */
-  private async doRunWorkflow(context: Context): Promise<EkoResult> {
+  private async doRunWorkflow(context: Context): Promise<OneDollarAgentResult> {
     const agents = context.agents as Agent[];
     const workflow = context.workflow as Workflow;
     
@@ -393,7 +393,7 @@ class AgentChain implements AgentChain {
 // Context Implementation
 class Context implements Context {
   public taskId: string;
-  public config: EkoConfig;
+  public config: OneDollarAgentConfig;
   public agents: Agent[];
   public chain: Chain;
   public workflow: Workflow;
@@ -402,7 +402,7 @@ class Context implements Context {
   public pause: boolean = false;
   public controller: AbortController = new AbortController();
 
-  constructor(taskId: string, config: EkoConfig, agents: Agent[], chain: Chain) {
+  constructor(taskId: string, config: OneDollarAgentConfig, agents: Agent[], chain: Chain) {
     this.taskId = taskId;
     this.config = config;
     this.agents = agents;
@@ -433,4 +433,4 @@ class Context implements Context {
   }
 }
 
-export default EkoFramework;
+export default OneDollarAgentFramework;

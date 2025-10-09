@@ -16,7 +16,7 @@ import {
 } from '../utils/domActions';
 import { showCursor, hideCursor, highlightElement, removeHighlight } from '../utils/visualFeedback';
 
-export class EkoBrowserUseAgent implements Agent {
+export class OneDollarAgentBrowserUseAgent implements Agent {
   public Name = "BrowserUseAgent";
   public Description = "AI-powered browser automation using Browser-Use framework";
   public AgentContext?: any;
@@ -584,4 +584,4 @@ interface ActionResult {
   confidence?: number;
 }
 
-export default EkoBrowserUseAgent;
+export default OneDollarAgentBrowserUseAgent;

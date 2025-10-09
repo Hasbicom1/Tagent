@@ -16,7 +16,7 @@ import {
 } from '../utils/domActions';
 import { showCursor, hideCursor, highlightElement, removeHighlight } from '../utils/visualFeedback';
 
-export class EkoSkyvernAgent implements Agent {
+export class OneDollarAgentSkyvernAgent implements Agent {
   public Name = "SkyvernAgent";
   public Description = "AI-powered web automation using Skyvern framework";
   public AgentContext?: any;
@@ -601,4 +601,4 @@ interface ActionResult {
   skyvernId?: string;
 }
 
-export default EkoSkyvernAgent;
+export default OneDollarAgentSkyvernAgent;
