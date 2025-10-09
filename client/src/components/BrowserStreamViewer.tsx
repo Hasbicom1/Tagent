@@ -55,6 +55,7 @@ export function BrowserStreamViewer({
   const initializeAutomationAgent = async () => {
     try {
       // Dynamically import and initialize the automation agent
+      // @ts-ignore - automation-agent.js doesn't have TypeScript declarations
       const { default: AutomationAgent } = await import('@/core/automation-agent.js');
       
       if (!automationAgentRef.current) {
@@ -163,10 +164,10 @@ export function BrowserStreamViewer({
             </div>
 
             {/* Task logs if available */}
-            {allTaskLogs.length > 0 && (
+            {allTaskLogs.size > 0 && (
               <div className="mt-4 p-4 bg-gray-800 rounded-lg max-h-32 overflow-y-auto">
                 <div className="text-xs text-gray-400 mb-2">Recent Activity:</div>
-                {allTaskLogs.slice(-3).map((log, index) => (
+                {Array.from(allTaskLogs.values()).flat().slice(-3).map((log: any, index: number) => (
                   <div key={index} className="text-xs text-gray-300">
                     {log.message}
                   </div>
