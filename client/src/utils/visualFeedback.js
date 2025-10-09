@@ -1,6 +1,6 @@
 // Visual feedback for automation actions
 let cursorElement = null;
-let highlightElement = null;
+let highlightOverlay = null;
 
 // Create and show automation cursor
 export function showCursor() {
@@ -41,9 +41,9 @@ export function highlightElement(element) {
   removeHighlight();
   
   // Create highlight overlay
-  highlightElement = document.createElement('div');
-  highlightElement.id = 'automation-highlight';
-  highlightElement.style.cssText = `
+  highlightOverlay = document.createElement('div');
+  highlightOverlay.id = 'automation-highlight';
+  highlightOverlay.style.cssText = `
     position: absolute;
     border: 3px solid #00ff00;
     background: rgba(0, 255, 0, 0.1);
@@ -76,12 +76,12 @@ export function highlightElement(element) {
   
   // Position highlight over element
   const rect = element.getBoundingClientRect();
-  highlightElement.style.left = (rect.left + window.scrollX) + 'px';
-  highlightElement.style.top = (rect.top + window.scrollY) + 'px';
-  highlightElement.style.width = rect.width + 'px';
-  highlightElement.style.height = rect.height + 'px';
+  highlightOverlay.style.left = (rect.left + window.scrollX) + 'px';
+  highlightOverlay.style.top = (rect.top + window.scrollY) + 'px';
+  highlightOverlay.style.width = rect.width + 'px';
+  highlightOverlay.style.height = rect.height + 'px';
   
-  document.body.appendChild(highlightElement);
+  document.body.appendChild(highlightOverlay);
   
   // Auto-remove after 2 seconds
   setTimeout(() => {
@@ -91,9 +91,9 @@ export function highlightElement(element) {
 
 // Remove element highlight
 export function removeHighlight() {
-  if (highlightElement) {
-    highlightElement.remove();
-    highlightElement = null;
+  if (highlightOverlay) {
+    highlightOverlay.remove();
+    highlightOverlay = null;
   }
 }
 
