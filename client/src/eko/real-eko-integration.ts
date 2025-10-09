@@ -25,9 +25,12 @@ export function initializeRealEko(): Eko {
   const config: EkoConfig = {
     llms: {
       default: {
-        provider: "groq",
+        provider: "openai-compatible",
         model: "llama-3.1-70b-versatile",
-        apiKey: process.env.GROQ_API_KEY || "gsk_placeholder"
+        apiKey: process.env.GROQ_API_KEY || "gsk_placeholder",
+        config: {
+          baseURL: "https://api.groq.com/openai/v1"
+        }
       }
     },
     agents: [
