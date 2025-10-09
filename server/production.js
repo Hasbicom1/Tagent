@@ -1490,29 +1490,49 @@ app.post('/api/session/:agentId/execute', async (req, res) => {
 // STEP 13: Create HTTP server
 const server = http.createServer(app);
 
-// Initialize Socket.IO for realtime automation events (not VNC)
-try {
-  const ioOptions = { path: '/ws/socket.io/' };
-  const realtime = new RealTimeAutomationSocket(server, ioOptions);
-  // Optional: basic join/leave handlers via simple events
-  // These are implemented inside RealTimeAutomationSocket using this.io
-  console.log('🔗 Realtime (Socket.IO) initialized at path /ws/socket.io/');
-} catch (e) {
-  console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
+// Async server initialization function
+async function initializeServer() {
+  // Initialize Socket.IO for realtime automation events (not VNC)
+  try {
+    const ioOptions = { path: '/ws/socket.io/' };
+    const realtime = new RealTimeAutomationSocket(server, ioOptions);
+    // Optional: basic join/leave handlers via simple events
+    // These are implemented inside RealTimeAutomationSocket using this.io
+    console.log('🔗 Realtime (Socket.IO) initialized at path /ws/socket.io/');
+  } catch (e) {
+    console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
+  }
+
+  // Initialize WebSocket server for raw WebSocket connections
+  try {
+    const wsManager = new WebSocketManager();
+    await wsManager.initialize(server);
+    console.log('🔌 PRODUCTION: Raw WebSocket server initialized at /ws');
+  } catch (e) {
+    console.warn('⚠️  Raw WebSocket initialization failed:', e?.message);
+  }
+
+  // VNC CODE REMOVED - Using in-browser automation instead
+
+  // STEP 14: Server listening (proven pattern)
+  server.listen(port, host, () => {
+    console.log('🌐 PRODUCTION: Server listening on port', port);
+    console.log('🌐 PRODUCTION: Server listening on host', host);
+    console.log('🌐 PRODUCTION: Server ready for Railway health checks');
+    console.log('🌐 PRODUCTION: Health endpoint: http://localhost:' + port + '/health');
+    console.log('🌐 PRODUCTION: Root endpoint: http://localhost:' + port + '/');
+    console.log('🌐 PRODUCTION: API health endpoint: http://localhost:' + port + '/api/health');
+    console.log('✅ PRODUCTION: Server started successfully');
+    console.log('✅ PRODUCTION: Redis status:', redisConnected ? 'connected' : 'disconnected');
+    console.log('🔌 PRODUCTION: Socket.IO available at /ws/socket.io/');
+    console.log('🔌 PRODUCTION: Raw WebSocket available at /ws');
+  });
 }
 
-// VNC CODE REMOVED - Using in-browser automation instead
-
-// STEP 14: Server listening (proven pattern)
-server.listen(port, host, () => {
-  console.log('🌐 PRODUCTION: Server listening on port', port);
-  console.log('🌐 PRODUCTION: Server listening on host', host);
-  console.log('🌐 PRODUCTION: Server ready for Railway health checks');
-  console.log('🌐 PRODUCTION: Health endpoint: http://localhost:' + port + '/health');
-  console.log('🌐 PRODUCTION: Root endpoint: http://localhost:' + port + '/');
-  console.log('🌐 PRODUCTION: API health endpoint: http://localhost:' + port + '/api/health');
-  console.log('✅ PRODUCTION: Server started successfully');
-  console.log('✅ PRODUCTION: Redis status:', redisConnected ? 'connected' : 'disconnected');
+// Initialize the server
+initializeServer().catch(error => {
+  console.error('❌ PRODUCTION: Failed to initialize server:', error);
+  process.exit(1);
 });
 
 // STEP 15: Handle server errors
