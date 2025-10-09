@@ -184,14 +184,16 @@ export class OneDollarAgentFramework {
   private selectAgents(taskPrompt: string, agents: Agent[]): AgentNode[] {
     const selectedAgents: AgentNode[] = [];
     
-    // AI-powered agent selection
+    // AI-powered agent selection - use actual agent names
     if (taskPrompt.toLowerCase().includes('browser') || 
         taskPrompt.toLowerCase().includes('click') || 
-        taskPrompt.toLowerCase().includes('navigate')) {
+        taskPrompt.toLowerCase().includes('navigate') ||
+        taskPrompt.toLowerCase().includes('google') ||
+        taskPrompt.toLowerCase().includes('search')) {
       selectedAgents.push({
         id: this.uuidv4(),
         agent: {
-          name: 'BrowserAgent',
+          name: 'OneDollarAgentBrowserAgent', // Use actual agent name
           id: this.uuidv4(),
           status: 'init'
         }
@@ -204,7 +206,7 @@ export class OneDollarAgentFramework {
       selectedAgents.push({
         id: this.uuidv4(),
         agent: {
-          name: 'FileAgent',
+          name: 'OneDollarAgentFileAgent', // Use actual agent name
           id: this.uuidv4(),
           status: 'init'
         }
@@ -216,7 +218,7 @@ export class OneDollarAgentFramework {
       selectedAgents.push({
         id: this.uuidv4(),
         agent: {
-          name: 'BrowserAgent',
+          name: 'OneDollarAgentBrowserAgent', // Use actual agent name
           id: this.uuidv4(),
           status: 'init'
         }
@@ -237,10 +239,15 @@ export class OneDollarAgentFramework {
       throw new Error("Workflow error");
     }
 
+    // FIXED: Create proper agent name mapping
     const agentNameMap = agents.reduce((map, item) => {
       map[item.Name] = item;
+      console.log('🔍 ONEDOLLARAGENT: Mapped agent:', item.Name, 'to instance:', item);
       return map;
     }, {} as { [key: string]: Agent });
+
+    console.log('🔍 ONEDOLLARAGENT: Available agents:', Object.keys(agentNameMap));
+    console.log('🔍 ONEDOLLARAGENT: Workflow agents:', workflow.agents.map(a => a.agent.name));
 
     const results: string[] = [];
     
@@ -249,8 +256,12 @@ export class OneDollarAgentFramework {
       
       const agent = agentNameMap[agentNode.agent.name];
       if (!agent) {
+        console.error('❌ ONEDOLLARAGENT: Agent not found:', agentNode.agent.name);
+        console.error('❌ ONEDOLLARAGENT: Available agents:', Object.keys(agentNameMap));
         throw new Error("Unknown Agent: " + agentNode.agent.name);
       }
+
+      console.log('🚀 ONEDOLLARAGENT: Executing agent:', agentNode.agent.name);
 
       const agentChain = new AgentChain(agentNode);
       context.chain.push(agentChain);
@@ -277,6 +288,7 @@ export class OneDollarAgentFramework {
     agentChain: AgentChain
   ): Promise<string> {
     try {
+      console.log('🎬 ONEDOLLARAGENT: Starting agent execution:', agent.Name);
       agentNode.agent.status = "running";
       
       // Emit agent start event
@@ -288,9 +300,16 @@ export class OneDollarAgentFramework {
         agentNode: agentNode.agent,
       });
 
+      console.log('🎬 ONEDOLLARAGENT: Calling agent.run() with context:', {
+        taskPrompt: context.chain.taskPrompt,
+        agentName: agent.Name
+      });
+
       // Execute real agent
       agentNode.result = await agent.run(context, agentChain);
       agentNode.agent.status = "done";
+      
+      console.log('✅ ONEDOLLARAGENT: Agent completed with result:', agentNode.result);
       
       // Emit agent result event
       this.socket.emit('agent:result', {
@@ -304,6 +323,7 @@ export class OneDollarAgentFramework {
 
       return agentNode.result;
     } catch (e) {
+      console.error('❌ ONEDOLLARAGENT: Agent execution failed:', e);
       agentNode.agent.status = "error";
       
       // Emit agent error event

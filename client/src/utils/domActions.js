@@ -3,6 +3,9 @@
  * These functions provide actual DOM manipulation for in-browser automation
  */
 
+// Import visual feedback functions
+import { showCursor, hideCursor, highlightElement, removeHighlight } from './visualFeedback.js';
+
 /**
  * Navigate to a URL
  */
@@ -239,79 +242,4 @@ export async function takeScreenshot() {
  */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Show cursor overlay
- */
-function showCursor() {
-  let cursor = document.getElementById('automation-cursor');
-  if (!cursor) {
-    cursor = document.createElement('div');
-    cursor.id = 'automation-cursor';
-    cursor.style.cssText = `
-      position: fixed;
-      width: 20px;
-      height: 20px;
-      background: #ff0000;
-      border-radius: 50%;
-      z-index: 999999;
-      pointer-events: none;
-      display: none;
-      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
-    `;
-    document.body.appendChild(cursor);
-  }
-  cursor.style.display = 'block';
-}
-
-/**
- * Hide cursor overlay
- */
-function hideCursor() {
-  const cursor = document.getElementById('automation-cursor');
-  if (cursor) {
-    cursor.style.display = 'none';
-  }
-}
-
-/**
- * Highlight an element
- */
-function highlightElement(element) {
-  // Remove existing highlights
-  removeHighlight();
-  
-  // Add highlight class
-  element.classList.add('automation-highlight');
-  
-  // Add CSS for highlight
-  if (!document.getElementById('automation-highlight-style')) {
-    const style = document.createElement('style');
-    style.id = 'automation-highlight-style';
-    style.textContent = `
-      .automation-highlight {
-        outline: 3px solid #ff0000 !important;
-        outline-offset: 2px !important;
-        background-color: rgba(255, 0, 0, 0.1) !important;
-        animation: automation-pulse 1s infinite !important;
-      }
-      
-      @keyframes automation-pulse {
-        0% { outline-color: #ff0000; }
-        50% { outline-color: #ff6666; }
-        100% { outline-color: #ff0000; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-}
-
-/**
- * Remove highlight from elements
- */
-function removeHighlight() {
-  // Remove highlight class from all elements
-  const highlighted = document.querySelectorAll('.automation-highlight');
-  highlighted.forEach(el => el.classList.remove('automation-highlight'));
 }

@@ -23,6 +23,8 @@ export class OneDollarAgentBrowserAgent implements Agent {
 
   async run(context: AgentContext, agentChain: AgentChain): Promise<string> {
     console.log('🤖 ONEDOLLARAGENT BROWSER AGENT: Starting real browser automation');
+    console.log('🔍 ONEDOLLARAGENT BROWSER AGENT: Context:', context);
+    console.log('🔍 ONEDOLLARAGENT BROWSER AGENT: AgentChain:', agentChain);
     
     try {
       // Get task prompt from context
@@ -36,39 +38,51 @@ export class OneDollarAgentBrowserAgent implements Agent {
       // Execute actions with visual feedback
       const results: string[] = [];
       
+      // Show visual feedback that automation is starting
+      showCursor();
+      await this.delay(1000);
+      
       for (const action of actions) {
         console.log('🎬 ONEDOLLARAGENT BROWSER AGENT: Executing action:', action);
         
         let result: any;
         
-        switch (action.type) {
-          case 'navigate':
-            result = await this.executeNavigate(action);
-            break;
-          case 'click':
-            result = await this.executeClick(action);
-            break;
-          case 'type':
-            result = await this.executeType(action);
-            break;
-          case 'scroll':
-            result = await this.executeScroll(action);
-            break;
-          case 'wait':
-            result = await this.executeWait(action);
-            break;
-          case 'screenshot':
-            result = await this.executeScreenshot(action);
-            break;
-          default:
-            result = { success: false, error: `Unknown action: ${action.type}` };
+        try {
+          switch (action.type) {
+            case 'navigate':
+              result = await this.executeNavigate(action);
+              break;
+            case 'click':
+              result = await this.executeClick(action);
+              break;
+            case 'type':
+              result = await this.executeType(action);
+              break;
+            case 'scroll':
+              result = await this.executeScroll(action);
+              break;
+            case 'wait':
+              result = await this.executeWait(action);
+              break;
+            case 'screenshot':
+              result = await this.executeScreenshot(action);
+              break;
+            default:
+              result = { success: false, error: `Unknown action: ${action.type}` };
+          }
+          
+          results.push(`Action ${action.type}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+          
+          // Add delay between actions for natural behavior
+          await this.delay(500 + Math.random() * 1000);
+        } catch (actionError) {
+          console.error('❌ ONEDOLLARAGENT BROWSER AGENT: Action failed:', actionError);
+          results.push(`Action ${action.type}: FAILED - ${actionError.message}`);
         }
-        
-        results.push(`Action ${action.type}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-        
-        // Add delay between actions for natural behavior
-        await this.delay(500 + Math.random() * 1000);
       }
+      
+      // Hide cursor when done
+      hideCursor();
       
       const finalResult = results.join('\n');
       console.log('✅ ONEDOLLARAGENT BROWSER AGENT: Completed with results:', finalResult);
