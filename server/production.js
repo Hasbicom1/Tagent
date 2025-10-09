@@ -9,7 +9,7 @@ import http from 'http';
 // Socket.IO realtime automation (events only; not used for VNC streaming)
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { WebSocketManager } from './websocket.ts';
+// WebSocketManager removed - using Socket.IO only for now
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -1503,14 +1503,7 @@ async function initializeServer() {
     console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
   }
 
-  // Initialize WebSocket server for raw WebSocket connections
-  try {
-    const wsManager = new WebSocketManager();
-    await wsManager.initialize(server);
-    console.log('🔌 PRODUCTION: Raw WebSocket server initialized at /ws');
-  } catch (e) {
-    console.warn('⚠️  Raw WebSocket initialization failed:', e?.message);
-  }
+  // WebSocket server initialization removed - using Socket.IO only
 
   // VNC CODE REMOVED - Using in-browser automation instead
 
@@ -1524,8 +1517,7 @@ async function initializeServer() {
     console.log('🌐 PRODUCTION: API health endpoint: http://localhost:' + port + '/api/health');
     console.log('✅ PRODUCTION: Server started successfully');
     console.log('✅ PRODUCTION: Redis status:', redisConnected ? 'connected' : 'disconnected');
-    console.log('🔌 PRODUCTION: Socket.IO available at /ws/socket.io/');
-    console.log('🔌 PRODUCTION: Raw WebSocket available at /ws');
+  console.log('🔌 PRODUCTION: Socket.IO available at /ws/socket.io/');
   });
 }
 
