@@ -48,10 +48,10 @@ export function RealBrowserAutomation({
   const initializeRealBrowserAutomation = async () => {
     try {
       // Dynamically import and initialize the REAL browser automation agent
-      const { default: LiveBrowserAgent } = await import('@/core/live-browser-agent.js');
+      const { default: liveBrowserAgent, LiveBrowserAgent } = await import('@/core/live-browser-agent.js');
 
       if (!automationAgentRef.current) {
-        automationAgentRef.current = LiveBrowserAgent;
+        automationAgentRef.current = liveBrowserAgent;
 
         // Set up session data for REAL automation
         const sessionData = {

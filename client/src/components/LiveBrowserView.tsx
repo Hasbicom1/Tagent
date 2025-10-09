@@ -62,10 +62,10 @@ export function LiveBrowserView({
   const initializeLiveBrowser = async () => {
     try {
       // Dynamically import and initialize the live browser agent
-      const { default: LiveBrowserAgent } = await import('@/core/live-browser-agent.js');
+      const { default: liveBrowserAgent, LiveBrowserAgent } = await import('@/core/live-browser-agent.js');
       
       if (!automationAgentRef.current) {
-        automationAgentRef.current = LiveBrowserAgent;
+        automationAgentRef.current = liveBrowserAgent;
         
         // Set up session data
         const sessionData = {

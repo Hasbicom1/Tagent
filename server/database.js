@@ -6,7 +6,7 @@
 import { Pool } from 'pg';
 
 // Real PostgreSQL connection pool
-let pool: Pool | null = null;
+let pool = null;
 
 export async function initializeDatabase() {
   try {

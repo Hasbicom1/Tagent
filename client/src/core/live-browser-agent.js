@@ -9,7 +9,7 @@
  * - Real website navigation
  */
 
-import { socket, isConnected } from './socket-client';
+import { socket, isConnected, connectSocket } from './socket-client';
 import { 
   navigateTo, 
   clickElement, 
@@ -22,10 +22,10 @@ import {
 import { 
   showCursor, 
   hideCursor, 
-  moveCursor, 
+  moveCursorTo, 
   showHighlight, 
   removeHighlight,
-  showTyping,
+  showTypingAnimation,
   hideTyping,
   showAutomationStatus,
   cleanupVisuals
@@ -44,6 +44,7 @@ class LiveBrowserAgent {
   // Initialize live browser agent
   init() {
     console.log('🤖 Live Browser Agent initialized');
+    connectSocket(); // Connect to WebSocket
     this.setupWebSocketListeners();
     this.setupKeyboardShortcuts();
     this.setupEventListeners();
@@ -288,9 +289,9 @@ class LiveBrowserAgent {
     await this.simulateMouseMovement(selector);
     
     // Show typing animation
-    showTyping(selector, text);
+    showTypingAnimation(selector, text);
     await new Promise(resolve => setTimeout(resolve, text.length * 100));
-    hideTyping();
+    hideTypingAnimation();
 
     return {
       action: 'type',

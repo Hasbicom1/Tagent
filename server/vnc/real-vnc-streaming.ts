@@ -92,21 +92,21 @@ export class RealVNCStreamingEngine extends EventEmitter {
     logger.info('🔌 REAL VNC Streaming: Starting TigerVNC server...');
     
     const vncServer = spawn('x11vnc', [
-      '-display', ':99',
+        '-display', ':99',
       '-rfbport', String(this.config.vncPort || 5900),
       '-rfbauth', '/tmp/vncpasswd',
-      '-forever',
-      '-shared',
-      '-noxdamage',
+        '-forever',
+        '-shared',
+        '-noxdamage',
       '-noxrecord',
-      '-noxfixes',
+        '-noxfixes',
       '-noxrandr',
-      '-noxcomposite',
+        '-noxcomposite',
       '-noxdbe',
-      '-noxinerama',
-      '-noxkb',
-      '-noxscreensaver',
-      '-noxscreensaver',
+        '-noxinerama',
+        '-noxkb',
+        '-noxscreensaver',
+        '-noxscreensaver',
       '-noxscreensaver'
     ], {
       stdio: 'pipe'
@@ -258,7 +258,7 @@ export class RealVNCStreamingEngine extends EventEmitter {
   async closeStreamingSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    
+
     logger.info(`🔧 REAL VNC Streaming: Closing streaming session ${sessionId}`);
     
     // Close WebSocket
@@ -266,7 +266,7 @@ export class RealVNCStreamingEngine extends EventEmitter {
       session.websocket.close();
     }
     
-    // Kill VNC process
+      // Kill VNC process
     if (session.vncProcess) {
       session.vncProcess.kill();
     }

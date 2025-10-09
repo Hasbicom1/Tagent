@@ -11,7 +11,7 @@ const getSocketUrl = () => {
 export const socket = io(getSocketUrl(), {
   path: '/ws/socket.io/',
   transports: ["websocket", "polling"],
-  autoConnect: true,
+  autoConnect: false, // Don't auto-connect, let components control connection
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
@@ -34,5 +34,12 @@ socket.on('connect_error', (error) => {
   console.error('❌ Automation socket connection error:', error);
   isConnected = false;
 });
+
+// Connect method
+export const connectSocket = () => {
+  if (!socket.connected) {
+    socket.connect();
+  }
+};
 
 export { isConnected };

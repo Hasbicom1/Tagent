@@ -56,10 +56,10 @@ export function BrowserStreamViewer({
     try {
       // Dynamically import and initialize the automation agent
       // @ts-ignore - automation-agent.js doesn't have TypeScript declarations
-      const { AutomationAgent } = await import('@/core/automation-agent.js');
+      const { default: automationAgent, AutomationAgent } = await import('@/core/automation-agent.js');
       
       if (!automationAgentRef.current) {
-        automationAgentRef.current = new AutomationAgent();
+        automationAgentRef.current = automationAgent;
         await automationAgentRef.current.init();
         
         // Set up session data

@@ -1,5 +1,5 @@
 // Main automation agent that handles DOM control and WebSocket communication
-import { socket, isConnected } from './socket-client';
+import { socket, isConnected, connectSocket } from './socket-client';
 import { 
   navigateTo, 
   clickElement, 
@@ -22,6 +22,7 @@ class AutomationAgent {
   // Initialize automation agent
   init() {
     console.log('🤖 Automation Agent initialized');
+    connectSocket(); // Connect to WebSocket
     this.setupWebSocketListeners();
     this.setupKeyboardShortcuts();
   }
