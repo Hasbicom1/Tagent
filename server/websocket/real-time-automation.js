@@ -67,6 +67,36 @@ export class RealTimeAutomationSocket {
       socket.on('navigateTo', async (data) => {
         await this.handleNavigationRequest(socket, data);
       });
+
+      // NEW: Handle automation session events
+      socket.on('automation:session:start', (data) => {
+        console.log('🚀 Automation session started:', data);
+        this.activeSessions.set(socket.id, {
+          ...this.activeSessions.get(socket.id),
+          isActive: true,
+          sessionData: data,
+          startTime: new Date()
+        });
+        
+        socket.emit('automation:start', data);
+      });
+
+      socket.on('automation:session:stop', (data) => {
+        console.log('🛑 Automation session stopped:', data);
+        this.activeSessions.set(socket.id, {
+          ...this.activeSessions.get(socket.id),
+          isActive: false,
+          endTime: new Date()
+        });
+        
+        socket.emit('automation:stop', data);
+      });
+
+      // Handle automation results from client
+      socket.on('automation:result', (result) => {
+        console.log('📊 Automation result:', result);
+        this.handleAutomationResult(socket, result);
+      });
       
       // Handle disconnect
       socket.on('disconnect', () => {
@@ -82,6 +112,50 @@ export class RealTimeAutomationSocket {
     this.setupAIEngineListeners();
   }
   
+  /**
+   * Handle automation result from client
+   */
+  handleAutomationResult(socket, result) {
+    console.log('📊 Processing automation result:', result);
+    
+    // Log the result
+    if (result.status === 'success') {
+      console.log('✅ Automation command successful:', result.command?.action);
+    } else if (result.status === 'error') {
+      console.error('❌ Automation command failed:', result.error);
+    }
+    
+    // Update session with result
+    const session = this.activeSessions.get(socket.id);
+    if (session) {
+      session.lastActivity = new Date();
+      session.lastResult = result;
+    }
+    
+    // Emit result to other connected clients if needed
+    socket.broadcast.emit('automation:update', {
+      type: 'result',
+      result,
+      timestamp: new Date()
+    });
+  }
+
+  /**
+   * Send automation command to client
+   */
+  sendAutomationCommand(socket, command) {
+    console.log('📤 Sending automation command:', command);
+    socket.emit('automation:command', command);
+  }
+
+  /**
+   * Send batch automation commands to client
+   */
+  sendAutomationBatch(socket, commands) {
+    console.log('📦 Sending automation batch:', commands);
+    socket.emit('automation:batch', commands);
+  }
+
   /**
    * Handle automation request
    */

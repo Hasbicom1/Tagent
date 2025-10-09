@@ -18,6 +18,8 @@ import AgentChat from "@/pages/agent-chat";
 import BrowserChatPage from "@/pages/browser-chat";
 import InvisibleAutomationPage from "@/pages/invisible-automation";
 import AutomationSessionPage from "@/pages/automation-session";
+import AutomationDemo from "@/pages/automation-demo";
+import AutomationTest from "@/pages/automation-test";
 import VNCTestPage from "@/pages/vnc-test";
 import NotFound from "@/pages/not-found";
 import { useToast } from "@/hooks/use-toast";
@@ -267,6 +269,26 @@ function Router() {
             <ThemeToggle />
           </div>
           <AutomationSessionPage />
+        </div>
+      )} />
+      
+      {/* Automation Demo Route */}
+      <Route path="/automation-demo" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AutomationDemo />
+        </div>
+      )} />
+      
+      {/* Automation Test Route */}
+      <Route path="/automation-test" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AutomationTest />
         </div>
       )} />
       
