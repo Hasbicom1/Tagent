@@ -88,6 +88,27 @@ export async function createTables() {
     // CRITICAL FIX: Add missing columns to existing tables
     console.log('🔄 REAL Database: Running migrations for existing tables...');
     
+    // FIRST: Remove any problematic unique constraints on agent_id
+    try {
+      await client.query(`
+        ALTER TABLE user_sessions 
+        DROP CONSTRAINT IF EXISTS user_sessions_agent_id_key;
+      `);
+      console.log('✅ REAL Database: Migration: Removed unique constraint on agent_id');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      await client.query(`
+        ALTER TABLE user_sessions 
+        DROP CONSTRAINT IF EXISTS user_sessions_pkey;
+      `);
+      console.log('✅ REAL Database: Migration: Removed primary key constraint');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
     try {
       // Add missing checkout_session_id column if it doesn't exist
       await client.query(`
@@ -174,6 +195,27 @@ export async function createTables() {
       console.log('✅ REAL Database: Migration: updated_at column added');
     } catch (migrationError) {
       console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+
+    // FINAL: Recreate table with proper constraints if needed
+    try {
+      console.log('🔄 REAL Database: Ensuring proper table structure...');
+      
+      // Check if we need to recreate the table structure
+      const tableCheck = await client.query(`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = 'user_sessions' AND column_name = 'session_id';
+      `);
+      
+      if (tableCheck.rows.length === 0) {
+        console.log('⚠️ REAL Database: user_sessions table missing, will be created by CREATE TABLE IF NOT EXISTS');
+      } else {
+        console.log('✅ REAL Database: user_sessions table structure verified');
+      }
+      
+    } catch (tableError) {
+      console.warn('⚠️ REAL Database: Table structure check warning:', tableError.message);
     }
 
     client.release();

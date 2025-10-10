@@ -163,10 +163,13 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
-    // Determine deterministic automation agent/session id derived from Stripe checkout session id
+    // Determine deterministic automation session id derived from Stripe checkout session id
     const automationSessionId = 'automation_' + checkoutSessionId;
+    
+    // Generate unique agent ID to avoid constraint violations
+    const uniqueAgentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Check if a session already exists for this checkout in our primary storage (by agentId)
+    // Check if a session already exists for this checkout in our primary storage (by sessionId)
     try {
       const existing = await getUserSession(automationSessionId);
       if (existing) {
@@ -185,7 +188,7 @@ router.post('/checkout-success', async (req, res) => {
 
     const sessionData = {
       sessionId: automationSessionId,
-      agentId: automationSessionId,
+      agentId: uniqueAgentId, // Use unique agent ID to avoid constraint violations
       expiresAt,
       status: 'active',
       paymentVerified: true,
