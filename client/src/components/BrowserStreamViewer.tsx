@@ -177,7 +177,7 @@ export function BrowserStreamViewer({
 
         {/* IN-BROWSER AUTOMATION VIEW - NO VNC NEEDED */}
         <div 
-          id="live-browser-agent-DXyiI6TP"
+          id={`live-browser-agent-${sessionId}`}
           className="w-full h-full bg-gray-900 flex flex-col items-center justify-center text-white"
           style={{ flex: 1 }}
         >

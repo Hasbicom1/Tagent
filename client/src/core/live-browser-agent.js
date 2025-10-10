@@ -53,8 +53,14 @@ class LiveBrowserAgent {
 
   // Initialize the browser frame for live control
   initializeBrowserFrame() {
+    // Get session ID from URL
+    const pathParts = window.location.pathname.split('/');
+    const sessionId = pathParts[pathParts.length - 1];
+    
+    console.log('🔍 Looking for container with session ID:', sessionId);
+    
     // Find the browser automation container (in-browser automation, no iframe needed)
-    this.browserFrame = document.getElementById('live-browser-agent-DXyiI6TP');
+    this.browserFrame = document.getElementById(`live-browser-agent-${sessionId}`);
     if (this.browserFrame) {
       console.log('🌐 Live Browser: Browser automation container found');
       this.setupBrowserFrameListeners();
