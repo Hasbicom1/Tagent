@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Worker Service: Python FastAPI + In-Browser Automation
-Architecture: FastAPI (HTTP/health) + Socket.IO for in-browser automation
-NO MORE VNC CODE - PURE IN-BROWSER AUTOMATION
+Worker Service: Python FastAPI + Live Browser Streaming
+Architecture: FastAPI + Playwright CDP + WebSocket streaming
+REAL LIVE BROWSER STREAMING - 100% FREE
 """
 
-print("🚨🚨🚨 WORKER VERSION 5.0 - PURE IN-BROWSER AUTOMATION 🚨🚨🚨")
-print("🚨 NO VNC - NO PLAYWRIGHT - DIRECT BROWSER CONTROL 🚨")
+print("🚀🚀🚀 WORKER VERSION 6.0 - LIVE BROWSER STREAMING 🚀🚀🚀")
+print("🚀 REAL PLAYWRIGHT CDP + LIVE VIDEO STREAMING 🚀")
 import os
 import asyncio
 import json
@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 from rq import Queue, Worker
 import logging
+from live_stream import LiveBrowserStream
 
 # Configure logging
 logging.basicConfig(
@@ -45,7 +46,10 @@ async def lifespan(app: FastAPI):
     logger.info("✅ In-browser automation worker shutdown")
 
 # Initialize FastAPI with lifespan
-app = FastAPI(title="Browser Agent Worker", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Live Browser Streaming Worker", version="6.0.0", lifespan=lifespan)
+
+# Store active streams
+active_streams = {}
 
 # CORS middleware
 app.add_middleware(
@@ -338,47 +342,70 @@ async def stagehand_task(task_data: Dict[str, Any]):
         }
 
 # Connect agents endpoint for frontend
-@app.post("/connect-agents")
-async def connect_agents(request_data: Dict[str, Any]):
-    """
-    Connect to REAL AI agents for frontend
-    """
-    print("🔗 REAL AI Agents: Frontend connection request")
-    
+@app.post("/start_stream")
+async def start_stream(session_id: str):
+    """Start live browser stream for session"""
     try:
-        session_id = request_data.get('sessionId')
-        agent_id = request_data.get('agentId')
-        agent_types = request_data.get('agentTypes', ['browser-use', 'skyvern', 'lavague', 'stagehand'])
+        backend_ws_url = f"wss://www.onedollaragent.ai/ws/stream/{session_id}"
         
-        logger.info(f"🎯 REAL AI Agents: Connecting frontend to agents", {
-            "sessionId": session_id,
-            "agentId": agent_id,
-            "agentTypes": agent_types
-        })
+        stream = LiveBrowserStream(session_id, backend_ws_url)
+        await stream.start()
         
-        # Return available agents and their status
-        return {
-            "success": True,
-            "message": "Connected to REAL AI agents",
-            "sessionId": session_id,
-            "agentId": agent_id,
-            "availableAgents": {
-                "browser-use": {"status": "ready", "endpoint": "/browser-use-task"},
-                "skyvern": {"status": "ready", "endpoint": "/skyvern-task"},
-                "lavague": {"status": "ready", "endpoint": "/lavague-task"},
-                "stagehand": {"status": "ready", "endpoint": "/stagehand-task"}
-            },
-            "timestamp": datetime.now().isoformat()
-        }
+        active_streams[session_id] = stream
+        
+        logger.info(f"📹 Live stream started for session: {session_id}")
+        
+        return {"status": "streaming", "sessionId": session_id}
         
     except Exception as e:
-        print(f"❌ REAL AI Agents: Connection failed: {e}")
-        logger.error(f"❌ REAL AI Agents: Connection failed: {e}")
-        return {
-            "success": False,
-            "message": f"Failed to connect to AI agents: {str(e)}",
-            "timestamp": datetime.now().isoformat()
-        }
+        logger.error(f"❌ Failed to start stream: {e}")
+        return {"error": f"Failed to start stream: {str(e)}"}
+
+@app.post("/automation/{session_id}/navigate")
+async def navigate(session_id: str, url: str):
+    """AI agent navigates"""
+    stream = active_streams.get(session_id)
+    if stream:
+        await stream.navigate(url)
+        return {"status": "ok"}
+    return {"error": "stream not found"}
+
+@app.post("/automation/{session_id}/click")
+async def click(session_id: str, selector: str):
+    """AI agent clicks"""
+    stream = active_streams.get(session_id)
+    if stream:
+        await stream.click(selector)
+        return {"status": "ok"}
+    return {"error": "stream not found"}
+
+@app.post("/automation/{session_id}/type")
+async def type_text(session_id: str, selector: str, text: str):
+    """AI agent types"""
+    stream = active_streams.get(session_id)
+    if stream:
+        await stream.type(selector, text)
+        return {"status": "ok"}
+    return {"error": "stream not found"}
+
+@app.post("/automation/{session_id}/scroll")
+async def scroll(session_id: str, x: int, y: int):
+    """AI agent scrolls"""
+    stream = active_streams.get(session_id)
+    if stream:
+        await stream.scroll(x, y)
+        return {"status": "ok"}
+    return {"error": "stream not found"}
+
+@app.post("/stop_stream/{session_id}")
+async def stop_stream(session_id: str):
+    """Stop live browser stream"""
+    stream = active_streams.get(session_id)
+    if stream:
+        await stream.stop()
+        del active_streams[session_id]
+        return {"status": "stopped"}
+    return {"error": "stream not found"}
 
 # In-browser automation is now the primary method
 # No VNC/Playwright dependencies

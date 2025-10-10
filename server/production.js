@@ -6,9 +6,11 @@
  */
 
 import http from 'http';
+import WebSocket from 'ws';
 // Socket.IO realtime automation (events only; not used for VNC streaming)
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
+import { LiveStreamRelay } from './live-stream-relay.js';
 // WebSocketManager removed - using Socket.IO only for now
 import express from 'express';
 import { createRequire } from 'module';
@@ -1505,7 +1507,28 @@ async function initializeServer() {
     console.warn('⚠️  Realtime (Socket.IO) initialization failed:', e?.message);
   }
 
-  // WebSocket server initialization removed - using Socket.IO only
+  // Initialize live stream relay
+  const liveStreamRelay = new LiveStreamRelay(server);
+  console.log('📹 Live stream relay initialized');
+
+  // Handle WebSocket upgrades for live streaming
+  server.on('upgrade', (request, socket, head) => {
+    // Worker stream connections
+    if (liveStreamRelay.handleUpgrade(request, socket, head)) {
+      return;
+    }
+    
+    // Frontend viewer connections
+    if (request.url.startsWith('/ws/view/')) {
+      const url = new URL(request.url, 'ws://localhost');
+      const sessionId = url.pathname.split('/').pop();
+      
+      const wss = new WebSocket.Server({ noServer: true });
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        liveStreamRelay.addFrontendConnection(sessionId, ws);
+      });
+    }
+  });
 
   // VNC CODE REMOVED - Using in-browser automation instead
 
