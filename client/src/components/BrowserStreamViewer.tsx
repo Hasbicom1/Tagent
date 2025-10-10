@@ -54,22 +54,17 @@ export function BrowserStreamViewer({
   }, [sessionId, agentId, workerUrl]);
 
   const initializeLiveStream = () => {
-    // Connect to backend WebSocket for live stream
-    const ws = new WebSocket(`wss://www.onedollaragent.ai/ws/`);
-    wsRef.current = ws;
+           // Connect to backend WebSocket for live stream
+           const ws = new WebSocket(`wss://www.onedollaragent.ai/ws/stream/${sessionId}`);
+           wsRef.current = ws;
     
     let frameCount = 0;
     let lastTime = Date.now();
     
-    ws.onopen = () => {
-      console.log('✅ Connected to live stream, registering client...');
-      // Register as client
-      ws.send(JSON.stringify({
-        type: 'client_register',
-        sessionId: sessionId
-      }));
-      setIsConnected(true);
-    };
+           ws.onopen = () => {
+             console.log('✅ Connected to live stream');
+             setIsConnected(true);
+           };
     
     ws.onmessage = (event) => {
       try {

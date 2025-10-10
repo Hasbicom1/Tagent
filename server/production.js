@@ -1557,104 +1557,15 @@ async function initializeServer() {
         return;
       }
       
-      // NEW: Race condition fix - WebSocket proxy for worker/client communication
-      if (request.url.startsWith('/ws/') && !request.url.startsWith('/ws/stream/') && !request.url.startsWith('/ws/view/')) {
-        const wss = new WebSocketServer({ noServer: true });
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          handleWebSocketConnection(ws, request);
-        });
-        return;
-      }
+      // REMOVED: WebSocket proxy causing protocol conflicts
+      // The existing Socket.IO and live stream relay handle all WebSocket connections
     } catch (error) {
       console.error('❌ WebSocket upgrade error:', error.message);
       socket.destroy();
     }
   });
 
-  // NEW: WebSocket connection handler for race condition fix
-  const workerWSMap = new Map();  // sessionId -> worker websocket
-  const clientWSMap = new Map();  // clientWs -> sessionId
-
-  function handleWebSocketConnection(ws, req) {
-    console.log('🔌 WebSocket connection established');
-    
-    // Add error handling to prevent crashes
-    ws.on('error', (error) => {
-      console.error('❌ WebSocket error:', error.message);
-      // Don't crash the server, just log and close the connection
-    });
-    
-    ws.once('message', (msg) => {
-      let obj;
-      try {
-        obj = JSON.parse(msg.toString());
-      } catch (e) {
-        console.error('❌ Invalid WS registration payload', e);
-        ws.close();
-        return;
-      }
-      
-      if (obj.type === 'worker_register' && obj.sessionId) {
-        // Python worker registering
-        const sid = obj.sessionId;
-        workerWSMap.set(sid, ws);
-        ws.sessionId = sid;
-        console.log('✅ Worker registered for session:', sid);
-        
-        // Mark session as ready in Redis
-        if (redis) {
-          redis.hset(`session:${sid}`, { 
-            status: 'ready',
-            workerConnected: 'true',
-            readyAt: Date.now().toString()
-          });
-          redis.expire(`session:${sid}`, 24 * 3600);
-        }
-        
-        // Forward worker messages to clients
-        ws.on('message', (m) => {
-          const clientEntry = [...clientWSMap.entries()].find(([cws, sid2]) => sid2 === sid);
-          if (clientEntry) {
-            const [clientWs, _] = clientEntry;
-            if (clientWs.readyState === 1) { // WebSocket.OPEN
-              clientWs.send(m);
-            }
-          }
-        });
-        
-        ws.on('close', () => {
-          console.log('❌ Worker disconnected for session', sid);
-          workerWSMap.delete(sid);
-          if (redis) {
-            redis.hset(`session:${sid}`, { status: 'disconnected' });
-          }
-        });
-      }
-      else if (obj.type === 'client_register' && obj.sessionId) {
-        // Frontend client connecting
-        const sid = obj.sessionId;
-        clientWSMap.set(ws, sid);
-        ws.sessionId = sid;
-        console.log('✅ Client registered to session', sid);
-        
-        // Forward client messages to worker
-        ws.on('message', (m) => {
-          const workerWs = workerWSMap.get(sid);
-          if (workerWs && workerWs.readyState === 1) { // WebSocket.OPEN
-            workerWs.send(m);
-          }
-        });
-        
-        ws.on('close', () => {
-          clientWSMap.delete(ws);
-        });
-      }
-      else {
-        console.error('❌ Unknown WS registration:', obj);
-        ws.close();
-      }
-    });
-  }
+  // REMOVED: WebSocket proxy handler - using existing Socket.IO and live stream relay
 
   // VNC CODE REMOVED - Using in-browser automation instead
 
