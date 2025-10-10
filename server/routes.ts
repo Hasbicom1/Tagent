@@ -842,6 +842,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.redirect('/payment-failed');
       }
 
+      // Start live browser stream in worker
+      try {
+        const workerUrl = process.env.WORKER_URL || 'https://worker-production-6480.up.railway.app';
+        const streamResponse = await fetch(`${workerUrl}/start_stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: agentIdCreated })
+        });
+        
+        if (streamResponse.ok) {
+          console.log(`📹 Live stream started for session: ${agentIdCreated}`);
+        } else {
+          console.warn(`⚠️ Failed to start live stream for session: ${agentIdCreated}`);
+        }
+      } catch (error) {
+        console.warn('⚠️ Worker stream start failed (non-critical):', error);
+      }
+
       // Redirect to split-screen chat interface (live browser + chat)
       return res.redirect(`/live/agent/${encodeURIComponent(agentIdCreated)}`);
     } catch (error) {

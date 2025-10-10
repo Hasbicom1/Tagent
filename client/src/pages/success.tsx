@@ -71,7 +71,7 @@ export default function Success() {
         });
         
         // Redirect immediately to the agent chat interface
-        window.location.href = `/agent?id=${agentId}`;
+        window.location.href = `/live/agent/${agentId}`;
 
       } catch (error) {
         console.error('Checkout success error:', (error as Error).message);

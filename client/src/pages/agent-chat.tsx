@@ -103,6 +103,30 @@ export default function AgentChat() {
     };
   }, [sessionInfo, connectionStatus.isAuthenticated, subscribeToSession, disconnect]);
 
+  // Real-time session expiry check
+  useEffect(() => {
+    if (!sessionInfo?.expiresAt) return;
+
+    const checkExpiry = () => {
+      const remaining = computeMinutesRemaining(sessionInfo.expiresAt);
+      if (remaining <= 0) {
+        toast({
+          title: "Session Expired",
+          description: "Your 24-hour session has expired. Please start a new session.",
+          variant: "destructive",
+        });
+        setLocation('/');
+      }
+    };
+
+    // Check immediately
+    checkExpiry();
+
+    // Check every minute
+    const interval = setInterval(checkExpiry, 60000);
+    return () => clearInterval(interval);
+  }, [sessionInfo?.expiresAt, toast, setLocation]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);

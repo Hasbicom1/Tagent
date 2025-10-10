@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
 import { Loader2, WifiOff, CheckCircle, XCircle, MousePointer, Keyboard, ScrollText, Bot } from 'lucide-react';
+import { BrowserStreamViewer } from './BrowserStreamViewer';
 
 interface RealBrowserAutomationProps {
   sessionId: string;
@@ -175,94 +176,13 @@ export function RealBrowserAutomation({
         </div>
       </div>
 
-      {/* Main Browser Content Area */}
-      <div className="flex-1 flex flex-col items-center justify-center text-white p-8 pt-16">
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 bg-green-500/20 rounded-lg flex items-center justify-center mx-auto">
-            <Bot size={32} className="text-green-500" />
-          </div>
-          <div className="space-y-3">
-            <h3 className="text-2xl font-bold text-green-400">
-              REAL AI BROWSER AUTOMATION ACTIVE
-            </h3>
-            <p className="text-gray-400 max-w-md">
-              REAL AI agents (Browser-Use, Skyvern, LaVague, Stagehand) are controlling your browser. 
-              You will see REAL mouse movement, clicking, typing, and scrolling.
-            </p>
-
-            {/* Current automation status */}
-            <div className="bg-gray-800 rounded-lg p-4 max-w-md">
-              <div className="text-sm text-gray-300 mb-2">Current Status:</div>
-              <div className="text-green-400 font-mono text-sm">{automationStatus}</div>
-              {currentTask && (
-                <div className="text-blue-400 font-mono text-xs mt-1">{currentTask}</div>
-              )}
-            </div>
-
-            {/* Real-time status indicators */}
-            <div className="flex flex-col gap-2 text-sm">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${connectionStatus.isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span>WebSocket: {connectionStatus.isConnected ? 'Connected' : 'Disconnected'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isAgentActive ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                <span>REAL Agent: {isAgentActive ? 'Active' : 'Initializing'}</span>
-              </div>
-              {taskStatuses.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span>Active Tasks: {taskStatuses.length}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Connect to REAL agents button */}
-            {!isAgentActive && (
-              <button
-                onClick={connectToRealAgents}
-                className="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-semibold"
-              >
-                Connect to REAL AI Agents
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Agent activity log */}
-        {agentActivity.length > 0 && (
-          <div className="mt-8 p-4 bg-gray-800 rounded-lg max-h-48 overflow-y-auto w-full max-w-2xl">
-            <div className="text-xs text-gray-400 mb-2">REAL Agent Activity:</div>
-            {agentActivity.slice(-5).map((activity: any) => (
-              <div key={activity.id} className="text-xs text-gray-300 flex items-center gap-2 mb-1">
-                {activity.type === 'click' && <MousePointer size={12} className="text-blue-400" />}
-                {activity.type === 'type' && <Keyboard size={12} className="text-purple-400" />}
-                {activity.type === 'scroll' && <ScrollText size={12} className="text-green-400" />}
-                {activity.type === 'navigate' && <Bot size={12} className="text-yellow-400" />}
-                <span className="flex-1">{activity.description}</span>
-                <span className="text-gray-500 text-xs">
-                  {new Date(activity.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Task logs if available */}
-        {allTaskLogs.size > 0 && (
-          <div className="mt-4 p-4 bg-gray-800 rounded-lg max-h-48 overflow-y-auto w-full max-w-2xl">
-            <div className="text-xs text-gray-400 mb-2">REAL Task Execution:</div>
-            {Array.from(allTaskLogs.values()).flat().slice(-5).map((log: any, index: number) => (
-              <div key={index} className="text-xs text-gray-300 flex items-center gap-2">
-                {log.type === 'mouse' && <MousePointer size={12} className="text-blue-400" />}
-                {log.type === 'keyboard' && <Keyboard size={12} className="text-purple-400" />}
-                {log.type === 'scroll' && <ScrollText size={12} className="text-green-400" />}
-                {log.type === 'status' && <CheckCircle size={12} className="text-yellow-400" />}
-                <span>{log.message}</span>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Live Browser Stream */}
+      <div className="flex-1">
+        <BrowserStreamViewer 
+          sessionId={sessionId}
+          agentId={agentId}
+          workerUrl={workerUrl}
+        />
       </div>
     </div>
   );
