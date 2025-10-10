@@ -36,7 +36,7 @@ export default function Success() {
         const existingAgentId = localStorage.getItem(localKey);
         if (existingAgentId) {
           // Fast-path redirect to persistent agent session
-          window.location.href = `/agent?id=${existingAgentId}`;
+          window.location.href = `/live/agent/${existingAgentId}`;
           return;
         }
 
