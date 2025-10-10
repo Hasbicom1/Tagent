@@ -163,11 +163,11 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
-    // Determine deterministic automation session id derived from Stripe checkout session id
-    const automationSessionId = 'automation_' + checkoutSessionId;
-    
     // Generate unique agent ID to avoid constraint violations
     const uniqueAgentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Use the unique agent ID as both sessionId and agentId for consistency
+    const automationSessionId = uniqueAgentId;
 
     // Check if a session already exists for this checkout in our primary storage (by sessionId)
     try {
