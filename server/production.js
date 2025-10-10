@@ -113,6 +113,9 @@ const app = express();
 // Trust proxy for correct HTTPS detection behind Railway/NGINX
 app.set('trust proxy', 1);
 
+// Initialize Socket.IO for real-time communication
+const { Server } = require('socket.io');
+
 // Rate limit metrics (basic counters for observability)
 const rateLimitMetrics = {
   global429: 0,
