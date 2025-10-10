@@ -18,6 +18,7 @@ import redis
 from rq import Queue, Worker
 import logging
 from live_stream import LiveBrowserStream
+import websockets
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Environment variables
 REDIS_URL = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
 PORT = int(os.getenv('PORT', '8080'))
+BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/"
 
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager
@@ -40,6 +42,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
     logger.info(f"📊 Port: {PORT}")
     logger.info("✅ Live browser streaming ready - REAL PLAYWRIGHT CDP")
+    
+    # Start provision loop for race condition fix
+    asyncio.create_task(provision_loop())
+    logger.info("🚀 Worker provision loop started")
+    
     yield
     # Shutdown
     logger.info("🔄 Shutting down worker...")
@@ -50,6 +57,56 @@ app = FastAPI(title="Live Browser Streaming Worker", version="6.0.0", lifespan=l
 
 # Store active streams
 active_streams = {}
+
+# NEW: Race condition fix - Provision loop
+async def provision_loop():
+    """Listen for new sessions to provision"""
+    redis_conn = redis.from_url(REDIS_URL)
+    
+    while True:
+        try:
+            # Block until we get a session to provision
+            res = redis_conn.brpop("provision_agent_queue", timeout=5)
+            if res:
+                _, session_id_bytes = res
+                session_id = session_id_bytes.decode()
+                logger.info(f"🛠️ Provisioning agent for session: {session_id}")
+                await start_agent_for_session(session_id)
+            else:
+                # Nothing in queue, wait a bit
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"❌ Provision loop error: {e}")
+            await asyncio.sleep(5)
+
+async def start_agent_for_session(session_id: str):
+    """Start the live browser automation for a session"""
+    try:
+        # Connect to backend WebSocket
+        ws_url = f"{BACKEND_WS_URL}{session_id}"
+        ws = await websockets.connect(ws_url)
+        
+        # Register with backend
+        register_msg = {
+            "type": "worker_register",
+            "sessionId": session_id
+        }
+        await ws.send(json.dumps(register_msg))
+        logger.info(f"✅ Worker registered to backend: {session_id}")
+        
+        # Start your existing live stream logic
+        stream = LiveBrowserStream(session_id, ws_url)
+        active_streams[session_id] = stream
+        await stream.start()
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start agent for session {session_id}: {e}")
+        # Mark session as failed
+        redis_conn = redis.from_url(REDIS_URL)
+        redis_conn.hset(f"session:{session_id}", {
+            "status": "error",
+            "error": str(e)
+        })
 
 # CORS middleware
 app.add_middleware(

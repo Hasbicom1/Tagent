@@ -360,6 +360,34 @@ router.get('/session/:sessionId', async (req, res) => {
   }
 });
 
+// NEW: Session status API for race condition fix
+router.get('/api/session-status', async (req, res) => {
+  try {
+    const sessionId = req.query.session;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing session' });
+    }
+    
+    // Check Redis for session status
+    const { getRedis } = require('./redis-simple.js');
+    const redis = getRedis();
+    const rec = await redis.hgetall(`session:${sessionId}`);
+    
+    if (!rec || !rec.status) {
+      return res.json({ status: 'not_found' });
+    }
+    
+    return res.json({
+      status: rec.status,  // "starting", "ready", "disconnected"
+      workerConnected: rec.workerConnected === 'true',
+      readyAt: rec.readyAt
+    });
+  } catch (error) {
+    console.error('❌ Session status check failed:', error);
+    res.status(500).json({ error: 'Status check failed' });
+  }
+});
+
 // Browser automation endpoints
 router.post('/browser/:agentId/initialize', async (req, res) => {
   try {

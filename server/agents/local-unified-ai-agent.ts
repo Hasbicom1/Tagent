@@ -80,7 +80,7 @@ export class LocalUnifiedAIAgent extends EventEmitter {
       this.emit('taskCompleted', { taskId: task.id, result });
       
       logger.info(`✅ Local Unified AI Agent: Task ${task.id} completed successfully`);
-      
+
     } catch (error) {
       logger.error(`❌ Local Unified AI Agent: Task ${task.id} failed:`, error);
       task.status = 'failed';
@@ -110,8 +110,8 @@ export class LocalUnifiedAIAgent extends EventEmitter {
     logger.info(`🌐 Browser Automation: ${task.instruction}`);
     
     // Queue the task for the browser worker
-    const browserTask = {
-      id: task.id,
+      const browserTask = {
+        id: task.id,
       instruction: task.instruction,
       url: task.url,
       selector: task.selector,
@@ -120,8 +120,8 @@ export class LocalUnifiedAIAgent extends EventEmitter {
     };
 
     await queueBrowserTask(browserTask);
-    
-    return {
+      
+      return {
       success: true,
       message: `Browser automation task queued: ${task.instruction}`,
       taskId: task.id
@@ -167,7 +167,7 @@ export class LocalUnifiedAIAgent extends EventEmitter {
 
     await queueBrowserTask(formTask);
     
-    return {
+      return {
       success: true,
       message: `Real form filling queued: ${task.instruction}`,
       fields: task.data || {}
@@ -187,7 +187,7 @@ export class LocalUnifiedAIAgent extends EventEmitter {
     };
 
     await queueBrowserTask(navigationTask);
-    
+
     return {
       success: true,
       message: `Real navigation queued: ${task.instruction}`,
