@@ -142,12 +142,15 @@ export default function AgentChat() {
     try {
       setIsLoading(true);
       
+      console.log('[SESSION] Attempting to load session for agentId:', agentId);
+      
       // Get session info
       const sessionResponse = await apiRequest('GET', `/api/session/${agentId}`);
       
       if (!sessionResponse.ok) {
         const error = await sessionResponse.json();
-        throw new Error(error.error);
+        console.error('[SESSION] Session lookup failed:', error);
+        throw new Error(error.error || 'Session not found');
       }
       
 			const raw = await sessionResponse.json();
