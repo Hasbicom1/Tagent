@@ -44,17 +44,21 @@ export async function createTables() {
     
     const client = await pool.connect();
     
-    // Real table creation
+    // Real table creation with ALL required columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_sessions (
         session_id VARCHAR(255) PRIMARY KEY,
         agent_id VARCHAR(255) NOT NULL,
         checkout_session_id VARCHAR(255),
         payment_intent_id VARCHAR(255),
-        expires_at TIMESTAMP NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         status VARCHAR(50) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        payment_verified BOOLEAN DEFAULT FALSE,
+        amount_paid NUMERIC(10, 2),
+        customer_email VARCHAR(255),
+        stripe_customer_id VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -143,24 +147,32 @@ export async function createUserSession(sessionData) {
 
     const client = await pool.connect();
     const result = await client.query(
-      `INSERT INTO user_sessions (session_id, agent_id, checkout_session_id, payment_intent_id, expires_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO user_sessions (session_id, agent_id, checkout_session_id, payment_intent_id, expires_at, status, payment_verified, amount_paid, customer_email, stripe_customer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (session_id) DO UPDATE SET
        status = EXCLUDED.status,
+       payment_verified = EXCLUDED.payment_verified,
+       amount_paid = EXCLUDED.amount_paid,
+       customer_email = EXCLUDED.customer_email,
+       stripe_customer_id = EXCLUDED.stripe_customer_id,
        updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
-        sessionData.session_id,
-        sessionData.agent_id,
-        sessionData.checkout_session_id,
-        sessionData.payment_intent_id,
-        sessionData.expires_at,
-        sessionData.status || 'active'
+        sessionData.session_id || sessionData.sessionId,
+        sessionData.agent_id || sessionData.agentId,
+        sessionData.checkout_session_id || sessionData.checkoutSessionId,
+        sessionData.payment_intent_id || sessionData.paymentIntentId,
+        sessionData.expires_at || sessionData.expiresAt,
+        sessionData.status || 'active',
+        sessionData.payment_verified || false,
+        sessionData.amount_paid || sessionData.amountPaid || 1.00,
+        sessionData.customer_email || sessionData.customerEmail || 'user@example.com',
+        sessionData.stripe_customer_id || sessionData.stripeCustomerId || null
       ]
     );
     client.release();
 
-    console.log(`✅ REAL Database: Created/updated session ${sessionData.session_id}`);
+    console.log(`✅ REAL Database: Created/updated session ${sessionData.session_id || sessionData.sessionId}`);
     return result.rows[0];
   } catch (error) {
     console.error('❌ REAL Database: createUserSession failed:', error);

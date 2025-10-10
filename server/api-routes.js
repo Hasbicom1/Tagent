@@ -195,9 +195,9 @@ router.post('/checkout-success', async (req, res) => {
     };
 
     try {
-      // Create session in database
-      const storedSession = await createUserSession(sessionData);
-      console.log('✅ DATABASE: Automation session stored with ID:', storedSession.id);
+           // Create session in database
+           const storedSession = await createUserSession(sessionData);
+           console.log('✅ DATABASE: Automation session stored with ID:', storedSession?.session_id || storedSession?.id);
       
       // Create session in real session manager if available
       if (global.realSessionManager) {
@@ -213,12 +213,12 @@ router.post('/checkout-success', async (req, res) => {
         }
       }
       
-      return res.status(200).json({
-        sessionId: automationSessionId,
-        agentId: automationSessionId,
-        expiresAt: expiresAt.toISOString(),
-        databaseId: storedSession.id
-      });
+           return res.status(200).json({
+             sessionId: automationSessionId,
+             agentId: automationSessionId,
+             expiresAt: expiresAt.toISOString(),
+             databaseId: storedSession?.session_id || storedSession?.id
+           });
     } catch (dbError) {
       console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
       return res.status(200).json({
