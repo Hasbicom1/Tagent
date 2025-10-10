@@ -1336,10 +1336,17 @@ setTimeout(async () => {
 try {
   const db = await initializeDatabase();
   if (db && db.connected) {
-    await createTables();
-    console.log('✅ PRODUCTION: REAL PostgreSQL database initialized and tables created');
+    console.log('✅ PRODUCTION: Database connected, creating tables...');
+    const tablesCreated = await createTables();
+    if (tablesCreated) {
+      console.log('✅ PRODUCTION: REAL PostgreSQL database initialized and tables created');
+    } else {
+      console.error('❌ PRODUCTION: Table creation failed');
+      process.exit(1);
+    }
   } else {
     console.error('❌ PRODUCTION: REAL Database initialization failed - NO MOCK FALLBACKS ALLOWED');
+    console.error('Database error:', db?.error);
     process.exit(1); // Exit if database fails - no mock fallbacks
   }
 } catch (error) {
@@ -1518,8 +1525,8 @@ async function initializeServer() {
       return;
     }
     
-    // Frontend viewer connections
-    if (request.url.startsWith('/ws/view/')) {
+    // Frontend viewer connections (both /ws/view/ and /ws/stream/ for compatibility)
+    if (request.url.startsWith('/ws/view/') || request.url.startsWith('/ws/stream/')) {
       const url = new URL(request.url, 'ws://localhost');
       const sessionId = url.pathname.split('/').pop();
       

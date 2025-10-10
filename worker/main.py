@@ -35,15 +35,15 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize in-browser automation service"""
-    logger.info("🚀 In-Browser Automation Worker starting...")
+    """Initialize live browser streaming service"""
+    logger.info("🚀 Live Browser Streaming Worker starting...")
     logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
     logger.info(f"📊 Port: {PORT}")
-    logger.info("✅ In-browser automation ready - NO VNC/PLAYWRIGHT")
+    logger.info("✅ Live browser streaming ready - REAL PLAYWRIGHT CDP")
     yield
     # Shutdown
     logger.info("🔄 Shutting down worker...")
-    logger.info("✅ In-browser automation worker shutdown")
+    logger.info("✅ Live browser streaming worker shutdown")
 
 # Initialize FastAPI with lifespan
 app = FastAPI(title="Live Browser Streaming Worker", version="6.0.0", lifespan=lifespan)

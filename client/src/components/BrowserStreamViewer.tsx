@@ -55,7 +55,7 @@ export function BrowserStreamViewer({
 
   const initializeLiveStream = () => {
     // Connect to backend WebSocket for live stream
-    const ws = new WebSocket(`wss://www.onedollaragent.ai/ws/view/${sessionId}`);
+    const ws = new WebSocket(`wss://www.onedollaragent.ai/ws/stream/${sessionId}`);
     wsRef.current = ws;
     
     let frameCount = 0;
