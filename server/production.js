@@ -1362,11 +1362,14 @@ console.log('✅ PRODUCTION: Real implementations are ENABLED for production dep
 // Initialize real session management
 let realSessionManager = null;
 try {
-  // Import and initialize real session manager
-  const { RealSessionManager } = await import('./session/real-session-manager.ts');
+  // Import and initialize real session manager (JavaScript version)
+  const { RealSessionManager } = await import('./session/real-session-manager.js');
   realSessionManager = new RealSessionManager();
   await realSessionManager.initialize();
   console.log('✅ PRODUCTION: Real session management initialized successfully');
+  
+  // Make session manager globally available
+  global.realSessionManager = realSessionManager;
 } catch (error) {
   console.error('❌ PRODUCTION: Real session management initialization failed:', error);
   console.log('⚠️ PRODUCTION: Continuing with basic session handling');

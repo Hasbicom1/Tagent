@@ -70,6 +70,9 @@ export default function Success() {
           expiresAt
         });
         
+        // Wait a moment for session to be fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Redirect immediately to the agent chat interface
         console.log('[DEBUG] Success page redirecting to:', `/live/agent/${agentId}`);
         console.log('[DEBUG] Agent ID:', agentId);

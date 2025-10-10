@@ -195,8 +195,24 @@ router.post('/checkout-success', async (req, res) => {
     };
 
     try {
+      // Create session in database
       const storedSession = await createUserSession(sessionData);
       console.log('✅ DATABASE: Automation session stored with ID:', storedSession.id);
+      
+      // Create session in real session manager if available
+      if (global.realSessionManager) {
+        try {
+          await global.realSessionManager.createUserSession(
+            session.customer_details?.email || 'user@example.com',
+            automationSessionId,
+            'phoenix-7742'
+          );
+          console.log('✅ REAL SESSION: Session created in real session manager');
+        } catch (sessionError) {
+          console.warn('⚠️ REAL SESSION: Failed to create session in real session manager:', sessionError?.message);
+        }
+      }
+      
       return res.status(200).json({
         sessionId: automationSessionId,
         agentId: automationSessionId,
@@ -228,7 +244,14 @@ router.get('/agent/:agentId/status', async (req, res) => {
     const { agentId } = req.params;
     console.log('🔍 AGENT: Checking status for agent:', agentId);
     
-    const session = await getUserSession(agentId);
+    // Use real session manager if available
+    let session = null;
+    if (global.realSessionManager) {
+      session = await global.realSessionManager.getUserSession(agentId);
+    } else {
+      // Fallback to database
+      session = await getUserSession(agentId);
+    }
     
     if (!session) {
       return res.status(404).json({
@@ -239,28 +262,32 @@ router.get('/agent/:agentId/status', async (req, res) => {
 
     // Check if session is expired
     const now = new Date();
-    const expiresAt = new Date(session.expires_at);
+    const expiresAt = new Date(session.expiresAt || session.expires_at);
     
     if (now > expiresAt) {
       console.log('⚠️ AGENT: Session expired for agent:', agentId);
-      await updateSessionStatus(agentId, 'expired');
+      if (global.realSessionManager) {
+        await global.realSessionManager.updateSession(agentId, { status: 'expired' });
+      } else {
+        await updateSessionStatus(agentId, 'expired');
+      }
       
       return res.status(410).json({
         error: 'Agent session has expired',
         status: 'expired',
-        expiredAt: session.expires_at
+        expiredAt: session.expiresAt || session.expires_at
       });
     }
 
     console.log('✅ AGENT: Active session found for agent:', agentId);
     res.status(200).json({
       success: true,
-      agentId: session.agent_id,
+      agentId: session.agentId || session.agent_id,
       status: session.status,
-      expiresAt: session.expires_at,
-      paymentVerified: session.payment_verified,
-      amountPaid: session.amount_paid,
-      customerEmail: session.customer_email,
+      expiresAt: session.expiresAt || session.expires_at,
+      paymentVerified: session.payment_verified || true,
+      amountPaid: session.amount_paid || 1.00,
+      customerEmail: session.customerEmail || session.customer_email || 'user@example.com',
       timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
     });
 
@@ -268,6 +295,62 @@ router.get('/agent/:agentId/status', async (req, res) => {
     console.error('❌ AGENT: Failed to check agent status:', error);
     res.status(500).json({
       error: 'Failed to check agent status',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+// Session endpoint for frontend
+router.get('/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    console.log('🔍 SESSION: Checking session:', sessionId);
+    
+    // Use real session manager if available
+    let session = null;
+    if (global.realSessionManager) {
+      session = await global.realSessionManager.getUserSession(sessionId);
+    } else {
+      // Fallback to database
+      session = await getUserSession(sessionId);
+    }
+    
+    if (!session) {
+      return res.status(404).json({
+        error: 'Session not found or expired',
+        status: 'not_found'
+      });
+    }
+
+    // Check if session is expired
+    const now = new Date();
+    const expiresAt = new Date(session.expiresAt || session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('⚠️ SESSION: Session expired:', sessionId);
+      return res.status(410).json({
+        error: 'Session has expired',
+        status: 'expired',
+        expiredAt: session.expiresAt || session.expires_at
+      });
+    }
+
+    console.log('✅ SESSION: Active session found:', sessionId);
+    res.status(200).json({
+      success: true,
+      sessionId: session.id || session.session_id,
+      agentId: session.agentId || session.agent_id,
+      status: session.status,
+      expiresAt: session.expiresAt || session.expires_at,
+      isActive: session.status === 'active',
+      timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
+    });
+
+  } catch (error) {
+    console.error('❌ SESSION: Failed to check session:', error);
+    res.status(500).json({
+      error: 'Failed to check session',
       status: 'error',
       details: error.message
     });

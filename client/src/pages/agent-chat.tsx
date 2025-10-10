@@ -71,7 +71,11 @@ export default function AgentChat() {
     }
 
 		console.log('[SESSION] Bootstrapping session for:', agentId);
-		loadSessionAndMessages();
+		
+		// Add a small delay to ensure session is created
+		setTimeout(() => {
+			loadSessionAndMessages();
+		}, 500);
   }, [agentId, setLocation]);
 
 	useEffect(() => {
@@ -115,7 +119,7 @@ export default function AgentChat() {
           description: "Your 24-hour session has expired. Please start a new session.",
           variant: "destructive",
         });
-        setLocation('/');
+        // Don't redirect - let user stay on page and see error
       }
     };
 
@@ -146,8 +150,8 @@ export default function AgentChat() {
       console.log('[DEBUG] Current URL:', window.location.href);
       console.log('[DEBUG] Agent ID from URL:', agentId);
       
-      // Get session info
-      const sessionResponse = await apiRequest('GET', `/api/session/${agentId}`);
+      // Get session info using agent status endpoint
+      const sessionResponse = await apiRequest('GET', `/api/agent/${agentId}/status`);
       
       console.log('[DEBUG] Session response status:', sessionResponse.status);
       console.log('[DEBUG] Session response ok:', sessionResponse.ok);
@@ -188,7 +192,7 @@ export default function AgentChat() {
           description: "Your 24-hour session has expired. Please start a new session.",
           variant: "destructive",
         });
-        setLocation('/');
+        // Don't redirect - let user stay on page and see error
       } else {
         toast({
           title: "Connection Error",
