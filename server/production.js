@@ -6,7 +6,7 @@
  */
 
 import http from 'http';
-import WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
 // Socket.IO realtime automation (events only; not used for VNC streaming)
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
@@ -1523,7 +1523,7 @@ async function initializeServer() {
       const url = new URL(request.url, 'ws://localhost');
       const sessionId = url.pathname.split('/').pop();
       
-      const wss = new WebSocket.Server({ noServer: true });
+      const wss = new WebSocketServer({ noServer: true });
       wss.handleUpgrade(request, socket, head, (ws) => {
         liveStreamRelay.addFrontendConnection(sessionId, ws);
       });

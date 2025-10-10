@@ -1,9 +1,9 @@
-import WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
 
 export class LiveStreamRelay {
   constructor(server) {
     // WebSocket server for worker connections
-    this.wss = new WebSocket.Server({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true });
     
     // Store frontend connections by sessionId
     this.frontendConnections = new Map();
@@ -25,7 +25,7 @@ export class LiveStreamRelay {
           
           // Forward frame to all frontend clients watching this session
           const frontendWs = this.frontendConnections.get(sessionId);
-          if (frontendWs && frontendWs.readyState === WebSocket.OPEN) {
+          if (frontendWs && frontendWs.readyState === 1) { // WebSocket.OPEN = 1
             frontendWs.send(data); // Forward raw frame data
           }
         } catch (err) {
