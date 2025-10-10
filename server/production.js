@@ -1539,28 +1539,35 @@ async function initializeServer() {
 
   // Handle WebSocket upgrades for live streaming
   server.on('upgrade', (request, socket, head) => {
-    // Worker stream connections
-    if (liveStreamRelay.handleUpgrade(request, socket, head)) {
-      return;
-    }
-    
-    // Frontend viewer connections (both /ws/view/ and /ws/stream/ for compatibility)
-    if (request.url.startsWith('/ws/view/') || request.url.startsWith('/ws/stream/')) {
-      const url = new URL(request.url, 'ws://localhost');
-      const sessionId = url.pathname.split('/').pop();
+    try {
+      // Worker stream connections
+      if (liveStreamRelay.handleUpgrade(request, socket, head)) {
+        return;
+      }
       
-      const wss = new WebSocketServer({ noServer: true });
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        liveStreamRelay.addFrontendConnection(sessionId, ws);
-      });
-    }
-    
-    // NEW: Race condition fix - WebSocket proxy for worker/client communication
-    if (request.url.startsWith('/ws/')) {
-      const wss = new WebSocketServer({ noServer: true });
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        handleWebSocketConnection(ws, request);
-      });
+      // Frontend viewer connections (both /ws/view/ and /ws/stream/ for compatibility)
+      if (request.url.startsWith('/ws/view/') || request.url.startsWith('/ws/stream/')) {
+        const url = new URL(request.url, 'ws://localhost');
+        const sessionId = url.pathname.split('/').pop();
+        
+        const wss = new WebSocketServer({ noServer: true });
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          liveStreamRelay.addFrontendConnection(sessionId, ws);
+        });
+        return;
+      }
+      
+      // NEW: Race condition fix - WebSocket proxy for worker/client communication
+      if (request.url.startsWith('/ws/') && !request.url.startsWith('/ws/stream/') && !request.url.startsWith('/ws/view/')) {
+        const wss = new WebSocketServer({ noServer: true });
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          handleWebSocketConnection(ws, request);
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('❌ WebSocket upgrade error:', error.message);
+      socket.destroy();
     }
   });
 
@@ -1570,6 +1577,12 @@ async function initializeServer() {
 
   function handleWebSocketConnection(ws, req) {
     console.log('🔌 WebSocket connection established');
+    
+    // Add error handling to prevent crashes
+    ws.on('error', (error) => {
+      console.error('❌ WebSocket error:', error.message);
+      // Don't crash the server, just log and close the connection
+    });
     
     ws.once('message', (msg) => {
       let obj;
