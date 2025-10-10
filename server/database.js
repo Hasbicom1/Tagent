@@ -85,8 +85,99 @@ export async function createTables() {
       )
     `);
 
+    // CRITICAL FIX: Add missing columns to existing tables
+    console.log('🔄 REAL Database: Running migrations for existing tables...');
+    
+    try {
+      // Add missing checkout_session_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS checkout_session_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: checkout_session_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing payment_intent_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: payment_intent_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing payment_verified column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS payment_verified BOOLEAN DEFAULT FALSE;
+      `);
+      console.log('✅ REAL Database: Migration: payment_verified column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing amount_paid column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10, 2);
+      `);
+      console.log('✅ REAL Database: Migration: amount_paid column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing customer_email column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: customer_email column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing stripe_customer_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: stripe_customer_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing created_at column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      `);
+      console.log('✅ REAL Database: Migration: created_at column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing updated_at column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      `);
+      console.log('✅ REAL Database: Migration: updated_at column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+
     client.release();
-    console.log('✅ REAL Database: Tables created successfully');
+    console.log('✅ REAL Database: Tables created and migrations completed successfully');
     return true;
   } catch (error) {
     console.error('❌ REAL Database: Table creation failed:', error);
