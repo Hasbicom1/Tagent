@@ -71,6 +71,9 @@ export default function Success() {
         });
         
         // Redirect immediately to the agent chat interface
+        console.log('[DEBUG] Success page redirecting to:', `/live/agent/${agentId}`);
+        console.log('[DEBUG] Agent ID:', agentId);
+        console.log('[DEBUG] Session data:', data);
         window.location.href = `/live/agent/${agentId}`;
 
       } catch (error) {
