@@ -53,13 +53,13 @@ class LiveBrowserAgent {
 
   // Initialize the browser frame for live control
   initializeBrowserFrame() {
-    // Find the browser iframe
-    this.browserFrame = document.querySelector('iframe[title="Live Browser - AI Agent Control"]');
+    // Find the browser automation container (in-browser automation, no iframe needed)
+    this.browserFrame = document.getElementById('live-browser-agent-DXyiI6TP');
     if (this.browserFrame) {
-      console.log('🌐 Live Browser: Browser frame found');
+      console.log('🌐 Live Browser: Browser automation container found');
       this.setupBrowserFrameListeners();
     } else {
-      console.warn('⚠️ Live Browser: Browser frame not found, retrying...');
+      console.warn('⚠️ Live Browser: Browser automation container not found, retrying...');
       setTimeout(() => this.initializeBrowserFrame(), 1000);
     }
   }
