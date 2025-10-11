@@ -228,6 +228,34 @@ router.post('/checkout-success', async (req, res) => {
         // Don't fail the checkout, just log the error
       }
 
+      // ⚠️ CRITICAL FIX: Store EVERYTHING in Redis
+      try {
+        const { getRedis } = await import('./redis-simple.js');
+        const redis = await getRedis();
+        
+        if (redis) {
+          await redis.hset(`session:${automationSessionId}`, {
+            'agent_id': uniqueAgentId,
+            'stripe_session_id': checkoutSessionId,
+            'status': 'queued',
+            'browser_ready': 'false',
+            'worker_ready': 'false',
+            'websocket_token': websocketToken,  // ⚠️ MUST STORE TOKEN!
+            'expires_at': expiresAt.toISOString(),
+            'created_at': new Date().toISOString()
+          });
+          
+          // Set expiration (24 hours + 1 hour buffer)
+          await redis.expire(`session:${automationSessionId}`, 25 * 60 * 60);
+          
+          console.log('✅ REDIS: Session stored with JWT token:', automationSessionId);
+        } else {
+          console.warn('⚠️ REDIS: Redis not available, JWT token not stored');
+        }
+      } catch (redisError) {
+        console.error('❌ REDIS: Failed to store session in Redis:', redisError.message);
+      }
+
       // CRITICAL FIX: Queue browser job after successful payment (with JWT token)
       if (isQueueAvailable()) {
         try {
@@ -240,6 +268,23 @@ router.post('/checkout-success', async (req, res) => {
         }
       } else {
         console.warn('⚠️ QUEUE: Queue not available, browser job not queued');
+      }
+
+      // ⚠️ CRITICAL FIX: Also add to simple Redis queue for worker
+      try {
+        const { getRedis } = await import('./redis-simple.js');
+        const redis = await getRedis();
+        
+        if (redis) {
+          await redis.rpush('browser:queue', JSON.stringify({
+            sessionId: automationSessionId,
+            agentId: uniqueAgentId,
+            timestamp: Date.now()
+          }));
+          console.log('✅ REDIS QUEUE: Browser job added to simple queue:', automationSessionId);
+        }
+      } catch (queueError) {
+        console.error('❌ REDIS QUEUE: Failed to add to simple queue:', queueError.message);
       }
       
            return res.status(200).json({
