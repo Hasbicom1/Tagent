@@ -72,17 +72,19 @@ async def provision_loop():
         logger.error(f"❌ WORKER: Redis connection failed: {e}")
         return
     
-    logger.info("👂 WORKER: Listening for sessions on 'provision_agent_queue'...")
+    logger.info("👂 WORKER: Listening for sessions on 'browser:queue'...")
     
     while True:
         try:
             # Block until we get a session to provision
             logger.debug("🔍 WORKER: Checking queue for new sessions...")
-            res = redis_conn.brpop("provision_agent_queue", timeout=5)
+            res = redis_conn.brpop("browser:queue", timeout=5)
             if res:
-                _, session_id_bytes = res
-                session_id = session_id_bytes.decode()
-                logger.info(f"🎯 WORKER: Received session to provision: {session_id}")
+                _, job_data_bytes = res
+                job_data = json.loads(job_data_bytes.decode())
+                session_id = job_data['sessionId']
+                agent_id = job_data['agentId']
+                logger.info(f"🎯 WORKER: Received job to provision: {session_id}")
                 logger.info(f"📊 WORKER: Active streams before: {len(active_streams)}")
                 
                 await start_agent_for_session(session_id)
