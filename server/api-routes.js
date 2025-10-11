@@ -388,7 +388,7 @@ router.get('/session/:sessionId', async (req, res) => {
 });
 
 // NEW: Session status API for race condition fix
-router.get('/api/session-status', async (req, res) => {
+router.get('/session-status', async (req, res) => {
   const { session } = req.query;
   
   console.log('🔍 Checking session status:', session);
@@ -402,7 +402,7 @@ router.get('/api/session-status', async (req, res) => {
   
   try {
     // Check Redis for session data
-    const { getRedis } = require('./redis-simple.js');
+    const { getRedis } = await import('./redis-simple.js');
     const redis = await getRedis();
     const sessionData = await redis.hgetall(`session:${session}`);
     

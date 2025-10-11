@@ -774,6 +774,63 @@ console.log('✅ PRODUCTION: API endpoints defined in api-routes.js');
 // Checkout success endpoint - using existing stripe webhook endpoint
 
 
+// CRITICAL FIX: Session status endpoint for race condition fix
+app.get('/api/session-status', async (req, res) => {
+  const { session } = req.query;
+  
+  console.log('🔍 Checking session status:', session);
+  
+  if (!session) {
+    return res.status(400).json({ 
+      error: 'Session ID required',
+      status: 'error'
+    });
+  }
+  
+  try {
+    // Check Redis for session data
+    const redis = await getRedis();
+    if (!redis) {
+      return res.status(500).json({
+        error: 'Redis not available',
+        status: 'error'
+      });
+    }
+    
+    const sessionData = await redis.hgetall(`session:${session}`);
+    
+    console.log('📊 Session data from Redis:', sessionData);
+    
+    if (!sessionData || Object.keys(sessionData).length === 0) {
+      return res.json({
+        status: 'not_found',
+        ready: false,
+        message: 'Session not found in Redis'
+      });
+    }
+    
+    // Check if worker has marked browser as ready
+    const isReady = sessionData.status === 'active' && 
+                    sessionData.browser_ready === 'true';
+    
+    return res.json({
+      status: sessionData.status || 'unknown',
+      ready: isReady,
+      browserReady: sessionData.browser_ready === 'true',
+      workerReady: sessionData.worker_ready === 'true',
+      timestamp: new Date().toISOString(),
+      debug: sessionData // Include full data for debugging
+    });
+    
+  } catch (error) {
+    console.error('❌ Error checking session status:', error);
+    return res.status(500).json({
+      error: 'Failed to check session status',
+      message: error.message
+    });
+  }
+});
+
 // FIXED: Session endpoints with proper expiry validation
 app.get('/api/session/:sessionId', async (req, res) => {
   console.log('📋 PRODUCTION: Session status requested for:', req.params.sessionId);
