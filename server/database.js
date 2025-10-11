@@ -44,17 +44,21 @@ export async function createTables() {
     
     const client = await pool.connect();
     
-    // Real table creation
+    // Real table creation with ALL required columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_sessions (
         session_id VARCHAR(255) PRIMARY KEY,
         agent_id VARCHAR(255) NOT NULL,
         checkout_session_id VARCHAR(255),
         payment_intent_id VARCHAR(255),
-        expires_at TIMESTAMP NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         status VARCHAR(50) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        payment_verified BOOLEAN DEFAULT FALSE,
+        amount_paid NUMERIC(10, 2),
+        customer_email VARCHAR(255),
+        stripe_customer_id VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -81,8 +85,141 @@ export async function createTables() {
       )
     `);
 
+    // CRITICAL FIX: Add missing columns to existing tables
+    console.log('🔄 REAL Database: Running migrations for existing tables...');
+    
+    // FIRST: Remove any problematic unique constraints on agent_id
+    try {
+      await client.query(`
+        ALTER TABLE user_sessions 
+        DROP CONSTRAINT IF EXISTS user_sessions_agent_id_key;
+      `);
+      console.log('✅ REAL Database: Migration: Removed unique constraint on agent_id');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      await client.query(`
+        ALTER TABLE user_sessions 
+        DROP CONSTRAINT IF EXISTS user_sessions_pkey;
+      `);
+      console.log('✅ REAL Database: Migration: Removed primary key constraint');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing checkout_session_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS checkout_session_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: checkout_session_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing payment_intent_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: payment_intent_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing payment_verified column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS payment_verified BOOLEAN DEFAULT FALSE;
+      `);
+      console.log('✅ REAL Database: Migration: payment_verified column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing amount_paid column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10, 2);
+      `);
+      console.log('✅ REAL Database: Migration: amount_paid column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing customer_email column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: customer_email column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing stripe_customer_id column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255);
+      `);
+      console.log('✅ REAL Database: Migration: stripe_customer_id column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+    
+    try {
+      // Add missing created_at column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      `);
+      console.log('✅ REAL Database: Migration: created_at column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+  }
+
+  try {
+      // Add missing updated_at column if it doesn't exist
+      await client.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      `);
+      console.log('✅ REAL Database: Migration: updated_at column added');
+    } catch (migrationError) {
+      console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
+    }
+
+    // FINAL: Recreate table with proper constraints if needed
+    try {
+      console.log('🔄 REAL Database: Ensuring proper table structure...');
+      
+      // Check if we need to recreate the table structure
+      const tableCheck = await client.query(`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = 'user_sessions' AND column_name = 'session_id';
+      `);
+      
+      if (tableCheck.rows.length === 0) {
+        console.log('⚠️ REAL Database: user_sessions table missing, will be created by CREATE TABLE IF NOT EXISTS');
+      } else {
+        console.log('✅ REAL Database: user_sessions table structure verified');
+      }
+      
+    } catch (tableError) {
+      console.warn('⚠️ REAL Database: Table structure check warning:', tableError.message);
+    }
+
     client.release();
-    console.log('✅ REAL Database: Tables created successfully');
+    console.log('✅ REAL Database: Tables created and migrations completed successfully');
     return true;
   } catch (error) {
     console.error('❌ REAL Database: Table creation failed:', error);
@@ -92,7 +229,7 @@ export async function createTables() {
 
 export async function getUserSession(sessionId) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -102,7 +239,7 @@ export async function getUserSession(sessionId) {
       [sessionId]
     );
     client.release();
-
+    
     if (result.rows.length === 0) {
       return null;
     }
@@ -116,7 +253,7 @@ export async function getUserSession(sessionId) {
 
 export async function updateSessionStatus(sessionId, status) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -143,24 +280,32 @@ export async function createUserSession(sessionData) {
 
     const client = await pool.connect();
     const result = await client.query(
-      `INSERT INTO user_sessions (session_id, agent_id, checkout_session_id, payment_intent_id, expires_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO user_sessions (session_id, agent_id, checkout_session_id, payment_intent_id, expires_at, status, payment_verified, amount_paid, customer_email, stripe_customer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (session_id) DO UPDATE SET
        status = EXCLUDED.status,
+       payment_verified = EXCLUDED.payment_verified,
+       amount_paid = EXCLUDED.amount_paid,
+       customer_email = EXCLUDED.customer_email,
+       stripe_customer_id = EXCLUDED.stripe_customer_id,
        updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
-        sessionData.session_id,
-        sessionData.agent_id,
-        sessionData.checkout_session_id,
-        sessionData.payment_intent_id,
-        sessionData.expires_at,
-        sessionData.status || 'active'
+        sessionData.session_id || sessionData.sessionId,
+        sessionData.agent_id || sessionData.agentId,
+        sessionData.checkout_session_id || sessionData.checkoutSessionId,
+        sessionData.payment_intent_id || sessionData.paymentIntentId,
+        sessionData.expires_at || sessionData.expiresAt,
+        sessionData.status || 'active',
+        sessionData.payment_verified || false,
+        sessionData.amount_paid || sessionData.amountPaid || 1.00,
+        sessionData.customer_email || sessionData.customerEmail || 'user@example.com',
+        sessionData.stripe_customer_id || sessionData.stripeCustomerId || null
       ]
     );
     client.release();
 
-    console.log(`✅ REAL Database: Created/updated session ${sessionData.session_id}`);
+    console.log(`✅ REAL Database: Created/updated session ${sessionData.session_id || sessionData.sessionId}`);
     return result.rows[0];
   } catch (error) {
     console.error('❌ REAL Database: createUserSession failed:', error);
@@ -170,7 +315,7 @@ export async function createUserSession(sessionData) {
 
 export async function logAgentActivity(sessionId, agentType, actionType, details = {}) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 

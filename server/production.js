@@ -113,6 +113,9 @@ const app = express();
 // Trust proxy for correct HTTPS detection behind Railway/NGINX
 app.set('trust proxy', 1);
 
+// Initialize Socket.IO for real-time communication
+const { Server } = require('socket.io');
+
 // Rate limit metrics (basic counters for observability)
 const rateLimitMetrics = {
   global429: 0,
@@ -771,6 +774,63 @@ console.log('✅ PRODUCTION: API endpoints defined in api-routes.js');
 // Checkout success endpoint - using existing stripe webhook endpoint
 
 
+// CRITICAL FIX: Session status endpoint for race condition fix
+app.get('/api/session-status', async (req, res) => {
+  const { session } = req.query;
+  
+  console.log('🔍 Checking session status:', session);
+  
+  if (!session) {
+    return res.status(400).json({ 
+      error: 'Session ID required',
+      status: 'error'
+    });
+  }
+  
+  try {
+    // Check Redis for session data
+    const redis = await getRedis();
+    if (!redis) {
+      return res.status(500).json({
+        error: 'Redis not available',
+        status: 'error'
+      });
+    }
+    
+    const sessionData = await redis.hgetall(`session:${session}`);
+    
+    console.log('📊 Session data from Redis:', sessionData);
+    
+    if (!sessionData || Object.keys(sessionData).length === 0) {
+      return res.json({
+        status: 'not_found',
+        ready: false,
+        message: 'Session not found in Redis'
+      });
+    }
+    
+    // Check if worker has marked browser as ready
+    const isReady = sessionData.status === 'active' && 
+                    sessionData.browser_ready === 'true';
+    
+    return res.json({
+      status: sessionData.status || 'unknown',
+      ready: isReady,
+      browserReady: sessionData.browser_ready === 'true',
+      workerReady: sessionData.worker_ready === 'true',
+      timestamp: new Date().toISOString(),
+      debug: sessionData // Include full data for debugging
+    });
+    
+  } catch (error) {
+    console.error('❌ Error checking session status:', error);
+    return res.status(500).json({
+      error: 'Failed to check session status',
+      message: error.message
+    });
+  }
+});
+
 // FIXED: Session endpoints with proper expiry validation
 app.get('/api/session/:sessionId', async (req, res) => {
   console.log('📋 PRODUCTION: Session status requested for:', req.params.sessionId);
@@ -975,6 +1035,7 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
   try {
     // Import database functions
     const { getUserSession } = await import('./database.js');
+    const { getRedis } = await import('./redis-simple.js');
     
     // Get real session from database
     const session = await getUserSession(req.params.sessionId);
@@ -988,11 +1049,25 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
       });
     }
     
+    // CRITICAL FIX: Get JWT token from Redis
+    let websocketToken = null;
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        const sessionData = await redis.hgetall(`session:${req.params.sessionId}`);
+        websocketToken = sessionData.websocket_token;
+        console.log('🔐 PRODUCTION: JWT token retrieved from Redis:', !!websocketToken);
+      }
+    } catch (redisError) {
+      console.warn('⚠️ PRODUCTION: Failed to get JWT token from Redis:', redisError.message);
+    }
+    
     res.json({
       sessionId: req.params.sessionId,
       status: session.status,
       expiresAt: session.expires_at,
       paymentVerified: session.payment_verified,
+      websocketToken: websocketToken, // ⚠️ CRITICAL: Add JWT token!
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1326,9 +1401,9 @@ app.get('/api/automation/:sessionId/screenshot-throttled', async (req, res) => {
 
 console.log('✅ PRODUCTION: Missing API endpoints added');
 
-// STEP 7.5: REAL session management endpoints (available but not active)
-console.log('🔧 PRODUCTION: REAL session management endpoints available but not active');
-console.log('ℹ️ PRODUCTION: Real session endpoints can be enabled for production deployment');
+// STEP 7.5: REAL session management endpoints (ENABLED FOR PRODUCTION)
+console.log('🔧 PRODUCTION: REAL session management endpoints ENABLED');
+console.log('✅ PRODUCTION: Real session endpoints are ACTIVE for production deployment');
 
 // STEP 8: Initialize REAL Database (NO MOCK FALLBACKS)
 console.log('🔧 PRODUCTION: Initializing REAL PostgreSQL database...');
@@ -1336,10 +1411,17 @@ setTimeout(async () => {
 try {
   const db = await initializeDatabase();
   if (db && db.connected) {
-    await createTables();
-    console.log('✅ PRODUCTION: REAL PostgreSQL database initialized and tables created');
+    console.log('✅ PRODUCTION: Database connected, creating tables...');
+    const tablesCreated = await createTables();
+    if (tablesCreated) {
+      console.log('✅ PRODUCTION: REAL PostgreSQL database initialized and tables created');
+  } else {
+      console.error('❌ PRODUCTION: Table creation failed');
+      process.exit(1);
+    }
   } else {
     console.error('❌ PRODUCTION: REAL Database initialization failed - NO MOCK FALLBACKS ALLOWED');
+    console.error('Database error:', db?.error);
     process.exit(1); // Exit if database fails - no mock fallbacks
   }
 } catch (error) {
@@ -1348,10 +1430,26 @@ try {
 }
 }, 1000);
 
-// STEP 9: REAL session management (available but not initialized to avoid startup errors)
-console.log('🔧 PRODUCTION: REAL session management available but not initialized');
-console.log('ℹ️ PRODUCTION: Real implementations can be enabled for production deployment');
+// STEP 9: REAL session management (INITIALIZED FOR PRODUCTION)
+console.log('🔧 PRODUCTION: REAL session management INITIALIZING...');
+console.log('✅ PRODUCTION: Real implementations are ENABLED for production deployment');
+
+// Initialize real session management
 let realSessionManager = null;
+try {
+  // Import and initialize real session manager (JavaScript version)
+  const { RealSessionManager } = await import('./session/real-session-manager.js');
+  realSessionManager = new RealSessionManager();
+  await realSessionManager.initialize();
+  console.log('✅ PRODUCTION: Real session management initialized successfully');
+  
+  // Make session manager globally available
+  global.realSessionManager = realSessionManager;
+} catch (error) {
+  console.error('❌ PRODUCTION: Real session management initialization failed:', error);
+  console.log('⚠️ PRODUCTION: Continuing with basic session handling');
+  // Don't exit - continue with basic session handling
+}
 
 // STEP 10: Error handling middleware
 app.use((err, req, res, next) => {
@@ -1513,22 +1611,33 @@ async function initializeServer() {
 
   // Handle WebSocket upgrades for live streaming
   server.on('upgrade', (request, socket, head) => {
-    // Worker stream connections
-    if (liveStreamRelay.handleUpgrade(request, socket, head)) {
-      return;
-    }
-    
-    // Frontend viewer connections
-    if (request.url.startsWith('/ws/view/')) {
-      const url = new URL(request.url, 'ws://localhost');
-      const sessionId = url.pathname.split('/').pop();
+    try {
+      // Worker stream connections
+      if (liveStreamRelay.handleUpgrade(request, socket, head)) {
+        return;
+      }
       
-      const wss = new WebSocketServer({ noServer: true });
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        liveStreamRelay.addFrontendConnection(sessionId, ws);
-      });
+      // Frontend viewer connections (both /ws/view/ and /ws/stream/ for compatibility)
+      if (request.url.startsWith('/ws/view/') || request.url.startsWith('/ws/stream/')) {
+        const url = new URL(request.url, 'ws://localhost');
+        const sessionId = url.pathname.split('/').pop();
+        
+        const wss = new WebSocketServer({ noServer: true });
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          liveStreamRelay.addFrontendConnection(sessionId, ws);
+        });
+        return;
+      }
+      
+      // REMOVED: WebSocket proxy causing protocol conflicts
+      // The existing Socket.IO and live stream relay handle all WebSocket connections
+    } catch (error) {
+      console.error('❌ WebSocket upgrade error:', error.message);
+      socket.destroy();
     }
   });
+
+  // REMOVED: WebSocket proxy handler - using existing Socket.IO and live stream relay
 
   // VNC CODE REMOVED - Using in-browser automation instead
 
@@ -1742,3 +1851,303 @@ app.get('/api/health/details', async (req, res) => {
 });
 
 // DUPLICATE SERVER INITIALIZATION REMOVED - Server already created and listening above
+
+// ===== DEBUG ENDPOINTS FOR TROUBLESHOOTING =====
+console.log('🔧 PRODUCTION: Adding debug endpoints for troubleshooting...');
+
+// Debug endpoint for live stream status
+app.get('/api/debug/live-stream/:sessionId', async (req, res) => {
+  console.log('🔍 DEBUG: Live stream status requested for:', req.params.sessionId);
+  try {
+    const sessionId = req.params.sessionId;
+    
+    // Check Redis for session data
+    let redisStatus = 'disconnected';
+    let sessionData = null;
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        redisStatus = 'connected';
+        sessionData = await redis.hgetall(`session:${sessionId}`);
+      }
+    } catch (error) {
+      console.warn('⚠️ DEBUG: Redis check failed:', error.message);
+    }
+    
+    // Check if session exists in database
+    let dbSession = null;
+    try {
+      const { getUserSession } = await import('./database.js');
+      dbSession = await getUserSession(sessionId);
+    } catch (error) {
+      console.warn('⚠️ DEBUG: Database check failed:', error.message);
+    }
+    
+    res.json({
+      sessionId,
+      timestamp: new Date().toISOString(),
+      redis: {
+        status: redisStatus,
+        sessionData: sessionData || {}
+      },
+      database: {
+        session: dbSession ? {
+          id: dbSession.id,
+          status: dbSession.status,
+          expiresAt: dbSession.expires_at,
+          paymentVerified: dbSession.payment_verified
+        } : null
+      },
+      liveStream: {
+        activeConnections: liveStreamRelay?.frontendConnections?.size || 0,
+        hasFrontendConnection: liveStreamRelay?.frontendConnections?.has(sessionId) || false
+      }
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Live stream status check failed:', error);
+    res.status(500).json({
+      error: 'Debug check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for Redis frame channels
+app.get('/api/debug/redis-frames', async (req, res) => {
+  console.log('🔍 DEBUG: Redis frame channels check requested');
+  try {
+    const redis = await getRedis();
+    if (!redis) {
+      return res.status(503).json({
+        error: 'Redis not available',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Get all browser frame channels
+    const channels = await redis.pubsub('CHANNELS', 'browser:frames:*');
+    
+    res.json({
+      channels: channels || [],
+      channelCount: channels?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Redis frames check failed:', error);
+    res.status(500).json({
+      error: 'Redis frames check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for WebSocket connections
+app.get('/api/debug/websocket-connections', async (req, res) => {
+  console.log('🔍 DEBUG: WebSocket connections check requested');
+  try {
+    const connections = {
+      liveStreamRelay: {
+        frontendConnections: liveStreamRelay?.frontendConnections?.size || 0,
+        hasRedisSubscriber: !!liveStreamRelay?.redisSubscriber
+      },
+      realtimeAutomation: {
+        // Socket.IO connections are handled internally
+        available: true
+      }
+    };
+    
+    res.json({
+      connections,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: WebSocket connections check failed:', error);
+    res.status(500).json({
+      error: 'WebSocket connections check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for environment variables
+app.get('/api/debug/env', async (req, res) => {
+  console.log('🔍 DEBUG: Environment variables check requested');
+  try {
+    const envVars = {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      REDIS_URL: process.env.REDIS_URL ? '***configured***' : 'not set',
+      REDIS_PUBLIC_URL: process.env.REDIS_PUBLIC_URL ? '***configured***' : 'not set',
+      JWT_SECRET: process.env.JWT_SECRET ? '***configured***' : 'not set',
+      GROQ_API_KEY: process.env.GROQ_API_KEY ? '***configured***' : 'not set',
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '***configured***' : 'not set',
+      DATABASE_URL: process.env.DATABASE_URL ? '***configured***' : 'not set'
+    };
+    
+    res.json({
+      environment: envVars,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Environment check failed:', error);
+    res.status(500).json({
+      error: 'Environment check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+console.log('✅ PRODUCTION: Debug endpoints added for troubleshooting');
+
+// ===== COMPREHENSIVE TEST ENDPOINT =====
+console.log('🔧 PRODUCTION: Adding comprehensive test endpoint...');
+
+// Test complete end-to-end flow
+app.get('/api/test-complete-flow', async (req, res) => {
+  console.log('🧪 TEST: Complete flow test requested');
+  try {
+    const testResults = {
+      timestamp: new Date().toISOString(),
+      tests: {}
+    };
+    
+    // Test 1: Redis Connection
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        testResults.tests.redis = { status: 'connected', message: 'Redis connection successful' };
+      } else {
+        testResults.tests.redis = { status: 'disconnected', message: 'Redis not available' };
+      }
+    } catch (error) {
+      testResults.tests.redis = { status: 'error', message: error.message };
+    }
+    
+    // Test 2: Database Connection
+    try {
+      const { getDatabase } = await import('./database.js');
+      const db = getDatabase();
+      if (db) {
+        const result = await db.query('SELECT 1');
+        testResults.tests.database = { status: 'connected', message: 'Database connection successful' };
+      } else {
+        testResults.tests.database = { status: 'disconnected', message: 'Database not available' };
+      }
+    } catch (error) {
+      testResults.tests.database = { status: 'error', message: error.message };
+    }
+    
+    // Test 3: JWT Utils
+    try {
+      const { generateWebSocketToken, verifyWebSocketToken } = await import('./jwt-utils.js');
+      const testToken = generateWebSocketToken('test-session', 'test-agent');
+      const decoded = verifyWebSocketToken(testToken);
+      testResults.tests.jwt = { 
+        status: 'working', 
+        message: 'JWT generation and verification successful',
+        testToken: testToken.substring(0, 20) + '...'
+      };
+    } catch (error) {
+      testResults.tests.jwt = { status: 'error', message: error.message };
+    }
+    
+    // Test 4: Live Stream Relay
+    try {
+      const hasRelay = !!liveStreamRelay;
+      const hasFrontendConnections = !!liveStreamRelay?.frontendConnections;
+      const hasRedisSubscriber = !!liveStreamRelay?.redisSubscriber;
+      
+      testResults.tests.liveStreamRelay = {
+        status: hasRelay ? 'initialized' : 'not initialized',
+        message: `Relay: ${hasRelay}, Frontend: ${hasFrontendConnections}, Redis: ${hasRedisSubscriber}`,
+        frontendConnections: liveStreamRelay?.frontendConnections?.size || 0
+      };
+    } catch (error) {
+      testResults.tests.liveStreamRelay = { status: 'error', message: error.message };
+    }
+    
+    // Test 5: WebSocket Server
+    try {
+      const hasWebSocketServer = !!liveStreamRelay?.wss;
+      testResults.tests.webSocketServer = {
+        status: hasWebSocketServer ? 'initialized' : 'not initialized',
+        message: `WebSocket server: ${hasWebSocketServer}`
+      };
+    } catch (error) {
+      testResults.tests.webSocketServer = { status: 'error', message: error.message };
+    }
+    
+    // Test 6: Environment Variables
+    const requiredEnvVars = ['NODE_ENV', 'PORT', 'JWT_SECRET'];
+    const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    
+    testResults.tests.environment = {
+      status: missingEnvVars.length === 0 ? 'complete' : 'incomplete',
+      message: missingEnvVars.length === 0 ? 'All required environment variables set' : `Missing: ${missingEnvVars.join(', ')}`,
+      missing: missingEnvVars
+    };
+    
+    // Test 7: API Routes
+    try {
+      const testRoutes = [
+        '/api/health',
+        '/api/debug/env',
+        '/api/debug/websocket-connections'
+      ];
+      
+      const routeTests = [];
+      for (const route of testRoutes) {
+        try {
+          const response = await fetch(`http://localhost:${port}${route}`);
+          routeTests.push({
+            route,
+            status: response.ok ? 'working' : 'error',
+            statusCode: response.status
+          });
+        } catch (error) {
+          routeTests.push({
+            route,
+            status: 'error',
+            error: error.message
+          });
+        }
+      }
+      
+      testResults.tests.apiRoutes = {
+        status: routeTests.every(r => r.status === 'working') ? 'working' : 'partial',
+        message: `API routes test completed`,
+        routes: routeTests
+      };
+    } catch (error) {
+      testResults.tests.apiRoutes = { status: 'error', message: error.message };
+    }
+    
+    // Overall Status
+    const allTests = Object.values(testResults.tests);
+    const workingTests = allTests.filter(test => test.status === 'working' || test.status === 'connected' || test.status === 'initialized' || test.status === 'complete');
+    const totalTests = allTests.length;
+    
+    testResults.overall = {
+      status: workingTests.length === totalTests ? 'all_passing' : 'partial',
+      message: `${workingTests.length}/${totalTests} tests passing`,
+      score: Math.round((workingTests.length / totalTests) * 100)
+    };
+    
+    res.json(testResults);
+  } catch (error) {
+    console.error('❌ TEST: Complete flow test failed:', error);
+    res.status(500).json({
+      error: 'Test failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+console.log('✅ PRODUCTION: Comprehensive test endpoint added');

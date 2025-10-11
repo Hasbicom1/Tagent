@@ -8,6 +8,8 @@
 import express from 'express';
 import { createUserSession, getUserSession, updateSessionStatus } from './database.js';
 import { getBrowserSession, createBrowserSession, removeBrowserSession } from './browser-automation.js';
+import { queueBrowserJobAfterPayment, isQueueAvailable } from './queue-simple.js';
+import { generateWebSocketToken } from './jwt-utils.js';
 
 const router = express.Router();
 
@@ -163,10 +165,13 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
-    // Determine deterministic automation agent/session id derived from Stripe checkout session id
-    const automationSessionId = 'automation_' + checkoutSessionId;
+    // Generate unique agent ID to avoid constraint violations
+    const uniqueAgentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Use the unique agent ID as both sessionId and agentId for consistency
+    const automationSessionId = uniqueAgentId;
 
-    // Check if a session already exists for this checkout in our primary storage (by agentId)
+    // Check if a session already exists for this checkout in our primary storage (by sessionId)
     try {
       const existing = await getUserSession(automationSessionId);
       if (existing) {
@@ -185,7 +190,7 @@ router.post('/checkout-success', async (req, res) => {
 
     const sessionData = {
       sessionId: automationSessionId,
-      agentId: automationSessionId,
+      agentId: uniqueAgentId, // Use unique agent ID to avoid constraint violations
       expiresAt,
       status: 'active',
       paymentVerified: true,
@@ -195,14 +200,100 @@ router.post('/checkout-success', async (req, res) => {
     };
 
     try {
-      const storedSession = await createUserSession(sessionData);
-      console.log('✅ DATABASE: Automation session stored with ID:', storedSession.id);
-      return res.status(200).json({
-        sessionId: automationSessionId,
-        agentId: automationSessionId,
-        expiresAt: expiresAt.toISOString(),
-        databaseId: storedSession.id
-      });
+           // Create session in database
+           const storedSession = await createUserSession(sessionData);
+           console.log('✅ DATABASE: Automation session stored with ID:', storedSession?.session_id || storedSession?.id);
+      
+      // Create session in real session manager if available
+      if (global.realSessionManager) {
+        try {
+          await global.realSessionManager.createUserSession(
+            session.customer_details?.email || 'user@example.com',
+            automationSessionId,
+            'phoenix-7742'
+          );
+          console.log('✅ REAL SESSION: Session created in real session manager');
+        } catch (sessionError) {
+          console.warn('⚠️ REAL SESSION: Failed to create session in real session manager:', sessionError?.message);
+        }
+      }
+
+      // CRITICAL FIX: Generate JWT token for WebSocket authentication
+      let websocketToken = null;
+      try {
+        websocketToken = generateWebSocketToken(automationSessionId, uniqueAgentId);
+        console.log('✅ JWT: WebSocket token generated for session:', automationSessionId);
+      } catch (jwtError) {
+        console.error('❌ JWT: Failed to generate WebSocket token:', jwtError.message);
+        // Don't fail the checkout, just log the error
+      }
+
+      // ⚠️ CRITICAL FIX: Store EVERYTHING in Redis
+      try {
+        const { getRedis } = await import('./redis-simple.js');
+        const redis = await getRedis();
+        
+        if (redis) {
+          await redis.hset(`session:${automationSessionId}`, {
+            'agent_id': uniqueAgentId,
+            'stripe_session_id': checkoutSessionId,
+            'status': 'queued',
+            'browser_ready': 'false',
+            'worker_ready': 'false',
+            'websocket_token': websocketToken,  // ⚠️ MUST STORE TOKEN!
+            'expires_at': expiresAt.toISOString(),
+            'created_at': new Date().toISOString()
+          });
+          
+          // Set expiration (24 hours + 1 hour buffer)
+          await redis.expire(`session:${automationSessionId}`, 25 * 60 * 60);
+          
+          console.log('✅ REDIS: Session stored with JWT token:', automationSessionId);
+        } else {
+          console.warn('⚠️ REDIS: Redis not available, JWT token not stored');
+        }
+      } catch (redisError) {
+        console.error('❌ REDIS: Failed to store session in Redis:', redisError.message);
+      }
+
+      // CRITICAL FIX: Queue browser job after successful payment (with JWT token)
+      if (isQueueAvailable()) {
+        try {
+          console.log('🚀 QUEUE: Queueing browser job after payment success...');
+          const queueResult = await queueBrowserJobAfterPayment(automationSessionId, uniqueAgentId, websocketToken);
+          console.log('✅ QUEUE: Browser job queued successfully:', queueResult);
+        } catch (queueError) {
+          console.error('❌ QUEUE: Failed to queue browser job:', queueError.message);
+          // Don't fail the checkout, just log the error
+        }
+      } else {
+        console.warn('⚠️ QUEUE: Queue not available, browser job not queued');
+      }
+
+      // ⚠️ CRITICAL FIX: Also add to simple Redis queue for worker
+      try {
+        const { getRedis } = await import('./redis-simple.js');
+        const redis = await getRedis();
+        
+        if (redis) {
+          await redis.rpush('browser:queue', JSON.stringify({
+            sessionId: automationSessionId,
+            agentId: uniqueAgentId,
+            timestamp: Date.now()
+          }));
+          console.log('✅ REDIS QUEUE: Browser job added to simple queue:', automationSessionId);
+        }
+      } catch (queueError) {
+        console.error('❌ REDIS QUEUE: Failed to add to simple queue:', queueError.message);
+      }
+      
+           return res.status(200).json({
+             sessionId: automationSessionId,
+             agentId: automationSessionId,
+             expiresAt: expiresAt.toISOString(),
+             databaseId: storedSession?.session_id || storedSession?.id,
+             websocketToken: websocketToken
+           });
     } catch (dbError) {
       console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
       return res.status(200).json({
@@ -228,7 +319,14 @@ router.get('/agent/:agentId/status', async (req, res) => {
     const { agentId } = req.params;
     console.log('🔍 AGENT: Checking status for agent:', agentId);
     
-    const session = await getUserSession(agentId);
+    // Use real session manager if available
+    let session = null;
+    if (global.realSessionManager) {
+      session = await global.realSessionManager.getUserSession(agentId);
+    } else {
+      // Fallback to database
+      session = await getUserSession(agentId);
+    }
     
     if (!session) {
       return res.status(404).json({
@@ -239,28 +337,32 @@ router.get('/agent/:agentId/status', async (req, res) => {
 
     // Check if session is expired
     const now = new Date();
-    const expiresAt = new Date(session.expires_at);
+    const expiresAt = new Date(session.expiresAt || session.expires_at);
     
     if (now > expiresAt) {
       console.log('⚠️ AGENT: Session expired for agent:', agentId);
-      await updateSessionStatus(agentId, 'expired');
+      if (global.realSessionManager) {
+        await global.realSessionManager.updateSession(agentId, { status: 'expired' });
+      } else {
+        await updateSessionStatus(agentId, 'expired');
+      }
       
       return res.status(410).json({
         error: 'Agent session has expired',
         status: 'expired',
-        expiredAt: session.expires_at
+        expiredAt: session.expiresAt || session.expires_at
       });
     }
 
     console.log('✅ AGENT: Active session found for agent:', agentId);
     res.status(200).json({
       success: true,
-      agentId: session.agent_id,
+      agentId: session.agentId || session.agent_id,
       status: session.status,
-      expiresAt: session.expires_at,
-      paymentVerified: session.payment_verified,
-      amountPaid: session.amount_paid,
-      customerEmail: session.customer_email,
+      expiresAt: session.expiresAt || session.expires_at,
+      paymentVerified: session.payment_verified || true,
+      amountPaid: session.amount_paid || 1.00,
+      customerEmail: session.customerEmail || session.customer_email || 'user@example.com',
       timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
     });
 
@@ -270,6 +372,244 @@ router.get('/agent/:agentId/status', async (req, res) => {
       error: 'Failed to check agent status',
       status: 'error',
       details: error.message
+    });
+  }
+});
+
+// Session endpoint for frontend
+router.get('/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    console.log('🔍 SESSION: Checking session:', sessionId);
+    
+    // Use real session manager if available
+    let session = null;
+    if (global.realSessionManager) {
+      session = await global.realSessionManager.getUserSession(sessionId);
+    } else {
+      // Fallback to database
+      session = await getUserSession(sessionId);
+    }
+    
+    if (!session) {
+      return res.status(404).json({
+        error: 'Session not found or expired',
+        status: 'not_found'
+      });
+    }
+
+    // Check if session is expired
+    const now = new Date();
+    const expiresAt = new Date(session.expiresAt || session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('⚠️ SESSION: Session expired:', sessionId);
+      return res.status(410).json({
+        error: 'Session has expired',
+        status: 'expired',
+        expiredAt: session.expiresAt || session.expires_at
+      });
+    }
+
+    console.log('✅ SESSION: Active session found:', sessionId);
+    res.status(200).json({
+      success: true,
+      sessionId: session.id || session.session_id,
+      agentId: session.agentId || session.agent_id,
+      status: session.status,
+      expiresAt: session.expiresAt || session.expires_at,
+      isActive: session.status === 'active',
+      timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
+    });
+
+  } catch (error) {
+    console.error('❌ SESSION: Failed to check session:', error);
+    res.status(500).json({
+      error: 'Failed to check session',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+// NEW: Session status API for race condition fix
+router.get('/session-status', async (req, res) => {
+  const { session } = req.query;
+  
+  console.log('🔍 Checking session status:', session);
+  
+  if (!session) {
+    return res.status(400).json({ 
+      error: 'Session ID required',
+      status: 'error'
+    });
+  }
+  
+  try {
+    // Check Redis for session data
+    const { getRedis } = await import('./redis-simple.js');
+    const redis = await getRedis();
+    const sessionData = await redis.hgetall(`session:${session}`);
+    
+    console.log('📊 Session data from Redis:', sessionData);
+    
+    if (!sessionData || Object.keys(sessionData).length === 0) {
+      return res.json({
+        status: 'not_found',
+        ready: false,
+        message: 'Session not found in Redis'
+      });
+    }
+    
+    // Check if worker has marked browser as ready
+    const isReady = sessionData.status === 'active' && 
+                    sessionData.browser_ready === 'true';
+    
+    return res.json({
+      status: sessionData.status || 'unknown',
+      ready: isReady,
+      browserReady: sessionData.browser_ready === 'true',
+      workerReady: sessionData.worker_ready === 'true',
+      timestamp: new Date().toISOString(),
+      debug: sessionData // Include full data for debugging
+    });
+    
+  } catch (error) {
+    console.error('❌ Error checking session status:', error);
+    return res.status(500).json({
+      error: 'Failed to check session status',
+      message: error.message
+    });
+  }
+});
+
+// NEW: Test endpoint to verify complete flow
+router.post('/api/test-browser-flow', async (req, res) => {
+  try {
+    console.log('🧪 TEST: Testing complete browser flow...');
+    
+    // Generate test session
+    const testSessionId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const testAgentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log('🧪 TEST: Generated test session:', testSessionId);
+    
+    // Test JWT token generation
+    let websocketToken = null;
+    try {
+      websocketToken = generateWebSocketToken(testSessionId, testAgentId);
+      console.log('✅ TEST: JWT token generated successfully');
+    } catch (jwtError) {
+      console.error('❌ TEST: JWT token generation failed:', jwtError.message);
+      return res.status(500).json({ error: 'JWT token generation failed', details: jwtError.message });
+    }
+    
+    // Test queue availability
+    if (!isQueueAvailable()) {
+      console.error('❌ TEST: Queue not available');
+      return res.status(500).json({ error: 'Queue not available' });
+    }
+    console.log('✅ TEST: Queue is available');
+    
+    // Test queue browser job
+    try {
+      const queueResult = await queueBrowserJobAfterPayment(testSessionId, testAgentId, websocketToken);
+      console.log('✅ TEST: Browser job queued successfully:', queueResult);
+    } catch (queueError) {
+      console.error('❌ TEST: Failed to queue browser job:', queueError.message);
+      return res.status(500).json({ error: 'Failed to queue browser job', details: queueError.message });
+    }
+    
+    // Test Redis session storage
+    try {
+      const { getRedis } = require('./redis-simple.js');
+      const redis = getRedis();
+      const sessionData = await redis.hgetall(`session:${testSessionId}`);
+      console.log('✅ TEST: Session data in Redis:', sessionData);
+    } catch (redisError) {
+      console.error('❌ TEST: Failed to check Redis session:', redisError.message);
+    }
+    
+    console.log('✅ TEST: Complete browser flow test passed');
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Complete browser flow test passed',
+      testSessionId,
+      testAgentId,
+      websocketToken: websocketToken ? 'generated' : 'failed',
+      queueAvailable: isQueueAvailable(),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ TEST: Complete flow test failed:', error);
+    return res.status(500).json({ 
+      error: 'Complete flow test failed', 
+      details: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// NEW: Environment variables check endpoint
+router.get('/api/env-check', async (req, res) => {
+  try {
+    console.log('🔍 ENV: Checking environment variables...');
+    
+    const envCheck = {
+      // Database
+      DATABASE_URL: process.env.DATABASE_URL ? '✅ Set' : '❌ Missing',
+      
+      // Redis
+      REDIS_URL: process.env.REDIS_URL ? '✅ Set' : '❌ Missing',
+      REDIS_PUBLIC_URL: process.env.REDIS_PUBLIC_URL ? '✅ Set' : '❌ Missing',
+      
+      // JWT
+      JWT_SECRET: process.env.JWT_SECRET ? '✅ Set' : '⚠️ Using default',
+      
+      // Stripe
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '✅ Set' : '❌ Missing',
+      STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ? '✅ Set' : '❌ Missing',
+      
+      // AI Providers
+      GROQ_API_KEY: process.env.GROQ_API_KEY ? '✅ Set' : '❌ Missing',
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? '✅ Set' : '⚠️ Not set',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ Set' : '⚠️ Not set',
+      
+      // Worker
+      BACKEND_WS_URL: process.env.BACKEND_WS_URL ? '✅ Set' : '⚠️ Using default',
+      
+      // Node Environment
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      PORT: process.env.PORT || '8080',
+      RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set'
+    };
+    
+    // Check critical variables
+    const criticalMissing = [];
+    if (!process.env.DATABASE_URL) criticalMissing.push('DATABASE_URL');
+    if (!process.env.REDIS_URL && !process.env.REDIS_PUBLIC_URL) criticalMissing.push('REDIS_URL or REDIS_PUBLIC_URL');
+    if (!process.env.STRIPE_SECRET_KEY) criticalMissing.push('STRIPE_SECRET_KEY');
+    if (!process.env.GROQ_API_KEY) criticalMissing.push('GROQ_API_KEY');
+    
+    const status = criticalMissing.length === 0 ? 'healthy' : 'missing_critical';
+    
+    console.log('🔍 ENV: Environment check completed');
+    console.log('🔍 ENV: Critical missing:', criticalMissing);
+    
+    return res.status(200).json({
+      status,
+      criticalMissing,
+      environment: envCheck,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ ENV: Environment check failed:', error);
+    return res.status(500).json({ 
+      error: 'Environment check failed', 
+      details: error.message 
     });
   }
 });

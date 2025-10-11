@@ -25,6 +25,8 @@ export function BrowserStreamViewer({
   const [fps, setFps] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState('Initializing...');
+  const [isReady, setIsReady] = useState(false);
 
   // Real-time WebSocket connection for automation commands
   const {
@@ -42,8 +44,8 @@ export function BrowserStreamViewer({
     console.log('[LIVE_STREAM] Session ID:', sessionId);
     console.log('[LIVE_STREAM] Agent ID:', agentId);
     
-    // Connect to live stream WebSocket
-    initializeLiveStream();
+    // CRITICAL FIX: Poll session status until worker is ready
+    pollSessionStatus();
     
     // Connect to WebSocket for real-time automation commands
     if (agentId) {
@@ -53,50 +55,126 @@ export function BrowserStreamViewer({
     setIsLoading(false);
   }, [sessionId, agentId, workerUrl]);
 
+  // CRITICAL FIX: Poll session status until worker is ready
+  const pollSessionStatus = async () => {
+    let pollCount = 0;
+    const MAX_POLLS = 30; // 60 seconds max wait time
+    
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/session-status?session=${sessionId}`);
+        const data = await response.json();
+        
+        console.log(`[POLL ${pollCount}] Session status:`, data);
+        setStatus(`Waiting for browser to start... (${data.status})`);
+        
+        if (data.status === 'ready' && data.workerConnected) {
+          console.log('✅ Worker is ready! Starting WebSocket connection...');
+          setIsReady(true);
+          setStatus('Connected');
+          
+          // NOW connect WebSocket
+          initializeLiveStream();
+        } else if (data.status === 'error') {
+          console.error('❌ Worker setup failed');
+          setError('Failed to initialize AI agent. Please try again.');
+          setStatus('Failed');
+        } else {
+          pollCount++;
+          
+          if (pollCount >= MAX_POLLS) {
+            console.error('❌ Session not ready in time');
+            setError('Timeout: Browser failed to start');
+            setStatus('Timeout');
+          } else {
+            // Wait 2 seconds before next poll
+            setTimeout(poll, 2000);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error polling session status:', err);
+        setError('Failed to check session status');
+        setStatus('Error');
+      }
+    };
+    
+    // Start polling
+    poll();
+  };
+
   const initializeLiveStream = () => {
-    // Connect to backend WebSocket for live stream
-    const ws = new WebSocket(`wss://www.onedollaragent.ai/ws/view/${sessionId}`);
+    // Get JWT token from session storage
+    const jwtToken = sessionStorage.getItem('websocket_token');
+    
+    if (!jwtToken) {
+      console.error('❌ No JWT token available for WebSocket authentication');
+      setError('Authentication token missing. Please refresh the page.');
+      return;
+    }
+
+    // Connect to backend WebSocket for live stream WITH JWT token
+    const wsUrl = `wss://www.onedollaragent.ai/ws/stream/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
+    console.log('🔌 Connecting to WebSocket with JWT authentication...');
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     
     let frameCount = 0;
     let lastTime = Date.now();
     
     ws.onopen = () => {
-      console.log('✅ Connected to live stream');
+      console.log('✅ WebSocket connected with JWT authentication');
       setIsConnected(true);
     };
     
     ws.onmessage = (event) => {
       try {
         const frame = JSON.parse(event.data);
+        console.log('📸 Frame received:', { type: frame.type, hasData: !!frame.data, sessionId: frame.sessionId });
         
-        // Render frame on canvas
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        
-        // Create image from Base64 JPEG
-        const img = new Image();
-        img.onload = () => {
-          // Set canvas size to match image
-          canvas.width = img.width;
-          canvas.height = img.height;
-          
-          // Draw frame
-          ctx.drawImage(img, 0, 0);
-          
-          // Calculate FPS
-          frameCount++;
-          const now = Date.now();
-          if (now - lastTime >= 1000) {
-            setFps(frameCount);
-            frameCount = 0;
-            lastTime = now;
+        if (frame.type === 'frame' && frame.data) {
+          // Render frame on canvas
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            console.warn('⚠️ Canvas not available');
+            return;
           }
-        };
-        img.src = `data:image/jpeg;base64,${frame.data}`;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            console.warn('⚠️ Canvas context not available');
+            return;
+          }
+          
+          // Create image from Base64 JPEG
+          const img = new Image();
+          img.onload = () => {
+            // Set canvas size to match image
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Draw frame
+            ctx.drawImage(img, 0, 0);
+            console.log('✅ Frame rendered on canvas');
+            
+            // Calculate FPS
+            frameCount++;
+            const now = Date.now();
+            if (now - lastTime >= 1000) {
+              setFps(frameCount);
+              frameCount = 0;
+              lastTime = now;
+            }
+          };
+          
+          img.onerror = (error) => {
+            console.error('❌ Failed to load image:', error);
+          };
+          
+          img.src = `data:image/jpeg;base64,${frame.data}`;
+        } else {
+          console.log('📨 Non-frame message received:', frame);
+        }
         
       } catch (err) {
         console.error('❌ Frame render error:', err);
@@ -134,11 +212,11 @@ export function BrowserStreamViewer({
     );
   }
 
-  if (isLoading) {
+  if (isLoading || !isReady) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full bg-gray-900 text-white">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-400">Initializing live browser stream...</p>
+        <p className="text-gray-400">{status}</p>
         <p className="text-gray-600 text-sm mt-2">Session: {sessionId.substring(0, 16)}...</p>
       </div>
     );

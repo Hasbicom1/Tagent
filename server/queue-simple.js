@@ -13,37 +13,77 @@ const { Queue } = require('bullmq');
 let taskQueue = null;
 let redisConnection = null;
 
+// Enhanced logging for debugging
+const logQueue = (level, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  const prefix = `[QUEUE-${level}] ${timestamp}`;
+  
+  if (data) {
+    console.log(`${prefix} ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`${prefix} ${message}`);
+  }
+};
+
 /**
  * Initialize the queue system
  */
 export async function initQueue(redisUrl) {
+  logQueue('INFO', 'Initializing queue system', { redisUrl: redisUrl ? 'provided' : 'missing' });
+  
   if (!redisUrl) {
-    console.log('⚠️  QUEUE: No Redis URL provided, queue disabled');
+    logQueue('WARN', 'No Redis URL provided, queue disabled');
     return false;
   }
 
   try {
-    console.log('🔌 QUEUE: Connecting to Redis for task queue...');
+    logQueue('INFO', 'Connecting to Redis for task queue...');
     
     redisConnection = new Redis(redisUrl, {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       retryStrategy(times) {
         const delay = Math.min(times * 50, 2000);
+        logQueue('DEBUG', `Redis retry attempt ${times}, delay: ${delay}ms`);
         return delay;
       }
+    });
+
+    // Add Redis event listeners for debugging
+    redisConnection.on('connect', () => {
+      logQueue('INFO', 'Redis connection established');
+    });
+    
+    redisConnection.on('ready', () => {
+      logQueue('INFO', 'Redis connection ready');
+    });
+    
+    redisConnection.on('error', (err) => {
+      logQueue('ERROR', 'Redis connection error', { error: err.message });
+    });
+    
+    redisConnection.on('close', () => {
+      logQueue('WARN', 'Redis connection closed');
     });
 
     taskQueue = new Queue('browser-automation', {
       connection: redisConnection
     });
 
+    // Add queue event listeners for debugging
+    taskQueue.on('error', (err) => {
+      logQueue('ERROR', 'Queue error', { error: err.message });
+    });
+
     await redisConnection.ping();
     
-    console.log('✅ QUEUE: Connected to Redis queue successfully');
+    logQueue('SUCCESS', 'Connected to Redis queue successfully');
     return true;
   } catch (error) {
-    console.error('❌ QUEUE: Failed to initialize:', error.message);
+    logQueue('ERROR', 'Failed to initialize queue', { 
+      error: error.message, 
+      stack: error.stack 
+    });
     taskQueue = null;
     redisConnection = null;
     return false;
@@ -54,28 +94,55 @@ export async function initQueue(redisUrl) {
  * Add a browser automation task to the queue
  */
 export async function queueBrowserTask(instruction, sessionId, agentId) {
+  logQueue('INFO', 'Attempting to queue browser task', {
+    instruction: instruction?.substring(0, 100) + '...',
+    sessionId,
+    agentId,
+    queueAvailable: !!taskQueue
+  });
+
   if (!taskQueue) {
+    logQueue('ERROR', 'Queue not initialized - cannot queue task');
     throw new Error('Queue not initialized');
   }
 
   try {
-    const job = await taskQueue.add('automation', {
+    const taskData = {
       instruction,
       sessionId,
-      agentId
-    }, {
+      agentId,
+      timestamp: new Date().toISOString(),
+      source: 'checkout-success'
+    };
+
+    logQueue('DEBUG', 'Adding task to queue', taskData);
+
+    const job = await taskQueue.add('automation', taskData, {
       priority: 1, // High priority
       removeOnComplete: 100,
-      removeOnFail: 50
+      removeOnFail: 50,
+      delay: 0, // Execute immediately
+      attempts: 3
     });
 
-    console.log(`📋 QUEUE: Browser task queued: ${job.id}`);
+    logQueue('SUCCESS', 'Browser task queued successfully', {
+      jobId: job.id,
+      taskId: `task_${job.id}`,
+      sessionId,
+      agentId
+    });
+
     return {
       taskId: `task_${job.id}`,
       jobId: job.id
     };
   } catch (error) {
-    console.error('❌ QUEUE: Failed to queue task:', error.message);
+    logQueue('ERROR', 'Failed to queue task', {
+      error: error.message,
+      stack: error.stack,
+      sessionId,
+      agentId
+    });
     throw error;
   }
 }
@@ -84,7 +151,10 @@ export async function queueBrowserTask(instruction, sessionId, agentId) {
  * Get task status from queue
  */
 export async function getTaskStatus(jobId) {
+  logQueue('DEBUG', 'Getting task status', { jobId });
+
   if (!taskQueue) {
+    logQueue('ERROR', 'Queue not initialized - cannot get task status');
     throw new Error('Queue not initialized');
   }
 
@@ -92,11 +162,19 @@ export async function getTaskStatus(jobId) {
     const job = await taskQueue.getJob(jobId);
     
     if (!job) {
+      logQueue('WARN', 'Job not found', { jobId });
       return { status: 'not_found' };
     }
 
     const state = await job.getState();
     const progress = job.progress;
+    
+    logQueue('DEBUG', 'Task status retrieved', {
+      jobId,
+      state,
+      progress,
+      hasReturnValue: !!job.returnvalue
+    });
     
     return {
       status: state,
@@ -105,7 +183,11 @@ export async function getTaskStatus(jobId) {
       returnvalue: job.returnvalue
     };
   } catch (error) {
-    console.error('❌ QUEUE: Failed to get task status:', error.message);
+    logQueue('ERROR', 'Failed to get task status', {
+      jobId,
+      error: error.message,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -114,23 +196,113 @@ export async function getTaskStatus(jobId) {
  * Check if queue is available
  */
 export function isQueueAvailable() {
-  return taskQueue !== null && redisConnection !== null;
+  const available = taskQueue !== null && redisConnection !== null;
+  logQueue('DEBUG', 'Queue availability check', { 
+    available, 
+    hasTaskQueue: !!taskQueue, 
+    hasRedisConnection: !!redisConnection 
+  });
+  return available;
 }
 
 /**
  * Close queue connections
  */
 export async function closeQueue() {
+  logQueue('INFO', 'Closing queue connections...');
+  
   if (taskQueue) {
-    await taskQueue.close();
+    try {
+      await taskQueue.close();
+      logQueue('INFO', 'Task queue closed');
+    } catch (error) {
+      logQueue('ERROR', 'Error closing task queue', { error: error.message });
+    }
     taskQueue = null;
   }
   
   if (redisConnection) {
-    await redisConnection.quit();
+    try {
+      await redisConnection.quit();
+      logQueue('INFO', 'Redis connection closed');
+    } catch (error) {
+      logQueue('ERROR', 'Error closing Redis connection', { error: error.message });
+    }
     redisConnection = null;
   }
   
-  console.log('🔄 QUEUE: Closed successfully');
+  logQueue('SUCCESS', 'Queue closed successfully');
+}
+
+/**
+ * Queue browser job after successful payment
+ * This is the critical missing piece that connects payment to browser launch
+ */
+export async function queueBrowserJobAfterPayment(sessionId, agentId, websocketToken = null) {
+  logQueue('INFO', 'Queueing browser job after payment', { sessionId, agentId, hasToken: !!websocketToken });
+
+  if (!taskQueue) {
+    logQueue('ERROR', 'Queue not initialized - cannot queue browser job');
+    throw new Error('Queue not initialized');
+  }
+
+  try {
+    // Store JWT token in Redis for worker to use
+    if (websocketToken && redisConnection) {
+      try {
+        await redisConnection.hset(`session:${sessionId}`, {
+          websocket_token: websocketToken,
+          status: 'queued',
+          queued_at: new Date().toISOString()
+        });
+        logQueue('INFO', 'JWT token stored in Redis for session', { sessionId });
+      } catch (redisError) {
+        logQueue('ERROR', 'Failed to store JWT token in Redis', { error: redisError.message });
+      }
+    }
+
+    // Create a browser launch task
+    const browserTask = {
+      type: 'browser_launch',
+      sessionId,
+      agentId,
+      instruction: 'Launch browser automation container for new session',
+      timestamp: new Date().toISOString(),
+      source: 'payment_success',
+      websocketToken
+    };
+
+    logQueue('DEBUG', 'Creating browser launch task', browserTask);
+
+    const job = await taskQueue.add('browser_launch', browserTask, {
+      priority: 1, // High priority
+      removeOnComplete: 100,
+      removeOnFail: 50,
+      delay: 0, // Execute immediately
+      attempts: 3
+    });
+
+    logQueue('SUCCESS', 'Browser job queued after payment', {
+      jobId: job.id,
+      sessionId,
+      agentId,
+      hasToken: !!websocketToken
+    });
+
+    return {
+      jobId: job.id,
+      taskId: `browser_${job.id}`,
+      sessionId,
+      agentId
+    };
+  } catch (error) {
+    logQueue('ERROR', 'Failed to queue browser job after payment', {
+      error: error.message,
+      stack: error.stack,
+      sessionId,
+      agentId
+    });
+    throw error;
+  }
 }
 

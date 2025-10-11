@@ -59,6 +59,14 @@ export default function Success() {
         const agentId = data.agentId || data.sessionId;
         const expiresAt = data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+        // CRITICAL FIX: Store JWT token for WebSocket authentication
+        if (data.websocketToken) {
+          sessionStorage.setItem('websocket_token', data.websocketToken);
+          console.log('✅ JWT token stored for WebSocket authentication');
+        } else {
+          console.warn('⚠️ No JWT token received from backend');
+        }
+
         // Persist mapping to prevent new session creation on any subsequent refreshes
         if (agentId) {
           localStorage.setItem(localKey, agentId);
@@ -69,6 +77,9 @@ export default function Success() {
           agentId,
           expiresAt
         });
+        
+        // NEW: Poll session status until worker is ready
+        await pollSessionStatus(agentId);
         
         // Redirect immediately to the agent chat interface
         window.location.href = `/live/agent/${agentId}`;
@@ -89,6 +100,45 @@ export default function Success() {
 
     handleCheckoutSuccess();
   }, [toast]);
+
+  // NEW: Poll session status until worker is ready
+  const pollSessionStatus = async (agentId: string) => {
+    for (let i = 0; i < 30; i++) { // Poll for up to 60 seconds
+      try {
+        const response = await fetch(`/api/session-status?session=${agentId}`);
+        const data = await response.json();
+        
+        console.log(`[POLL ${i}] Session status:`, data);
+        
+        if (data.status === 'ready' && data.workerConnected) {
+          console.log('✅ Worker is ready, redirecting to agent page');
+          window.location.href = `/live/agent/${agentId}`;
+          return;
+        } else if (data.status === 'error') {
+          console.error('❌ Worker setup failed');
+          toast({
+            title: "Setup Error",
+            description: "Failed to initialize AI agent. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // Wait 2 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error) {
+        console.error('Status check failed:', error);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    console.error('Session not ready in time');
+    toast({
+      title: "Timeout",
+      description: "Agent setup is taking longer than expected. Please try again.",
+      variant: "destructive",
+    });
+  };
 
   const handleEnterChat = () => {
     if (sessionData?.automationUrl) {

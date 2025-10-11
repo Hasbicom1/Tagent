@@ -18,6 +18,7 @@ import redis
 from rq import Queue, Worker
 import logging
 from live_stream import LiveBrowserStream
+import websockets
 
 # Configure logging
 logging.basicConfig(
@@ -29,27 +30,155 @@ logger = logging.getLogger(__name__)
 # Environment variables
 REDIS_URL = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
 PORT = int(os.getenv('PORT', '8080'))
+BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/"
 
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize in-browser automation service"""
-    logger.info("🚀 In-Browser Automation Worker starting...")
+    """Initialize live browser streaming service"""
+    logger.info("🚀 Live Browser Streaming Worker starting...")
     logger.info(f"📊 Redis URL: {REDIS_URL[:30]}...")
     logger.info(f"📊 Port: {PORT}")
-    logger.info("✅ In-browser automation ready - NO VNC/PLAYWRIGHT")
+    logger.info("✅ Live browser streaming ready - REAL PLAYWRIGHT CDP")
+    
+    # Start provision loop for race condition fix
+    asyncio.create_task(provision_loop())
+    logger.info("🚀 Worker provision loop started")
+    
     yield
     # Shutdown
     logger.info("🔄 Shutting down worker...")
-    logger.info("✅ In-browser automation worker shutdown")
+    logger.info("✅ Live browser streaming worker shutdown")
 
 # Initialize FastAPI with lifespan
 app = FastAPI(title="Live Browser Streaming Worker", version="6.0.0", lifespan=lifespan)
 
 # Store active streams
 active_streams = {}
+
+# NEW: Race condition fix - Provision loop with detailed logging
+async def provision_loop():
+    """Listen for new sessions to provision"""
+    logger.info("🔄 WORKER: Starting provision loop...")
+    redis_conn = redis.from_url(REDIS_URL)
+    
+    # Test Redis connection
+    try:
+        redis_conn.ping()
+        logger.info("✅ WORKER: Redis connection established")
+    except Exception as e:
+        logger.error(f"❌ WORKER: Redis connection failed: {e}")
+        return
+    
+    logger.info("👂 WORKER: Listening for sessions on 'browser:queue'...")
+    
+    while True:
+        try:
+            # Block until we get a session to provision
+            logger.debug("🔍 WORKER: Checking queue for new sessions...")
+            res = redis_conn.brpop("browser:queue", timeout=5)
+            if res:
+                _, job_data_bytes = res
+                job_data = json.loads(job_data_bytes.decode())
+                session_id = job_data['sessionId']
+                agent_id = job_data['agentId']
+                logger.info(f"🎯 WORKER: Received job to provision: {session_id}")
+                logger.info(f"📊 WORKER: Active streams before: {len(active_streams)}")
+                
+                await start_agent_for_session(session_id)
+                
+                logger.info(f"📊 WORKER: Active streams after: {len(active_streams)}")
+            else:
+                # Nothing in queue, wait a bit
+                logger.debug("⏳ WORKER: No sessions in queue, waiting...")
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"❌ WORKER: Provision loop error: {e}")
+            logger.error(f"❌ WORKER: Error details: {type(e).__name__}: {str(e)}")
+            await asyncio.sleep(5)
+
+async def start_agent_for_session(session_id: str):
+    """Start the live browser automation for a session"""
+    logger.info(f"🚀 WORKER: Starting agent for session: {session_id}")
+    
+    try:
+        # Get JWT token from Redis for WebSocket authentication
+        redis_conn = redis.from_url(REDIS_URL)
+        session_data = redis_conn.hgetall(f"session:{session_id}")
+        websocket_token = session_data.get('websocket_token')
+        
+        if not websocket_token:
+            logger.warn(f"⚠️ WORKER: No JWT token found for session {session_id}, proceeding without authentication")
+        else:
+            logger.info(f"🔐 WORKER: JWT token found for session {session_id}")
+        
+        # Connect to backend WebSocket with JWT token
+        ws_url = f"{BACKEND_WS_URL}{session_id}"
+        if websocket_token:
+            ws_url += f"?token={websocket_token}"
+        
+        logger.info(f"🔌 WORKER: Connecting to backend WebSocket: {ws_url}")
+        
+        # Add authentication header with JWT token
+        headers = {}
+        if websocket_token:
+            headers['Authorization'] = f'Bearer {websocket_token}'
+        
+        # Connect with timeout and proper settings
+        ws = await websockets.connect(
+            ws_url,
+            extra_headers=headers,
+            ping_interval=20,
+            ping_timeout=10,
+            close_timeout=5
+        )
+        logger.info(f"✅ WORKER: WebSocket connected to backend")
+        
+        # Register with backend
+        register_msg = {
+            "type": "worker_register",
+            "sessionId": session_id,
+            "token": websocket_token
+        }
+        logger.info(f"📝 WORKER: Registering with backend: {register_msg}")
+        await ws.send(json.dumps(register_msg))
+        logger.info(f"✅ WORKER: Worker registered to backend: {session_id}")
+        
+        # CRITICAL FIX: Update Redis to mark session as ready
+        redis_conn.hset(f"session:{session_id}", mapping={
+            "status": "ready",
+            "workerConnected": "true",
+            "browser_ready": "true",
+            "readyAt": datetime.now().isoformat()
+        })
+        logger.info(f"✅ WORKER: Session {session_id} marked as READY in Redis")
+        
+        # Start your existing live stream logic
+        logger.info(f"🎬 WORKER: Starting live browser stream for session: {session_id}")
+        stream = LiveBrowserStream(session_id, ws_url)
+        active_streams[session_id] = stream
+        logger.info(f"📊 WORKER: Stream added to active streams: {session_id}")
+        
+        await stream.start()
+        logger.info(f"✅ WORKER: Live browser stream started successfully for session: {session_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ WORKER: Failed to start agent for session {session_id}: {e}")
+        logger.error(f"❌ WORKER: Error details: {type(e).__name__}: {str(e)}")
+        
+        # Mark session as failed
+        try:
+            redis_conn = redis.from_url(REDIS_URL)
+            redis_conn.hset(f"session:{session_id}", mapping={
+                "status": "error",
+                "error": str(e),
+                "failed_at": datetime.now().isoformat()
+            })
+            logger.info(f"📝 WORKER: Session marked as failed in Redis: {session_id}")
+        except Exception as redis_error:
+            logger.error(f"❌ WORKER: Failed to update Redis with error status: {redis_error}")
 
 # CORS middleware
 app.add_middleware(

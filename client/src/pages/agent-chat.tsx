@@ -20,7 +20,7 @@ import {
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
-import { RealBrowserAutomation } from '@/components/RealBrowserAutomation';
+import { BrowserStreamViewer } from '@/components/BrowserStreamViewer';
 
 interface Message {
   id: string;
@@ -123,7 +123,11 @@ export default function AgentChat() {
     }
 
 		console.log('[SESSION] Bootstrapping session for:', agentId);
-		loadSessionAndMessages();
+		
+		// Add a small delay to ensure session is created
+		setTimeout(() => {
+			loadSessionAndMessages();
+		}, 500);
   }, [agentId, setLocation]);
 
 	useEffect(() => {
@@ -155,6 +159,30 @@ export default function AgentChat() {
     };
   }, [sessionInfo, connectionStatus.isAuthenticated, subscribeToSession, disconnect]);
 
+  // Real-time session expiry check
+  useEffect(() => {
+    if (!sessionInfo?.expiresAt) return;
+
+    const checkExpiry = () => {
+      const remaining = computeMinutesRemaining(sessionInfo.expiresAt);
+      if (remaining <= 0) {
+        toast({
+          title: "Session Expired",
+          description: "Your 24-hour session has expired. Please start a new session.",
+          variant: "destructive",
+        });
+        // Don't redirect - let user stay on page and see error
+      }
+    };
+
+    // Check immediately
+    checkExpiry();
+
+    // Check every minute
+    const interval = setInterval(checkExpiry, 60000);
+    return () => clearInterval(interval);
+  }, [sessionInfo?.expiresAt, toast, setLocation]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -170,12 +198,21 @@ export default function AgentChat() {
     try {
       setIsLoading(true);
       
-      // Get session info
-      const sessionResponse = await apiRequest('GET', `/api/session/${agentId}`);
+      console.log('[SESSION] Attempting to load session for agentId:', agentId);
+      console.log('[DEBUG] Current URL:', window.location.href);
+      console.log('[DEBUG] Agent ID from URL:', agentId);
+      
+      // Get session info using agent status endpoint
+      const sessionResponse = await apiRequest('GET', `/api/agent/${agentId}/status`);
+      
+      console.log('[DEBUG] Session response status:', sessionResponse.status);
+      console.log('[DEBUG] Session response ok:', sessionResponse.ok);
       
       if (!sessionResponse.ok) {
         const error = await sessionResponse.json();
-        throw new Error(error.error);
+        console.error('[SESSION] Session lookup failed:', error);
+        console.error('[DEBUG] Full error response:', error);
+        throw new Error(error.error || 'Session not found');
       }
       
 			const raw = await sessionResponse.json();
@@ -207,7 +244,7 @@ export default function AgentChat() {
           description: "Your 24-hour session has expired. Please start a new session.",
           variant: "destructive",
         });
-        setLocation('/');
+        // Don't redirect - let user stay on page and see error
       } else {
         toast({
           title: "Connection Error",
@@ -383,7 +420,7 @@ export default function AgentChat() {
       {/* FULLSCREEN BROWSER VIEW */}
       <div className="flex-1 relative overflow-hidden">
         {sessionInfo?.sessionId ? (
-          <RealBrowserAutomation
+          <BrowserStreamViewer
             sessionId={sessionInfo.sessionId}
             agentId={agentId}
             workerUrl="https://worker-production-6480.up.railway.app"
