@@ -121,7 +121,19 @@ async def start_agent_for_session(session_id: str):
         
         logger.info(f"🔌 WORKER: Connecting to backend WebSocket: {ws_url}")
         
-        ws = await websockets.connect(ws_url)
+        # Add authentication header with JWT token
+        headers = {}
+        if websocket_token:
+            headers['Authorization'] = f'Bearer {websocket_token}'
+        
+        # Connect with timeout and proper settings
+        ws = await websockets.connect(
+            ws_url,
+            extra_headers=headers,
+            ping_interval=20,
+            ping_timeout=10,
+            close_timeout=5
+        )
         logger.info(f"✅ WORKER: WebSocket connected to backend")
         
         # Register with backend
@@ -135,7 +147,7 @@ async def start_agent_for_session(session_id: str):
         logger.info(f"✅ WORKER: Worker registered to backend: {session_id}")
         
         # CRITICAL FIX: Update Redis to mark session as ready
-        redis_conn.hset(f"session:{session_id}", {
+        redis_conn.hset(f"session:{session_id}", mapping={
             "status": "ready",
             "workerConnected": "true",
             "browser_ready": "true",
@@ -159,7 +171,7 @@ async def start_agent_for_session(session_id: str):
         # Mark session as failed
         try:
             redis_conn = redis.from_url(REDIS_URL)
-            redis_conn.hset(f"session:{session_id}", {
+            redis_conn.hset(f"session:{session_id}", mapping={
                 "status": "error",
                 "error": str(e),
                 "failed_at": datetime.now().isoformat()
