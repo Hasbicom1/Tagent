@@ -102,6 +102,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showKeyboardHints, setShowKeyboardHints] = useState(true);
   const [blinkingCursor, setBlinkingCursor] = useState(true);
+  const [hintsTimeout, setHintsTimeout] = useState<NodeJS.Timeout | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -160,10 +161,24 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
       setSuggestions(newSuggestions);
       setShowCommandSuggestions(newSuggestions.length > 0);
       setSelectedSuggestionIndex(0);
+      
+      // Show hints when user starts typing
+      setShowKeyboardHints(true);
+      
+      // Clear existing timeout
+      if (hintsTimeout) {
+        clearTimeout(hintsTimeout);
+      }
+      
+      // Hide hints after 3 seconds of inactivity
+      const timeout = setTimeout(() => {
+        setShowKeyboardHints(false);
+      }, 3000);
+      setHintsTimeout(timeout);
     } else {
       setShowCommandSuggestions(false);
     }
-  }, [input]);
+  }, [input, hintsTimeout]);
 
   // Blinking cursor effect
   useEffect(() => {
@@ -177,6 +192,15 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
       }
     };
   }, []);
+
+  // Cleanup hints timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hintsTimeout) {
+        clearTimeout(hintsTimeout);
+      }
+    };
+  }, [hintsTimeout]);
 
   // Command suggestions based on input
   useEffect(() => {
@@ -814,13 +838,14 @@ Ready to change the world? Let's build together!`
               </div>
             )}
             
-            {/* Keyboard Hints */}
+            {/* Keyboard Hints - Subtle and non-intrusive */}
             {showKeyboardHints && (
-              <div className="absolute bottom-2 left-2 text-xs text-green-400/60 font-mono">
-                <div>Press ↑↓ to navigate history</div>
-                <div>Press Tab to autocomplete</div>
-                <div>Press Ctrl+K for command palette</div>
-                <div>Available: [h] help [f] features [p] pricing</div>
+              <div className="mt-1 text-xs text-green-400/30 font-mono text-center animate-in fade-in duration-300">
+                <div className="inline-block bg-black/10 px-2 py-0.5 rounded text-xs">
+                  <span className="text-green-400/50">↑↓</span> history • 
+                  <span className="text-green-400/50"> Tab</span> complete • 
+                  <span className="text-green-400/50"> Ctrl+K</span> palette
+                </div>
               </div>
             )}
           </div>
