@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { LiveStreamRelay } from './live-stream-relay.js';
+import jwt from 'jsonwebtoken';
 // WebSocketManager removed - using Socket.IO only for now
 import express from 'express';
 import { createRequire } from 'module';
@@ -1621,12 +1622,42 @@ async function initializeServer() {
       if (request.url.startsWith('/ws/view/') || request.url.startsWith('/ws/stream/')) {
         const url = new URL(request.url, 'ws://localhost');
         const sessionId = url.pathname.split('/').pop();
+        const token = url.searchParams.get('token');
         
-        const wss = new WebSocketServer({ noServer: true });
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          liveStreamRelay.addFrontendConnection(sessionId, ws);
-        });
-        return;
+        console.log('🔌 WebSocket connection attempt:', { sessionId, hasToken: !!token });
+        
+        // Validate JWT token
+        if (!token) {
+          console.error('❌ No token provided');
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+        
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+          
+          if (decoded.sessionId !== sessionId) {
+            console.error('❌ Token sessionId mismatch');
+            socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+            socket.destroy();
+            return;
+          }
+          
+          console.log('✅ Token validated for session:', sessionId);
+          
+          const wss = new WebSocketServer({ noServer: true });
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            liveStreamRelay.addFrontendConnection(sessionId, ws);
+          });
+          return;
+          
+        } catch (error) {
+          console.error('❌ JWT verification failed:', error.message);
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
       }
       
       // REMOVED: WebSocket proxy causing protocol conflicts
