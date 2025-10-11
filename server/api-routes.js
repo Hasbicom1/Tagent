@@ -772,6 +772,143 @@ router.post('/stripe/create-checkout-session', async (req, res) => {
 // to preserve the exact payload for signature verification. Duplicate route
 // removed here to avoid conflicts and ensure a single, correct handler.
 
+// GET /api/agent/:sessionId/status
+router.get('/api/agent/:sessionId/status', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    console.log('🔍 API: Checking status for session:', sessionId);
+    
+    const session = await getUserSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({
+        error: 'Session not found',
+        status: 'not_found'
+      });
+    }
+
+    // Check if session is expired
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('⚠️ API: Session expired:', sessionId);
+      await updateSessionStatus(sessionId, 'expired');
+      
+      return res.status(410).json({
+        error: 'Session has expired',
+        status: 'expired',
+        expiredAt: session.expires_at
+      });
+    }
+
+    console.log('✅ API: Active session found:', sessionId);
+    res.status(200).json({
+      success: true,
+      sessionId: session.session_id,
+      status: session.status,
+      expiresAt: session.expires_at,
+      timeRemaining: Math.max(0, expiresAt.getTime() - now.getTime())
+    });
+
+  } catch (error) {
+    console.error('❌ API: Failed to check session status:', error);
+    res.status(500).json({
+      error: 'Failed to check session status',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/create-or-recover-session
+router.post('/api/create-or-recover-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    console.log('🔍 API: Create or recover session:', sessionId);
+    
+    if (!sessionId) {
+      return res.status(400).json({
+        error: 'Session ID is required',
+        status: 'error'
+      });
+    }
+
+    // Check if session exists
+    try {
+      const existingSession = await getUserSession(sessionId);
+      
+      if (existingSession) {
+        // Check if session is expired
+        const now = new Date();
+        const expiresAt = new Date(existingSession.expires_at);
+        
+        if (now > expiresAt) {
+          console.log('⚠️ API: Session expired, cannot recover:', sessionId);
+          return res.status(410).json({
+            error: 'Session has expired and cannot be recovered',
+            status: 'expired',
+            expiredAt: existingSession.expires_at
+          });
+        }
+
+        console.log('✅ API: Recovered existing session:', sessionId);
+        return res.status(200).json({
+          success: true,
+          message: 'Session recovered successfully',
+          sessionId: existingSession.session_id,
+          status: existingSession.status,
+          expiresAt: existingSession.expires_at,
+          recovered: true
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ API: Error checking existing session:', e);
+      // Continue to create new session
+    }
+
+    // Create new session (24 hours)
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    const sessionData = {
+      sessionId,
+      agentId: sessionId,
+      expiresAt,
+      status: 'active',
+      paymentVerified: true
+    };
+
+    try {
+      const storedSession = await createUserSession(sessionData);
+      console.log('✅ API: New session created:', sessionId);
+      
+      return res.status(201).json({
+        success: true,
+        message: 'Session created successfully',
+        sessionId,
+        status: 'active',
+        expiresAt: expiresAt.toISOString(),
+        created: true
+      });
+    } catch (dbError) {
+      console.error('❌ API: Failed to store session:', dbError);
+      return res.status(500).json({
+        error: 'Failed to create session',
+        status: 'error',
+        details: dbError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ API: Create or recover session failed:', error);
+    res.status(500).json({
+      error: 'Failed to create or recover session',
+      status: 'error',
+      details: error.message
+    });
+  }
+});
+
 // Basic error handling for API routes
 router.use((err, req, res, next) => {
   console.error('❌ API: Error in API route:', err);

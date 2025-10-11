@@ -36,7 +36,7 @@ export default function Success() {
         const existingAgentId = localStorage.getItem(localKey);
         if (existingAgentId) {
           // Fast-path redirect to persistent agent session
-          window.location.href = `/agent?id=${existingAgentId}`;
+          window.location.href = `/live/agent/${existingAgentId}`;
           return;
         }
 
@@ -71,7 +71,7 @@ export default function Success() {
         });
         
         // Redirect immediately to the agent chat interface
-        window.location.href = `/agent?id=${agentId}`;
+        window.location.href = `/live/agent/${agentId}`;
 
       } catch (error) {
         console.error('Checkout success error:', (error as Error).message);
