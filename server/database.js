@@ -184,9 +184,9 @@ export async function createTables() {
       console.log('✅ REAL Database: Migration: created_at column added');
     } catch (migrationError) {
       console.warn('⚠️ REAL Database: Migration warning (non-critical):', migrationError.message);
-    }
-    
-    try {
+  }
+
+  try {
       // Add missing updated_at column if it doesn't exist
       await client.query(`
         ALTER TABLE user_sessions 
@@ -229,7 +229,7 @@ export async function createTables() {
 
 export async function getUserSession(sessionId) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -239,7 +239,7 @@ export async function getUserSession(sessionId) {
       [sessionId]
     );
     client.release();
-
+    
     if (result.rows.length === 0) {
       return null;
     }
@@ -253,7 +253,7 @@ export async function getUserSession(sessionId) {
 
 export async function updateSessionStatus(sessionId, status) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -315,7 +315,7 @@ export async function createUserSession(sessionData) {
 
 export async function logAgentActivity(sessionId, agentType, actionType, details = {}) {
   try {
-    if (!pool) {
+  if (!pool) {
       throw new Error('Database not initialized');
     }
 

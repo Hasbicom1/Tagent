@@ -1,309 +1,801 @@
-// client/src/lib/websocket.ts
+import { 
+  WSMessageType,
+  SubscriptionType,
+  ClientMessage,
+  ServerMessage,
+  TaskStatusMessage,
+  TaskProgressMessage,
+  TaskLogsMessage,
+  TaskErrorMessage,
+  SessionStatusMessage,
+  ConnectionStatusMessage,
+  BatchMessage,
+  clientMessageSchema,
+  serverMessageSchema
+} from '@shared/websocket-types';
 
-interface WebSocketMessage {
-  type: string;
-  data?: any;
-  message?: string;
-  sessionId?: string;
-}
+// Re-export shared types for use in components
+export { 
+  WSMessageType,
+  SubscriptionType,
+  type TaskStatusMessage,
+  type TaskProgressMessage,
+  type TaskLogsMessage,
+  type TaskErrorMessage,
+  type SessionStatusMessage,
+  type ConnectionStatusMessage,
+  type BatchMessage
+} from '@shared/websocket-types';
 
-interface WebSocketConfig {
-  onFrame?: (data: string) => void;
-  onConnected?: () => void;
-  onError?: (error: string) => void;
-  onClose?: () => void;
-}
-
-// WebSocket connection states
-export enum WSConnectionState {
-  DISCONNECTED = 'disconnected',
-  CONNECTING = 'connecting',
-  CONNECTED = 'connected',
-  AUTHENTICATED = 'authenticated',
-  ERROR = 'error'
-}
-
-// WebSocket event map for type safety
+// Event types for WebSocket client
 export interface WSEventMap {
-  connected: void;
-  disconnected: void;
-  authenticated: void;
-  taskStatus: any;
-  taskProgress: any;
-  taskLogs: any;
-  taskError: any;
-  error: { error: string };
+  connected: { connectionId: string };
+  disconnected: { reason: string };
+  authenticated: { agentId: string };
+  subscribed: { type: SubscriptionType; targetId: string };
+  unsubscribed: { type: SubscriptionType; targetId: string };
+  taskStatus: TaskStatusMessage;
+  taskProgress: TaskProgressMessage;
+  taskLogs: TaskLogsMessage;
+  taskError: TaskErrorMessage;
+  sessionStatus: SessionStatusMessage;
+  connectionStatus: ConnectionStatusMessage;
+  error: { error: string; code?: string; details?: any };
+  batch: BatchMessage;
 }
 
-// WebSocket client class
-export class WSClient {
-  private ws: WebSocket | null = null;
-  private eventListeners: Map<string, Function[]> = new Map();
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 2000;
-  private isConnecting = false;
+export type WSEventHandler<T extends keyof WSEventMap> = (data: WSEventMap[T]) => void;
 
-  constructor() {
-    // Initialize event listeners map
-    this.eventListeners = new Map();
-  }
-
-  async connect(): Promise<void> {
-    if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    this.isConnecting = true;
-    
-    try {
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/view/`;
-      this.ws = new WebSocket(wsUrl);
-      
-      this.ws.onopen = () => {
-        this.isConnecting = false;
-        this.emit('connected');
-      };
-      
-      this.ws.onclose = () => {
-        this.isConnecting = false;
-        this.emit('disconnected');
-      };
-      
-      this.ws.onerror = (error) => {
-        this.isConnecting = false;
-        this.emit('error', { error: 'WebSocket connection failed' });
-      };
-      
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.emit(data.type, data);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-      
-    } catch (error) {
-      this.isConnecting = false;
-      throw error;
-    }
-  }
-
-  async authenticate(token: string, agentId: string, refreshToken: () => Promise<string>): Promise<void> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket not connected');
-    }
-    
-    // Send authentication message
-    this.ws.send(JSON.stringify({
-      type: 'authenticate',
-      token,
-      agentId
-    }));
-    
-    this.emit('authenticated');
-  }
-
-  async subscribe(type: string, id: string): Promise<void> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket not connected');
-    }
-    
-    this.ws.send(JSON.stringify({
-      type: 'subscribe',
-      subscriptionType: type,
-      id
-    }));
-  }
-
-  isReady(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
-  }
-
-  on(event: string, listener: Function): void {
-    if (!this.eventListeners.has(event)) {
-      this.eventListeners.set(event, []);
-    }
-    this.eventListeners.get(event)!.push(listener);
-  }
-
-  off(event: string, listener: Function): void {
-    const listeners = this.eventListeners.get(event);
-    if (listeners) {
-      const index = listeners.indexOf(listener);
-      if (index > -1) {
-        listeners.splice(index, 1);
-      }
-    }
-  }
-
-  private emit(event: string, data?: any): void {
-    const listeners = this.eventListeners.get(event);
-    if (listeners) {
-      listeners.forEach(listener => listener(data));
-    }
-  }
-
-  forceDisconnect(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-    this.eventListeners.clear();
-  }
+// Connection states
+export enum WSConnectionState {
+  DISCONNECTED = 'DISCONNECTED',
+  CONNECTING = 'CONNECTING',
+  CONNECTED = 'CONNECTED',
+  AUTHENTICATED = 'AUTHENTICATED',
+  RECONNECTING = 'RECONNECTING',
+  ERROR = 'ERROR'
 }
 
-// Export singleton instance
-export const wsClient = new WSClient();
+// WebSocket client configuration
+export interface WSClientConfig {
+  url?: string;
+  reconnectInterval: number;
+  maxReconnectAttempts: number;
+  heartbeatInterval: number;
+  timeout: number;
+  debug: boolean;
+}
 
-export class AgentWebSocket {
+const DEFAULT_CONFIG: WSClientConfig = {
+  reconnectInterval: 3000,    // 3 seconds (faster reconnection)
+  maxReconnectAttempts: 15,   // More attempts for reliability
+  heartbeatInterval: 30000,   // 30 seconds
+  timeout: 30000,             // 30 seconds (more time for authentication)
+  debug: import.meta.env.DEV
+};
+
+export class WebSocketClient {
   private ws: WebSocket | null = null;
-  private sessionId: string;
-  private token: string;
-  private config: WebSocketConfig;
+  private config: WSClientConfig;
+  private state: WSConnectionState = WSConnectionState.DISCONNECTED;
+  private eventListeners = new Map<keyof WSEventMap, Set<WSEventHandler<any>>>();
+  private subscriptions = new Set<string>();
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 2000;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private reconnectTimeout: number | null = null;
+  private heartbeatInterval: number | null = null;
+  private lastPingTime: number = 0;
+  private messageQueue: ClientMessage[] = [];
+  private authenticatedAgentId: string | null = null;
+  private sessionToken: string | null = null;
+  private tokenRefreshCallback: (() => Promise<string>) | null = null;
 
-  constructor(sessionId: string, config: WebSocketConfig = {}) {
-    this.sessionId = sessionId;
-    this.config = config;
-
-    // Get token from localStorage
-    const storedToken = localStorage.getItem('agent_token');
-    if (!storedToken) {
-      console.error('❌ No JWT token found in localStorage');
-      throw new Error('Authentication token not found. Please complete payment first.');
+  constructor(config: Partial<WSClientConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    
+    // FIXED: Auto-detect WebSocket URL if not provided
+    if (!this.config.url) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      // Use raw WebSocket endpoint (not Socket.IO)
+      this.config.url = `${protocol}//${host}/ws`;
+      console.log('🔌 WS: Using WebSocket URL:', this.config.url);
     }
-
-    this.token = storedToken;
-    console.log('🔑 Token retrieved from localStorage');
   }
 
-  connect(): Promise<void> {
+  /**
+   * FIXED: Connect to WebSocket server with fallback
+   */
+  public connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (this.state === WSConnectionState.CONNECTED || this.state === WSConnectionState.AUTHENTICATED) {
+        resolve();
+        return;
+      }
+
+      this.setState(WSConnectionState.CONNECTING);
+      this.log('🔌 Connecting to WebSocket...');
+
       try {
-        // Build WebSocket URL with token
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = import.meta.env.VITE_WS_URL || 
-                      `${wsProtocol}//${window.location.host}`;
-        const wsUrl = `${wsHost}/ws/view/${this.sessionId}?token=${this.token}`;
-
-        console.log('🔌 Connecting to WebSocket:', {
-          sessionId: this.sessionId,
-          url: wsUrl.replace(/token=[^&]+/, 'token=***')
-        });
-
-        this.ws = new WebSocket(wsUrl);
-
-        // Connection opened
-        this.ws.onopen = () => {
-          console.log('✅ WebSocket connected successfully');
-          this.reconnectAttempts = 0;
-          this.startHeartbeat();
-          resolve();
-        };
-
-        // Listen for messages
-        this.ws.onmessage = (event) => {
-          try {
-            const message: WebSocketMessage = JSON.parse(event.data);
-            this.handleMessage(message);
-          } catch (error) {
-            console.error('❌ Error parsing WebSocket message:', error);
+        // FIXED: Use Socket.IO WebSocket endpoint
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const endpoints = [
+          // Use Socket.IO WebSocket endpoint
+          `${protocol}//${host}/ws/socket.io/?EIO=4&transport=websocket`,
+          // Fallback to raw WebSocket
+          `${protocol}//${host}/ws`
+        ];
+        
+        let currentEndpoint = 0;
+        
+        const tryConnect = () => {
+          if (currentEndpoint >= endpoints.length) {
+            reject(new Error('All WebSocket endpoints failed'));
+            return;
           }
-        };
+          
+          const endpoint = endpoints[currentEndpoint];
+          this.log(`🔌 Trying WebSocket endpoint: ${endpoint}`);
+          
+          this.ws = new WebSocket(endpoint);
+        
+          // Setup event handlers
+          this.ws.onopen = () => {
+            this.setState(WSConnectionState.CONNECTED);
+            this.reconnectAttempts = 0;
+            this.processMessageQueue();
+            this.emit('connected', { connectionId: 'connected' });
+            this.log('✅ WebSocket connected to:', endpoint);
+            resolve();
+          };
 
-        // Handle errors
-        this.ws.onerror = (error) => {
-          console.error('❌ WebSocket error:', error);
-          this.config.onError?.('WebSocket connection error');
-          reject(new Error('WebSocket connection failed'));
-        };
+          this.ws.onmessage = (event) => {
+            this.handleMessage(event.data);
+          };
 
-        // Handle close
-        this.ws.onclose = (event) => {
-          console.log('🔌 WebSocket disconnected:', {
-            code: event.code,
-            reason: event.reason
-          });
+          this.ws.onclose = (event) => {
+            this.handleDisconnection(event.code, event.reason);
+          };
 
-          this.stopHeartbeat();
-          this.config.onClose?.();
+          this.ws.onerror = (error) => {
+            this.log('❌ WebSocket error on endpoint:', endpoint, error);
+            this.setState(WSConnectionState.ERROR);
+            
+            // FIXED: Try next endpoint on error
+            currentEndpoint++;
+            if (currentEndpoint < endpoints.length) {
+              this.log('🔄 Trying next WebSocket endpoint...');
+              setTimeout(tryConnect, 1000); // Wait 1 second before trying next endpoint
+            } else {
+              const errorMessage = error instanceof Error ? error.message : 'All WebSocket endpoints failed';
+              console.error('❌ WS: All endpoints failed:', errorMessage);
+              reject(new Error(`WebSocket connection failed: ${errorMessage}`));
+            }
+          };
 
-          // Handle different close codes
-          switch (event.code) {
-            case 4001:
-              console.error('❌ Authentication required');
-              this.config.onError?.('Authentication required. Please log in again.');
-              break;
-            case 4002:
-              console.error('❌ Session mismatch');
-              this.config.onError?.('Invalid session. Please restart.');
-              break;
-            case 4003:
-              console.error('❌ Token expired or invalid');
-              this.config.onError?.('Your session has expired. Please log in again.');
-              break;
-            case 1000:
-              console.log('✅ Normal closure');
-              break;
-            default:
-              // Attempt reconnection for unexpected closures
-              if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                this.attemptReconnect();
+          // Connection timeout
+          setTimeout(() => {
+            if (this.state === WSConnectionState.CONNECTING) {
+              this.ws?.close();
+              currentEndpoint++;
+              if (currentEndpoint < endpoints.length) {
+                this.log('⏰ WebSocket timeout, trying next endpoint...');
+                setTimeout(tryConnect, 1000);
               } else {
-                this.config.onError?.('Connection lost. Please refresh the page.');
+                reject(new Error('WebSocket connection timeout on all endpoints'));
               }
-          }
+            }
+          }, this.config.timeout);
         };
+        
+        // Start connection attempt
+        tryConnect();
 
       } catch (error) {
-        console.error('❌ Error creating WebSocket:', error);
+        this.setState(WSConnectionState.ERROR);
         reject(error);
       }
     });
   }
 
-  private handleMessage(message: WebSocketMessage): void {
-    console.log('📨 Received message:', message.type);
+  /**
+   * Authenticate with the server using stored or provided token
+   */
+  public async authenticate(sessionToken: string, agentId: string, tokenRefreshCallback?: () => Promise<string>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🔐 [WS-AUTH] Starting authentication with:', {
+        hasToken: !!sessionToken,
+        tokenLength: sessionToken?.length || 0,
+        agentId,
+        state: this.state
+      });
+      
+      if (this.state !== WSConnectionState.CONNECTED) {
+        console.error('❌ [WS-AUTH] Cannot authenticate - WebSocket not connected, state:', this.state);
+        reject(new Error('Not connected to WebSocket server'));
+        return;
+      }
 
-    switch (message.type) {
-      case 'connected':
-        console.log('✅ WebSocket authenticated:', message.sessionId);
-        this.config.onConnected?.();
-        break;
+      // Store token and callback for reconnection
+      this.sessionToken = sessionToken;
+      this.authenticatedAgentId = agentId;
+      if (tokenRefreshCallback) {
+        this.tokenRefreshCallback = tokenRefreshCallback;
+      }
 
-      case 'frame':
-        // Forward frame data to handler
-        if (message.data) {
-          this.config.onFrame?.(message.data);
+      // Validate token is present
+      if (!sessionToken || sessionToken.trim() === '') {
+        console.error('❌ [WS-AUTH] Authentication failed - empty or missing token');
+        reject(new Error('Valid session token required for authentication'));
+        return;
+      }
+
+      const authMessage: ClientMessage = {
+        type: WSMessageType.AUTHENTICATE,
+        sessionToken,
+        agentId,
+        timestamp: new Date().toISOString(),
+        messageId: `auth-${Date.now()}`
+      };
+      
+      console.log('📤 [WS-AUTH] Sending authentication message:', {
+        type: authMessage.type,
+        hasToken: !!authMessage.sessionToken,
+        tokenLength: authMessage.sessionToken?.length || 0,
+        agentId: authMessage.agentId,
+        messageId: authMessage.messageId
+      });
+
+      // Setup one-time listeners for auth response
+      const handleAuthenticated = () => {
+        console.log('✅ [WS-AUTH] Authentication successful');
+        this.off('authenticated', handleAuthenticated);
+        this.off('error', handleError);
+        this.setState(WSConnectionState.AUTHENTICATED);
+        this.startHeartbeat(); // Start heartbeat only after authentication
+        resolve();
+      };
+
+      const handleError = (errorData: WSEventMap['error']) => {
+        console.error('❌ [WS-AUTH] Authentication error:', errorData);
+        this.off('authenticated', handleAuthenticated);
+        this.off('error', handleError);
+        
+        // If token is invalid, clear stored token
+        if (errorData.code === 'INVALID_TOKEN' || errorData.code === 'MISSING_TOKEN') {
+          console.log('🗑️ [WS-AUTH] Clearing invalid token');
+          this.sessionToken = null;
         }
-        break;
+        
+        reject(new Error(errorData.error));
+      };
 
-      case 'pong':
-        console.log('💓 Heartbeat received');
-        break;
+      this.on('authenticated', handleAuthenticated);
+      this.on('error', handleError);
 
-      case 'error':
-        console.error('❌ Server error:', message.message);
-        this.config.onError?.(message.message || 'Unknown error');
-        break;
+      this.sendMessage(authMessage);
 
-      default:
-        console.warn('⚠️ Unknown message type:', message.type);
+      // Authentication timeout
+      setTimeout(() => {
+        console.error('⏰ [WS-AUTH] Authentication timeout');
+        this.off('authenticated', handleAuthenticated);
+        this.off('error', handleError);
+        reject(new Error('Authentication timeout'));
+      }, this.config.timeout);
+    });
+  }
+
+  /**
+   * Subscribe to updates for a specific target
+   */
+  public async subscribe(type: SubscriptionType, targetId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.state !== WSConnectionState.AUTHENTICATED) {
+        reject(new Error('Must be authenticated to subscribe'));
+        return;
+      }
+
+      const subscriptionKey = `${type}:${targetId}`;
+      if (this.subscriptions.has(subscriptionKey)) {
+        resolve(); // Already subscribed
+        return;
+      }
+
+      const subscribeMessage: ClientMessage = {
+        type: WSMessageType.SUBSCRIBE,
+        subscriptionType: type,
+        targetId,
+        timestamp: new Date().toISOString(),
+        messageId: `sub-${Date.now()}`
+      };
+
+      // Setup one-time listeners for subscription response
+      const handleSubscribed = (data: WSEventMap['subscribed']) => {
+        if (data.type === type && data.targetId === targetId) {
+          this.off('subscribed', handleSubscribed);
+          this.off('error', handleError);
+          this.subscriptions.add(subscriptionKey);
+          resolve();
+        }
+      };
+
+      const handleError = (errorData: WSEventMap['error']) => {
+        this.off('subscribed', handleSubscribed);
+        this.off('error', handleError);
+        reject(new Error(errorData.error));
+      };
+
+      this.on('subscribed', handleSubscribed);
+      this.on('error', handleError);
+
+      this.sendMessage(subscribeMessage);
+
+      // Subscription timeout
+      setTimeout(() => {
+        this.off('subscribed', handleSubscribed);
+        this.off('error', handleError);
+        reject(new Error('Subscription timeout'));
+      }, this.config.timeout);
+    });
+  }
+
+  /**
+   * Unsubscribe from updates
+   */
+  public async unsubscribe(type: SubscriptionType, targetId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const subscriptionKey = `${type}:${targetId}`;
+      if (!this.subscriptions.has(subscriptionKey)) {
+        resolve(); // Not subscribed
+        return;
+      }
+
+      const unsubscribeMessage: ClientMessage = {
+        type: WSMessageType.UNSUBSCRIBE,
+        subscriptionType: type,
+        targetId,
+        timestamp: new Date().toISOString(),
+        messageId: `unsub-${Date.now()}`
+      };
+
+      // Setup one-time listeners for unsubscription response
+      const handleUnsubscribed = (data: WSEventMap['unsubscribed']) => {
+        if (data.type === type && data.targetId === targetId) {
+          this.off('unsubscribed', handleUnsubscribed);
+          this.off('error', handleError);
+          this.subscriptions.delete(subscriptionKey);
+          resolve();
+        }
+      };
+
+      const handleError = (errorData: WSEventMap['error']) => {
+        this.off('unsubscribed', handleUnsubscribed);
+        this.off('error', handleError);
+        reject(new Error(errorData.error));
+      };
+
+      this.on('unsubscribed', handleUnsubscribed);
+      this.on('error', handleError);
+
+      this.sendMessage(unsubscribeMessage);
+
+      // Unsubscription timeout
+      setTimeout(() => {
+        this.off('unsubscribed', handleUnsubscribed);
+        this.off('error', handleError);
+        reject(new Error('Unsubscription timeout'));
+      }, this.config.timeout);
+    });
+  }
+
+  /**
+   * Graceful disconnect (preserves authentication state for reconnection)
+   */
+  public disconnect(): void {
+    this.log('🔄 [DISCONNECT] Preserving auth state for reconnection');
+    this.stopReconnecting();
+    this.stopHeartbeat();
+    
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
+    }
+    
+    this.setState(WSConnectionState.DISCONNECTED);
+    this.subscriptions.clear();
+    this.messageQueue = [];
+    // ✅ CRITICAL FIX: Preserving authenticatedAgentId, sessionToken, tokenRefreshCallback for reconnection
+    // This prevents AUTH_REQUIRED loops on reconnection
+  }
+
+  /**
+   * Force disconnect (clears all authentication state)
+   */
+  public forceDisconnect(): void {
+    this.log('💥 [FORCE-DISCONNECT] Force disconnect - clearing all auth state');
+    this.stopReconnecting();
+    this.stopHeartbeat();
+    
+    if (this.ws) {
+      this.ws.close(1000, 'Force disconnect');
+      this.ws = null;
+    }
+    
+    this.setState(WSConnectionState.DISCONNECTED);
+    this.subscriptions.clear();
+    this.authenticatedAgentId = null;
+    this.sessionToken = null;
+    this.tokenRefreshCallback = null;
+    this.messageQueue = [];
+  }
+
+  /**
+   * Get current connection state
+   */
+  public getState(): WSConnectionState {
+    return this.state;
+  }
+
+  /**
+   * Get subscriptions
+   */
+  public getSubscriptions(): string[] {
+    return Array.from(this.subscriptions);
+  }
+
+  /**
+   * Check if connected and authenticated
+   */
+  public isReady(): boolean {
+    return this.state === WSConnectionState.AUTHENTICATED;
+  }
+
+  /**
+   * Add event listener
+   */
+  public on<T extends keyof WSEventMap>(event: T, handler: WSEventHandler<T>): void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(handler);
+  }
+
+  /**
+   * Remove event listener
+   */
+  public off<T extends keyof WSEventMap>(event: T, handler: WSEventHandler<T>): void {
+    const handlers = this.eventListeners.get(event);
+    if (handlers) {
+      handlers.delete(handler);
     }
   }
 
-  private startHeartbeat(): void {
-    // Send ping every 30 seconds to keep connection alive
-    this.heartbeatInterval = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.send({ type: 'ping' });
+  /**
+   * Send ping to server
+   */
+  public ping(): void {
+    const pingMessage: ClientMessage = {
+      type: WSMessageType.PING,
+      timestamp: new Date().toISOString(),
+      messageId: `ping-${Date.now()}`
+    };
+    this.sendMessage(pingMessage);
+    this.lastPingTime = Date.now();
+  }
+
+  // Private methods
+
+  private setState(newState: WSConnectionState): void {
+    if (this.state !== newState) {
+      this.state = newState;
+      this.log(`State changed to: ${newState}`);
+    }
+  }
+
+  private handleMessage(data: string): void {
+    try {
+      const message = JSON.parse(data);
+      const validatedMessage = serverMessageSchema.parse(message);
+
+      this.log('Received message:', validatedMessage.type);
+
+      switch (validatedMessage.type) {
+        case WSMessageType.PONG:
+          this.log(`Pong received (RTT: ${Date.now() - this.lastPingTime}ms)`);
+          break;
+
+        case WSMessageType.AUTHENTICATED:
+          this.emit('authenticated', { agentId: this.authenticatedAgentId! });
+          break;
+
+        case WSMessageType.SUBSCRIBED:
+          this.emit('subscribed', {
+            type: validatedMessage.subscriptionType,
+            targetId: validatedMessage.targetId
+          });
+          break;
+
+        case WSMessageType.UNSUBSCRIBED:
+          this.emit('unsubscribed', {
+            type: validatedMessage.subscriptionType,
+            targetId: validatedMessage.targetId
+          });
+          break;
+
+        case WSMessageType.TASK_STATUS:
+          this.emit('taskStatus', validatedMessage as TaskStatusMessage);
+          break;
+
+        case WSMessageType.TASK_PROGRESS:
+          this.emit('taskProgress', validatedMessage as TaskProgressMessage);
+          break;
+
+        case WSMessageType.TASK_LOGS:
+          this.emit('taskLogs', validatedMessage as TaskLogsMessage);
+          break;
+
+        case WSMessageType.TASK_ERROR:
+          this.emit('taskError', validatedMessage as TaskErrorMessage);
+          break;
+
+        case WSMessageType.SESSION_STATUS:
+          this.emit('sessionStatus', validatedMessage as SessionStatusMessage);
+          break;
+
+        case WSMessageType.CONNECTION_STATUS:
+          this.emit('connectionStatus', validatedMessage as ConnectionStatusMessage);
+          break;
+
+        case WSMessageType.ERROR:
+          this.emit('error', {
+            error: validatedMessage.error,
+            code: validatedMessage.code,
+            details: validatedMessage.details
+          });
+          break;
+
+        case WSMessageType.BATCH:
+          // PRODUCTION OPTIMIZATION: Unpack batched messages and process each one
+          this.handleBatchMessage(validatedMessage as BatchMessage);
+          break;
+
+        default:
+          this.log('Unknown message type:', message.type);
       }
-    }, 30000);
+    } catch (error) {
+      this.log('Failed to parse message:', error);
+    }
+  }
+
+  /**
+   * PRODUCTION OPTIMIZATION: Handle batched messages by unpacking and processing each individually
+   */
+  private handleBatchMessage(batchMessage: BatchMessage): void {
+    this.log(`Processing batch: ${batchMessage.batchId} with ${batchMessage.count} messages (${batchMessage.totalSize} bytes)`);
+    
+    // Emit the batch event for components that want to track batches
+    this.emit('batch', batchMessage);
+    
+    // Process each message in the batch individually
+    try {
+      for (const individualMessage of batchMessage.messages) {
+        if (!individualMessage || typeof individualMessage !== 'object') {
+          this.log('Skipping invalid message in batch:', individualMessage);
+          continue;
+        }
+        
+        // Validate each message individually and process it
+        try {
+          const validatedMessage = serverMessageSchema.parse(individualMessage);
+          this.processIndividualMessage(validatedMessage);
+        } catch (validationError) {
+          this.log('Failed to validate batched message:', validationError, individualMessage);
+        }
+      }
+    } catch (error) {
+      this.log('Error processing batch messages:', error);
+    }
+  }
+
+  /**
+   * Process an individual message (extracted from handleMessage logic for reuse)
+   */
+  private processIndividualMessage(validatedMessage: ServerMessage): void {
+    switch (validatedMessage.type) {
+      case WSMessageType.PONG:
+        this.log(`Pong received (RTT: ${Date.now() - this.lastPingTime}ms)`);
+        break;
+
+      case WSMessageType.AUTHENTICATED:
+        this.emit('authenticated', { agentId: this.authenticatedAgentId! });
+        break;
+
+      case WSMessageType.SUBSCRIBED:
+        this.emit('subscribed', {
+          type: validatedMessage.subscriptionType,
+          targetId: validatedMessage.targetId
+        });
+        break;
+
+      case WSMessageType.UNSUBSCRIBED:
+        this.emit('unsubscribed', {
+          type: validatedMessage.subscriptionType,
+          targetId: validatedMessage.targetId
+        });
+        break;
+
+      case WSMessageType.TASK_STATUS:
+        this.emit('taskStatus', validatedMessage as TaskStatusMessage);
+        break;
+
+      case WSMessageType.TASK_PROGRESS:
+        this.emit('taskProgress', validatedMessage as TaskProgressMessage);
+        break;
+
+      case WSMessageType.TASK_LOGS:
+        this.emit('taskLogs', validatedMessage as TaskLogsMessage);
+        break;
+
+      case WSMessageType.TASK_ERROR:
+        this.emit('taskError', validatedMessage as TaskErrorMessage);
+        break;
+
+      case WSMessageType.SESSION_STATUS:
+        this.emit('sessionStatus', validatedMessage as SessionStatusMessage);
+        break;
+
+      case WSMessageType.CONNECTION_STATUS:
+        this.emit('connectionStatus', validatedMessage as ConnectionStatusMessage);
+        break;
+
+      case WSMessageType.ERROR:
+        this.emit('error', {
+          error: validatedMessage.error,
+          code: validatedMessage.code,
+          details: validatedMessage.details
+        });
+        break;
+
+      case WSMessageType.BATCH:
+        // Nested batches not supported - log warning
+        this.log('Warning: Nested BATCH messages are not supported');
+        break;
+
+      default:
+        this.log('Unknown message type in batch:', (validatedMessage as any).type);
+    }
+  }
+
+  private handleDisconnection(code: number, reason: string): void {
+    this.log(`WebSocket disconnected: ${code} - ${reason}`);
+    this.stopHeartbeat();
+    this.ws = null;
+    this.setState(WSConnectionState.DISCONNECTED);
+    this.emit('disconnected', { reason: reason || 'Connection closed' });
+
+    // Preserve authentication state across network disconnections (not intentional disconnects)
+    // Only clear auth state for force disconnects
+    if (code === 1000 && reason === 'Force disconnect') {
+      this.log('🗑️ [DISCONNECT] Clearing auth state due to force disconnect');
+      this.authenticatedAgentId = null;
+      this.sessionToken = null;
+      this.tokenRefreshCallback = null;
+    } else {
+      this.log('🔄 [DISCONNECT] Preserving auth state for reconnection');
+    }
+    
+    // Clear subscriptions and message queue on any disconnect
+    this.subscriptions.clear();
+    this.messageQueue = [];
+    
+    // Attempt reconnection if not an intentional force disconnect
+    if ((code !== 1000 || reason !== 'Force disconnect') && this.reconnectAttempts < this.config.maxReconnectAttempts) {
+      this.scheduleReconnect();
+    }
+  }
+
+  private async scheduleReconnect(): Promise<void> {
+    if (this.reconnectTimeout) return;
+
+    this.setState(WSConnectionState.RECONNECTING);
+    this.reconnectAttempts++;
+    
+    const delay = Math.min(
+      this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1),
+      30000 // Max 30 seconds
+    );
+
+    this.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+
+    this.reconnectTimeout = window.setTimeout(async () => {
+      this.reconnectTimeout = null;
+      
+      try {
+        // Connect to WebSocket
+        await this.connect();
+        
+        // Re-authenticate if we were previously authenticated
+        this.log('🔄 [RECONNECT] Checking authentication state:', {
+          hasAgentId: !!this.authenticatedAgentId,
+          agentId: this.authenticatedAgentId,
+          hasToken: !!this.sessionToken,
+          tokenLength: this.sessionToken?.length || 0,
+          hasRefreshCallback: !!this.tokenRefreshCallback
+        });
+
+        if (this.authenticatedAgentId) {
+          let token = this.sessionToken;
+          
+          // If no stored token or token was invalidated, try to refresh
+          if (!token && this.tokenRefreshCallback) {
+            try {
+              this.log('🔄 [RECONNECT] Refreshing token via callback...');
+              token = await this.tokenRefreshCallback();
+              this.log('✅ [RECONNECT] Token refreshed for reconnection, length:', token?.length || 0);
+            } catch (refreshError) {
+              this.log('❌ [RECONNECT] Token refresh failed:', refreshError);
+              throw new Error('Failed to refresh authentication token');
+            }
+          }
+          
+          if (!token) {
+            this.log('❌ [RECONNECT] No valid authentication token available');
+            throw new Error('No valid authentication token available for reconnection');
+          }
+          
+          this.log('🔐 [RECONNECT] Re-authenticating with stored credentials...');
+          await this.authenticate(token, this.authenticatedAgentId);
+          this.log('✅ [RECONNECT] Re-authentication completed successfully');
+        } else {
+          this.log('⚠️ [RECONNECT] No stored agent ID - skipping automatic re-authentication');
+        }
+        
+        // Re-establish subscriptions
+        const subscriptions = Array.from(this.subscriptions);
+        this.subscriptions.clear();
+        
+        await Promise.all(
+          subscriptions.map(sub => {
+            const [type, targetId] = sub.split(':');
+            return this.subscribe(type as SubscriptionType, targetId);
+          })
+        );
+        
+        this.log('Reconnection successful');
+      } catch (error) {
+        this.log('Reconnect failed:', error);
+        
+        // If we've exceeded max attempts, stop trying
+        if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
+          this.log('Max reconnect attempts reached, stopping reconnection');
+          this.setState(WSConnectionState.ERROR);
+          this.emit('error', { 
+            error: 'Failed to reconnect after maximum attempts', 
+            code: 'MAX_RECONNECT_ATTEMPTS_EXCEEDED' 
+          });
+          return;
+        }
+        
+        // Schedule next reconnect attempt
+        this.scheduleReconnect();
+      }
+    }, delay);
+  }
+
+  private stopReconnecting(): void {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.reconnectAttempts = 0;
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = window.setInterval(() => {
+      if (this.state === WSConnectionState.CONNECTED || this.state === WSConnectionState.AUTHENTICATED) {
+        this.ping();
+      }
+    }, this.config.heartbeatInterval);
   }
 
   private stopHeartbeat(): void {
@@ -313,90 +805,57 @@ export class AgentWebSocket {
     }
   }
 
-  private attemptReconnect(): void {
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(`🔄 Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
-
-    setTimeout(() => {
-      this.connect().catch(error => {
-        console.error('❌ Reconnection failed:', error);
-      });
-    }, delay);
-  }
-
-  send(data: any): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
+  private sendMessage(message: ClientMessage): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+      this.log('Sent message:', message.type);
     } else {
-      console.error('❌ WebSocket not connected');
+      // Queue message for later if not connected
+      this.messageQueue.push(message);
+      this.log('Queued message:', message.type);
     }
   }
 
-  sendCommand(command: any): void {
-    this.send({
-      type: 'command',
-      data: command
-    });
-  }
-
-  disconnect(): void {
-    console.log('🔌 Disconnecting WebSocket...');
-    this.stopHeartbeat();
-    
-    if (this.ws) {
-      this.ws.close(1000, 'Client disconnecting');
-      this.ws = null;
+  private processMessageQueue(): void {
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift()!;
+      this.sendMessage(message);
     }
   }
 
-  getReadyState(): number {
-    return this.ws?.readyState ?? WebSocket.CLOSED;
+  private emit<T extends keyof WSEventMap>(event: T, data: WSEventMap[T]): void {
+    const handlers = this.eventListeners.get(event);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          handler(data);
+        } catch (error) {
+          this.log(`Error in event handler for ${event}:`, error);
+        }
+      });
+    }
   }
 
-  isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+  private log(...args: any[]): void {
+    if (this.config.debug) {
+      console.log('[WebSocket]', ...args);
+    }
   }
 }
 
-// Convenience function for simple connections
-export const connectToStream = (sessionId: string, config: WebSocketConfig = {}): AgentWebSocket => {
-  const ws = new AgentWebSocket(sessionId, config);
-  ws.connect().catch(error => {
-    console.error('❌ Failed to connect:', error);
-    config.onError?.(error.message);
-  });
-  return ws;
-};
+// Singleton instance for global use
+export const wsClient = new WebSocketClient();
 
-// Export singleton instance manager
-const activeConnections = new Map<string, AgentWebSocket>();
-
-export const getOrCreateConnection = (sessionId: string, config: WebSocketConfig = {}): AgentWebSocket => {
-  if (activeConnections.has(sessionId)) {
-    const existing = activeConnections.get(sessionId)!;
-    if (existing.isConnected()) {
-      return existing;
-    } else {
-      existing.disconnect();
-      activeConnections.delete(sessionId);
-    }
-  }
-
-  const ws = new AgentWebSocket(sessionId, config);
-  activeConnections.set(sessionId, ws);
-  
-  ws.connect().catch(error => {
-    console.error('❌ Failed to connect:', error);
-    activeConnections.delete(sessionId);
-    config.onError?.(error.message);
-  });
-
-  return ws;
-};
-
-export const disconnectAll = (): void => {
-  activeConnections.forEach(ws => ws.disconnect());
-  activeConnections.clear();
+// React integration helpers
+export const useWebSocket = () => {
+  return {
+    client: wsClient,
+    connect: wsClient.connect.bind(wsClient),
+    disconnect: wsClient.disconnect.bind(wsClient),
+    authenticate: wsClient.authenticate.bind(wsClient),
+    subscribe: wsClient.subscribe.bind(wsClient),
+    unsubscribe: wsClient.unsubscribe.bind(wsClient),
+    isReady: wsClient.isReady.bind(wsClient),
+    getState: wsClient.getState.bind(wsClient)
+  };
 };
