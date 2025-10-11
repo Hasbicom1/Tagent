@@ -665,8 +665,130 @@
     to { width: 100%; }
   }
 
-  @keyframes blink-caret {
-    from, to { border-color: transparent; }
-    50% { border-color: #00ff41; }
-  }
+    @keyframes blink-caret {
+      from, to { border-color: transparent; }
+      50% { border-color: #00ff41; }
+    }
+
+    /* Enhanced Terminal Animations */
+    @keyframes matrix-fall {
+      from { transform: translateY(-100vh); }
+      to { transform: translateY(100vh); }
+    }
+
+    @keyframes terminal-glow {
+      0%, 100% { 
+        box-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 15px #10b981;
+      }
+      50% { 
+        box-shadow: 0 0 10px #10b981, 0 0 20px #10b981, 0 0 30px #10b981;
+      }
+    }
+
+    @keyframes cursor-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    @keyframes status-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes command-typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+
+    /* Terminal Interface Styles */
+    .terminal-container {
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+      border: 1px solid #10b981;
+      box-shadow: 
+        0 0 20px rgba(16, 185, 129, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .terminal-prompt {
+      color: #10b981;
+      font-family: 'Courier Prime', 'Monaco', 'Consolas', monospace;
+      text-shadow: 0 0 5px #10b981;
+    }
+
+    .terminal-cursor {
+      animation: cursor-blink 1s infinite;
+      background: #10b981;
+      width: 2px;
+      height: 1.2em;
+      display: inline-block;
+      margin-left: 2px;
+    }
+
+    .matrix-drop {
+      position: absolute;
+      color: #10b981;
+      opacity: 0.03;
+      font-family: 'Courier Prime', monospace;
+      font-size: 12px;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .status-indicator {
+      animation: status-pulse 2s infinite;
+    }
+
+    .command-autocomplete {
+      background: rgba(0, 0, 0, 0.95);
+      border: 1px solid #10b981;
+      border-radius: 4px;
+      backdrop-filter: blur(10px);
+    }
+
+    .mini-map {
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #10b981;
+      backdrop-filter: blur(10px);
+      border-radius: 8px;
+    }
+
+    .section-transition {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .boot-sequence-line {
+      animation: command-typing 0.5s ease-out;
+    }
+
+    .progress-bar {
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    /* Hover Effects */
+    .terminal-hover:hover {
+      transform: scale(1.02);
+      transition: transform 0.2s ease;
+    }
+
+    .glow-on-hover:hover {
+      box-shadow: 
+        0 0 20px rgba(16, 185, 129, 0.4),
+        0 0 40px rgba(16, 185, 129, 0.2);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .terminal-container {
+        padding: 1rem;
+        font-size: 14px;
+      }
+      
+      .mini-map {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin-bottom: 1rem;
+      }
+    }
 }
