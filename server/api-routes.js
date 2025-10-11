@@ -389,29 +389,52 @@ router.get('/session/:sessionId', async (req, res) => {
 
 // NEW: Session status API for race condition fix
 router.get('/api/session-status', async (req, res) => {
+  const { session } = req.query;
+  
+  console.log('🔍 Checking session status:', session);
+  
+  if (!session) {
+    return res.status(400).json({ 
+      error: 'Session ID required',
+      status: 'error'
+    });
+  }
+  
   try {
-    const sessionId = req.query.session;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing session' });
-    }
-    
-    // Check Redis for session status
+    // Check Redis for session data
     const { getRedis } = require('./redis-simple.js');
-    const redis = getRedis();
-    const rec = await redis.hgetall(`session:${sessionId}`);
+    const redis = await getRedis();
+    const sessionData = await redis.hgetall(`session:${session}`);
     
-    if (!rec || !rec.status) {
-      return res.json({ status: 'not_found' });
+    console.log('📊 Session data from Redis:', sessionData);
+    
+    if (!sessionData || Object.keys(sessionData).length === 0) {
+      return res.json({
+        status: 'not_found',
+        ready: false,
+        message: 'Session not found in Redis'
+      });
     }
+    
+    // Check if worker has marked browser as ready
+    const isReady = sessionData.status === 'active' && 
+                    sessionData.browser_ready === 'true';
     
     return res.json({
-      status: rec.status,  // "starting", "ready", "disconnected"
-      workerConnected: rec.workerConnected === 'true',
-      readyAt: rec.readyAt
+      status: sessionData.status || 'unknown',
+      ready: isReady,
+      browserReady: sessionData.browser_ready === 'true',
+      workerReady: sessionData.worker_ready === 'true',
+      timestamp: new Date().toISOString(),
+      debug: sessionData // Include full data for debugging
     });
+    
   } catch (error) {
-    console.error('❌ Session status check failed:', error);
-    res.status(500).json({ error: 'Status check failed' });
+    console.error('❌ Error checking session status:', error);
+    return res.status(500).json({
+      error: 'Failed to check session status',
+      message: error.message
+    });
   }
 });
 
