@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { LandingPage } from "@/components/landing/LandingPage";
-import { CommandTerminalInterface } from "@/components/command/CommandTerminalInterface";
 import { AgentInterface } from "@/components/agent/AgentInterface";
 import { PaymentSuccess } from "@/components/payment/PaymentSuccess";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
@@ -295,7 +294,7 @@ function Router() {
           <div className="fixed top-4 right-4 z-50">
             <ThemeToggle />
           </div>
-          <CommandTerminalInterface onStartPayment={handleStartPayment} />
+          <Landing />
         </div>
       )} />
       <Route path="/classic" component={() => (
