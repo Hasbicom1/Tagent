@@ -8,6 +8,8 @@
 import express from 'express';
 import { createUserSession, getUserSession, updateSessionStatus } from './database.js';
 import { getBrowserSession, createBrowserSession, removeBrowserSession } from './browser-automation.js';
+import { queueBrowserJobAfterPayment, isQueueAvailable } from './queue-simple.js';
+import { generateWebSocketToken } from './jwt-utils.js';
 
 const router = express.Router();
 
@@ -215,12 +217,37 @@ router.post('/checkout-success', async (req, res) => {
           console.warn('⚠️ REAL SESSION: Failed to create session in real session manager:', sessionError?.message);
         }
       }
+
+      // CRITICAL FIX: Generate JWT token for WebSocket authentication
+      let websocketToken = null;
+      try {
+        websocketToken = generateWebSocketToken(automationSessionId, uniqueAgentId);
+        console.log('✅ JWT: WebSocket token generated for session:', automationSessionId);
+      } catch (jwtError) {
+        console.error('❌ JWT: Failed to generate WebSocket token:', jwtError.message);
+        // Don't fail the checkout, just log the error
+      }
+
+      // CRITICAL FIX: Queue browser job after successful payment (with JWT token)
+      if (isQueueAvailable()) {
+        try {
+          console.log('🚀 QUEUE: Queueing browser job after payment success...');
+          const queueResult = await queueBrowserJobAfterPayment(automationSessionId, uniqueAgentId, websocketToken);
+          console.log('✅ QUEUE: Browser job queued successfully:', queueResult);
+        } catch (queueError) {
+          console.error('❌ QUEUE: Failed to queue browser job:', queueError.message);
+          // Don't fail the checkout, just log the error
+        }
+      } else {
+        console.warn('⚠️ QUEUE: Queue not available, browser job not queued');
+      }
       
            return res.status(200).json({
              sessionId: automationSessionId,
              agentId: automationSessionId,
              expiresAt: expiresAt.toISOString(),
-             databaseId: storedSession?.session_id || storedSession?.id
+             databaseId: storedSession?.session_id || storedSession?.id,
+             websocketToken: websocketToken
            });
     } catch (dbError) {
       console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
@@ -385,6 +412,137 @@ router.get('/api/session-status', async (req, res) => {
   } catch (error) {
     console.error('❌ Session status check failed:', error);
     res.status(500).json({ error: 'Status check failed' });
+  }
+});
+
+// NEW: Test endpoint to verify complete flow
+router.post('/api/test-browser-flow', async (req, res) => {
+  try {
+    console.log('🧪 TEST: Testing complete browser flow...');
+    
+    // Generate test session
+    const testSessionId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const testAgentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log('🧪 TEST: Generated test session:', testSessionId);
+    
+    // Test JWT token generation
+    let websocketToken = null;
+    try {
+      websocketToken = generateWebSocketToken(testSessionId, testAgentId);
+      console.log('✅ TEST: JWT token generated successfully');
+    } catch (jwtError) {
+      console.error('❌ TEST: JWT token generation failed:', jwtError.message);
+      return res.status(500).json({ error: 'JWT token generation failed', details: jwtError.message });
+    }
+    
+    // Test queue availability
+    if (!isQueueAvailable()) {
+      console.error('❌ TEST: Queue not available');
+      return res.status(500).json({ error: 'Queue not available' });
+    }
+    console.log('✅ TEST: Queue is available');
+    
+    // Test queue browser job
+    try {
+      const queueResult = await queueBrowserJobAfterPayment(testSessionId, testAgentId, websocketToken);
+      console.log('✅ TEST: Browser job queued successfully:', queueResult);
+    } catch (queueError) {
+      console.error('❌ TEST: Failed to queue browser job:', queueError.message);
+      return res.status(500).json({ error: 'Failed to queue browser job', details: queueError.message });
+    }
+    
+    // Test Redis session storage
+    try {
+      const { getRedis } = require('./redis-simple.js');
+      const redis = getRedis();
+      const sessionData = await redis.hgetall(`session:${testSessionId}`);
+      console.log('✅ TEST: Session data in Redis:', sessionData);
+    } catch (redisError) {
+      console.error('❌ TEST: Failed to check Redis session:', redisError.message);
+    }
+    
+    console.log('✅ TEST: Complete browser flow test passed');
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Complete browser flow test passed',
+      testSessionId,
+      testAgentId,
+      websocketToken: websocketToken ? 'generated' : 'failed',
+      queueAvailable: isQueueAvailable(),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ TEST: Complete flow test failed:', error);
+    return res.status(500).json({ 
+      error: 'Complete flow test failed', 
+      details: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// NEW: Environment variables check endpoint
+router.get('/api/env-check', async (req, res) => {
+  try {
+    console.log('🔍 ENV: Checking environment variables...');
+    
+    const envCheck = {
+      // Database
+      DATABASE_URL: process.env.DATABASE_URL ? '✅ Set' : '❌ Missing',
+      
+      // Redis
+      REDIS_URL: process.env.REDIS_URL ? '✅ Set' : '❌ Missing',
+      REDIS_PUBLIC_URL: process.env.REDIS_PUBLIC_URL ? '✅ Set' : '❌ Missing',
+      
+      // JWT
+      JWT_SECRET: process.env.JWT_SECRET ? '✅ Set' : '⚠️ Using default',
+      
+      // Stripe
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '✅ Set' : '❌ Missing',
+      STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ? '✅ Set' : '❌ Missing',
+      
+      // AI Providers
+      GROQ_API_KEY: process.env.GROQ_API_KEY ? '✅ Set' : '❌ Missing',
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? '✅ Set' : '⚠️ Not set',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ Set' : '⚠️ Not set',
+      
+      // Worker
+      BACKEND_WS_URL: process.env.BACKEND_WS_URL ? '✅ Set' : '⚠️ Using default',
+      
+      // Node Environment
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      PORT: process.env.PORT || '8080',
+      RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set'
+    };
+    
+    // Check critical variables
+    const criticalMissing = [];
+    if (!process.env.DATABASE_URL) criticalMissing.push('DATABASE_URL');
+    if (!process.env.REDIS_URL && !process.env.REDIS_PUBLIC_URL) criticalMissing.push('REDIS_URL or REDIS_PUBLIC_URL');
+    if (!process.env.STRIPE_SECRET_KEY) criticalMissing.push('STRIPE_SECRET_KEY');
+    if (!process.env.GROQ_API_KEY) criticalMissing.push('GROQ_API_KEY');
+    
+    const status = criticalMissing.length === 0 ? 'healthy' : 'missing_critical';
+    
+    console.log('🔍 ENV: Environment check completed');
+    console.log('🔍 ENV: Critical missing:', criticalMissing);
+    
+    return res.status(200).json({
+      status,
+      criticalMissing,
+      environment: envCheck,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ ENV: Environment check failed:', error);
+    return res.status(500).json({ 
+      error: 'Environment check failed', 
+      details: error.message 
+    });
   }
 });
 
