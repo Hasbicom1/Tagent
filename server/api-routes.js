@@ -201,7 +201,7 @@ router.post('/checkout-success', async (req, res) => {
 
     try {
            // Create session in database
-           const storedSession = await createUserSession(sessionData);
+      const storedSession = await createUserSession(sessionData);
            console.log('✅ DATABASE: Automation session stored with ID:', storedSession?.session_id || storedSession?.id);
       
       // Create session in real session manager if available
@@ -287,13 +287,13 @@ router.post('/checkout-success', async (req, res) => {
         console.error('❌ REDIS QUEUE: Failed to add to simple queue:', queueError.message);
       }
       
-           return res.status(200).json({
-             sessionId: automationSessionId,
-             agentId: automationSessionId,
-             expiresAt: expiresAt.toISOString(),
+      return res.status(200).json({
+        sessionId: automationSessionId,
+        agentId: automationSessionId,
+        expiresAt: expiresAt.toISOString(),
              databaseId: storedSession?.session_id || storedSession?.id,
              websocketToken: websocketToken
-           });
+      });
     } catch (dbError) {
       console.warn('⚠️ DATABASE: Failed to persist session, returning ephemeral session:', dbError?.message);
       return res.status(200).json({
@@ -344,7 +344,7 @@ router.get('/agent/:agentId/status', async (req, res) => {
       if (global.realSessionManager) {
         await global.realSessionManager.updateSession(agentId, { status: 'expired' });
       } else {
-        await updateSessionStatus(agentId, 'expired');
+      await updateSessionStatus(agentId, 'expired');
       }
       
       return res.status(410).json({
@@ -609,7 +609,7 @@ router.get('/api/env-check', async (req, res) => {
     console.error('❌ ENV: Environment check failed:', error);
     return res.status(500).json({ 
       error: 'Environment check failed', 
-      details: error.message 
+      details: error.message
     });
   }
 });

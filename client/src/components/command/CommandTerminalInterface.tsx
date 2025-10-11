@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Terminal, 
   Clock, 
@@ -17,7 +18,11 @@ import {
   Minus,
   Maximize2,
   Bot,
-  Settings
+  Settings,
+  ArrowUp,
+  ArrowDown,
+  Tab,
+  Escape
 } from 'lucide-react';
 
 interface CommandTerminalInterfaceProps {
@@ -89,9 +94,19 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const [fontSize, setFontSize] = useState('text-base');
   const [fontStyle, setFontStyle] = useState('font-mono');
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Enhanced keyboard navigation states
+  const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showKeyboardHints, setShowKeyboardHints] = useState(true);
+  const [blinkingCursor, setBlinkingCursor] = useState(true);
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const cursorBlinkRef = useRef<NodeJS.Timeout | null>(null);
 
   // Focus input on mount and keep focus
   useEffect(() => {
@@ -99,6 +114,88 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
       inputRef.current.focus();
     }
   }, []);
+
+  // Blinking cursor effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBlinkingCursor(prev => !prev);
+    }, 500);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Command suggestions logic
+  const getCommandSuggestions = (input: string) => {
+    const allCommands = ['help', 'hero', 'features', 'pricing', 'start', 'clear', 'exit'];
+    return allCommands.filter(cmd => cmd.startsWith(input.toLowerCase()));
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      // Navigate command history
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      // Navigate command history forward
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (suggestions.length > 0) {
+        setInput(suggestions[selectedSuggestionIndex]);
+        setShowCommandSuggestions(false);
+      }
+    } else if (e.key === 'Escape') {
+      setShowCommandSuggestions(false);
+      setShowCommandPalette(false);
+    } else if (e.ctrlKey && e.key === 'k') {
+      e.preventDefault();
+      setShowCommandPalette(true);
+    }
+  };
+
+  // Update suggestions when input changes
+  useEffect(() => {
+    if (input.length > 0) {
+      const newSuggestions = getCommandSuggestions(input);
+      setSuggestions(newSuggestions);
+      setShowCommandSuggestions(newSuggestions.length > 0);
+      setSelectedSuggestionIndex(0);
+    } else {
+      setShowCommandSuggestions(false);
+    }
+  }, [input]);
+
+  // Blinking cursor effect
+  useEffect(() => {
+    cursorBlinkRef.current = setInterval(() => {
+      setBlinkingCursor(prev => !prev);
+    }, 530);
+    
+    return () => {
+      if (cursorBlinkRef.current) {
+        clearInterval(cursorBlinkRef.current);
+      }
+    };
+  }, []);
+
+  // Command suggestions based on input
+  useEffect(() => {
+    if (input.trim()) {
+      const availableCommands = [
+        'help', 'hero', 'features', 'pricing', 'specs', 'contact', 'about',
+        'themes', 'clear', 'reset', 'expand', 'reveal all'
+      ];
+      const filtered = availableCommands.filter(cmd => 
+        cmd.toLowerCase().startsWith(input.toLowerCase())
+      );
+      setSuggestions(filtered);
+      setShowCommandSuggestions(filtered.length > 0);
+      setSelectedSuggestionIndex(0);
+    } else {
+      setShowCommandSuggestions(false);
+      setSuggestions([]);
+    }
+  }, [input]);
 
   // Apply theme to CSS variables
   useEffect(() => {
@@ -710,6 +807,10 @@ Ready to change the world? Let's build together!`
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
                 className="flex-1 bg-transparent border-none outline-none text-primary font-mono placeholder:text-muted-foreground caret-primary"
+                style={{
+                  textShadow: '0 0 10px #00ff41',
+                  caretColor: blinkingCursor ? '#00ff41' : 'transparent'
+                }}
                 placeholder="Type a command... (try 'help' or 'h')"
                 data-testid="input-command"
               />
@@ -717,10 +818,73 @@ Ready to change the world? Let's build together!`
                 Press Enter
               </div>
             </div>
+            
+            {/* Command Suggestions Dropdown */}
+            {showCommandSuggestions && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 bg-black border border-green-400 rounded-b-md shadow-lg z-10">
+                {suggestions.map((suggestion, index) => (
+                  <div
+                    key={suggestion}
+                    className={`px-3 py-2 text-sm font-mono cursor-pointer ${
+                      index === selectedSuggestionIndex 
+                        ? 'bg-green-400 text-black' 
+                        : 'text-green-400 hover:bg-green-400/20'
+                    }`}
+                    onClick={() => {
+                      setInput(suggestion);
+                      setShowCommandSuggestions(false);
+                    }}
+                  >
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Keyboard Hints */}
+            {showKeyboardHints && (
+              <div className="absolute bottom-2 left-2 text-xs text-green-400/60 font-mono">
+                <div>Press ↑↓ to navigate history</div>
+                <div>Press Tab to autocomplete</div>
+                <div>Press Ctrl+K for command palette</div>
+                <div>Available: [h] help [f] features [p] pricing</div>
+              </div>
+            )}
           </div>
           )}
         </Card>
       </div>
+
+      {/* Command Palette Modal */}
+      {showCommandPalette && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-black border border-green-400 rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
+            <div className="text-green-400 font-mono text-sm mb-4">
+              Command Palette (Ctrl+K)
+            </div>
+            <div className="space-y-2">
+              {['help', 'hero', 'features', 'pricing', 'start', 'clear', 'exit'].map((cmd) => (
+                <div
+                  key={cmd}
+                  className="px-3 py-2 text-green-400 font-mono cursor-pointer hover:bg-green-400/20 rounded"
+                  onClick={() => {
+                    setInput(cmd);
+                    setShowCommandPalette(false);
+                    if (inputRef.current) {
+                      inputRef.current.focus();
+                    }
+                  }}
+                >
+                  {cmd}
+                </div>
+              ))}
+            </div>
+            <div className="text-xs text-green-400/60 mt-4">
+              Press Escape to close
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Revealed sections appear below terminal */}
       <div className="space-y-0">
