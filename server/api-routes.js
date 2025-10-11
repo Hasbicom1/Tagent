@@ -103,7 +103,159 @@ router.post('/checkout-success', async (req, res) => {
 });
 
 // ============================================
-// SESSION STATUS ENDPOINT
+// AGENT STATUS ENDPOINT (CRITICAL FIX)
+// ============================================
+router.get('/agent/:sessionId/status', async (req, res) => {
+  const { sessionId } = req.params;
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  console.log('🔍 Checking agent status:', sessionId);
+
+  try {
+    // Verify JWT token if provided
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.sessionId !== sessionId) {
+          return res.status(403).json({ 
+            success: false, 
+            error: 'Token does not match session' 
+          });
+        }
+      } catch (error) {
+        console.error('❌ Invalid token:', error.message);
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Invalid or expired token' 
+        });
+      }
+    }
+
+    // Get session from Redis first (faster)
+    let sessionData = await redisClient.get(`session:${sessionId}`);
+    
+    if (sessionData) {
+      sessionData = JSON.parse(sessionData);
+      console.log('✅ Agent session found in Redis:', sessionId);
+      
+      return res.json({
+        success: true,
+        status: sessionData.status,
+        agentId: sessionData.agentId,
+        expiresAt: sessionData.expiresAt,
+        isActive: sessionData.status === 'active',
+        timeRemaining: Math.floor((new Date(sessionData.expiresAt) - new Date()) / 1000)
+      });
+    }
+
+    // Fallback to PostgreSQL
+    const result = await pool.query(
+      'SELECT * FROM sessions WHERE session_id = $1',
+      [sessionId]
+    );
+
+    if (result.rows.length === 0) {
+      console.error('❌ Session not found:', sessionId);
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Session not found',
+        message: 'This agent session does not exist or has expired'
+      });
+    }
+
+    const session = result.rows[0];
+    console.log('✅ Agent session found in PostgreSQL:', sessionId);
+
+    // Check if expired
+    const isExpired = new Date(session.expires_at) < new Date();
+    
+    if (isExpired) {
+      return res.status(410).json({ 
+        success: false, 
+        error: 'Session expired',
+        expiresAt: session.expires_at
+      });
+    }
+
+    res.json({
+      success: true,
+      status: session.status,
+      agentId: session.agent_id,
+      expiresAt: session.expires_at,
+      isActive: session.status === 'active',
+      timeRemaining: Math.floor((new Date(session.expires_at) - new Date()) / 1000)
+    });
+
+  } catch (error) {
+    console.error('❌ Error checking agent status:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to check agent status' 
+    });
+  }
+});
+
+// ============================================
+// CREATE SESSION MANUALLY (FOR TESTING)
+// ============================================
+router.post('/create-session', async (req, res) => {
+  try {
+    const agentSessionId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const agentId = `test_${Math.random().toString(36).substr(2, 9)}`;
+    const expiresAt = new Date(Date.now() + JWT_EXPIRY * 1000);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        sessionId: agentSessionId, 
+        agentId,
+        exp: Math.floor(Date.now() / 1000) + JWT_EXPIRY
+      },
+      JWT_SECRET
+    );
+
+    // Store in PostgreSQL
+    await pool.query(`
+      INSERT INTO sessions (session_id, agent_id, status, expires_at, payment_verified, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+    `, [agentSessionId, agentId, 'active', expiresAt, true]);
+
+    // Store in Redis
+    await redisClient.setEx(
+      `session:${agentSessionId}`,
+      JWT_EXPIRY,
+      JSON.stringify({
+        sessionId: agentSessionId,
+        agentId,
+        status: 'active',
+        expiresAt: expiresAt.toISOString(),
+        token,
+        createdAt: new Date().toISOString()
+      })
+    );
+
+    console.log('✅ Test session created:', agentSessionId);
+
+    res.json({ 
+      success: true, 
+      sessionId: agentSessionId,
+      agentId,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      instructions: `Use this URL: /live/agent/${agentSessionId}`
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating session:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create session' 
+    });
+  }
+});
+
+// ============================================
+// SESSION STATUS ENDPOINT (Legacy support)
 // ============================================
 router.get('/session-status/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
