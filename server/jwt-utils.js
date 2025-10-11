@@ -24,8 +24,8 @@ export function generateWebSocketToken(sessionId, agentId) {
       sessionId,
       agentId,
       type: 'websocket_auth',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+      iat: Math.floor(Date.now() / 1000)
+      // ❌ REMOVED: exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) - conflicts with expiresIn
     };
     
     const token = jwt.sign(payload, JWT_SECRET, { 
