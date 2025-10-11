@@ -818,7 +818,6 @@ app.get('/api/session-status', async (req, res) => {
       ready: isReady,
       browserReady: sessionData.browser_ready === 'true',
       workerReady: sessionData.worker_ready === 'true',
-      websocketToken: sessionData.websocket_token || null, // ⚠️ ADD JWT TOKEN!
       timestamp: new Date().toISOString(),
       debug: sessionData // Include full data for debugging
     });
@@ -1036,6 +1035,7 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
   try {
     // Import database functions
     const { getUserSession } = await import('./database.js');
+    const { getRedis } = await import('./redis-simple.js');
     
     // Get real session from database
     const session = await getUserSession(req.params.sessionId);
@@ -1049,11 +1049,25 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
       });
     }
     
+    // CRITICAL FIX: Get JWT token from Redis
+    let websocketToken = null;
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        const sessionData = await redis.hgetall(`session:${req.params.sessionId}`);
+        websocketToken = sessionData.websocket_token;
+        console.log('🔐 PRODUCTION: JWT token retrieved from Redis:', !!websocketToken);
+      }
+    } catch (redisError) {
+      console.warn('⚠️ PRODUCTION: Failed to get JWT token from Redis:', redisError.message);
+    }
+    
     res.json({
       sessionId: req.params.sessionId,
       status: session.status,
       expiresAt: session.expires_at,
       paymentVerified: session.payment_verified,
+      websocketToken: websocketToken, // ⚠️ CRITICAL: Add JWT token!
       timestamp: new Date().toISOString()
     });
   } catch (error) {
