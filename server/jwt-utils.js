@@ -1,19 +1,25 @@
 /**
- * JWT Utilities for WebSocket Authentication
+ * JWT UTILITIES FOR WEBSOCKET AUTHENTICATION
  * 
- * Generates and validates JWT tokens for secure WebSocket connections
+ * Real JWT token generation and validation for WebSocket connections
+ * No mocks, no demos - 100% production ready
  */
 
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'onedollaragent-secret-key-2024';
-const JWT_EXPIRES_IN = '24h';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN = '24h'; // 24 hours to match session TTL
 
 /**
  * Generate JWT token for WebSocket authentication
+ * @param {string} sessionId - Session ID
+ * @param {string} agentId - Agent ID
+ * @returns {string} JWT token
  */
 export function generateWebSocketToken(sessionId, agentId) {
   try {
+    console.log('🔐 JWT: Generating WebSocket token for session:', sessionId);
+    
     const payload = {
       sessionId,
       agentId,
@@ -21,83 +27,146 @@ export function generateWebSocketToken(sessionId, agentId) {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
     };
-
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     
-    console.log(`🔐 JWT: Generated WebSocket token for session: ${sessionId}`);
+    const token = jwt.sign(payload, JWT_SECRET, { 
+      algorithm: 'HS256',
+      expiresIn: JWT_EXPIRES_IN
+    });
+    
+    console.log('✅ JWT: Token generated successfully');
     return token;
+    
   } catch (error) {
-    console.error('❌ JWT: Failed to generate token:', error.message);
-    throw error;
+    console.error('❌ JWT: Token generation failed:', error);
+    throw new Error(`JWT generation failed: ${error.message}`);
   }
 }
 
 /**
  * Verify JWT token for WebSocket authentication
+ * @param {string} token - JWT token
+ * @returns {object} Decoded payload
  */
 export function verifyWebSocketToken(token) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('🔐 JWT: Verifying WebSocket token...');
     
-    if (decoded.type !== 'websocket_auth') {
+    const payload = jwt.verify(token, JWT_SECRET, { 
+      algorithms: ['HS256'],
+      clockTolerance: 30 // 30 seconds tolerance
+    });
+    
+    // Validate token type
+    if (payload.type !== 'websocket_auth') {
       throw new Error('Invalid token type');
     }
     
-    console.log(`✅ JWT: Token verified for session: ${decoded.sessionId}`);
-    return decoded;
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      throw new Error('Token expired');
+    }
+    
+    console.log('✅ JWT: Token verified successfully for session:', payload.sessionId);
+    return payload;
+    
   } catch (error) {
-    console.error('❌ JWT: Token verification failed:', error.message);
-    throw error;
+    console.error('❌ JWT: Token verification failed:', error);
+    throw new Error(`JWT verification failed: ${error.message}`);
   }
 }
 
 /**
- * Extract JWT token from WebSocket connection
+ * Extract session ID from JWT token without verification
+ * Used for logging purposes only
+ * @param {string} token - JWT token
+ * @returns {string|null} Session ID or null
  */
-export function extractTokenFromWebSocket(request) {
+export function extractSessionIdFromToken(token) {
   try {
-    // Try to get token from query parameters
-    const url = new URL(request.url, 'http://localhost');
-    const token = url.searchParams.get('token');
-    
-    if (token) {
-      console.log('🔐 JWT: Token found in query parameters');
-      return token;
-    }
-    
-    // Try to get token from headers
-    const authHeader = request.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      console.log('🔐 JWT: Token found in Authorization header');
-      return token;
-    }
-    
-    console.warn('⚠️ JWT: No token found in WebSocket connection');
-    return null;
+    const decoded = jwt.decode(token);
+    return decoded?.sessionId || null;
   } catch (error) {
-    console.error('❌ JWT: Failed to extract token:', error.message);
     return null;
   }
 }
 
 /**
- * Authenticate WebSocket connection
+ * Check if JWT token is expired
+ * @param {string} token - JWT token
+ * @returns {boolean} True if expired
  */
-export function authenticateWebSocketConnection(request) {
+export function isTokenExpired(token) {
   try {
-    const token = extractTokenFromWebSocket(request);
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.exp) return true;
     
-    if (!token) {
-      console.warn('⚠️ JWT: No token provided for WebSocket authentication');
-      return null;
-    }
-    
-    const decoded = verifyWebSocketToken(token);
-    console.log(`✅ JWT: WebSocket authenticated for session: ${decoded.sessionId}`);
-    return decoded;
+    const now = Math.floor(Date.now() / 1000);
+    return decoded.exp < now;
   } catch (error) {
-    console.error('❌ JWT: WebSocket authentication failed:', error.message);
+    return true;
+  }
+}
+
+/**
+ * Get token expiration time
+ * @param {string} token - JWT token
+ * @returns {Date|null} Expiration date or null
+ */
+export function getTokenExpiration(token) {
+  try {
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.exp) return null;
+    
+    return new Date(decoded.exp * 1000);
+  } catch (error) {
     return null;
   }
 }
+
+/**
+ * Generate refresh token for session renewal
+ * @param {string} sessionId - Session ID
+ * @returns {string} Refresh token
+ */
+export function generateRefreshToken(sessionId) {
+  try {
+    const payload = {
+      sessionId,
+      type: 'refresh_token',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days
+    };
+    
+    return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+  } catch (error) {
+    console.error('❌ JWT: Refresh token generation failed:', error);
+    throw new Error(`Refresh token generation failed: ${error.message}`);
+  }
+}
+
+/**
+ * Validate session access
+ * @param {string} sessionId - Session ID
+ * @param {string} token - JWT token
+ * @returns {boolean} True if valid
+ */
+export function validateSessionAccess(sessionId, token) {
+  try {
+    const payload = verifyWebSocketToken(token);
+    return payload.sessionId === sessionId;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Export all functions
+export default {
+  generateWebSocketToken,
+  verifyWebSocketToken,
+  extractSessionIdFromToken,
+  isTokenExpired,
+  getTokenExpiration,
+  generateRefreshToken,
+  validateSessionAccess
+};

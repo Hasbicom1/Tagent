@@ -59,6 +59,14 @@ export default function Success() {
         const agentId = data.agentId || data.sessionId;
         const expiresAt = data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+        // CRITICAL FIX: Store JWT token for WebSocket authentication
+        if (data.websocketToken) {
+          sessionStorage.setItem('websocket_token', data.websocketToken);
+          console.log('✅ JWT token stored for WebSocket authentication');
+        } else {
+          console.warn('⚠️ No JWT token received from backend');
+        }
+
         // Persist mapping to prevent new session creation on any subsequent refreshes
         if (agentId) {
           localStorage.setItem(localKey, agentId);

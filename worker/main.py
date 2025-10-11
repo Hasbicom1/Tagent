@@ -132,6 +132,15 @@ async def start_agent_for_session(session_id: str):
         await ws.send(json.dumps(register_msg))
         logger.info(f"✅ WORKER: Worker registered to backend: {session_id}")
         
+        # CRITICAL FIX: Update Redis to mark session as ready
+        redis_conn.hset(f"session:{session_id}", {
+            "status": "ready",
+            "workerConnected": "true",
+            "browser_ready": "true",
+            "readyAt": datetime.now().isoformat()
+        })
+        logger.info(f"✅ WORKER: Session {session_id} marked as READY in Redis")
+        
         # Start your existing live stream logic
         logger.info(f"🎬 WORKER: Starting live browser stream for session: {session_id}")
         stream = LiveBrowserStream(session_id, ws_url)

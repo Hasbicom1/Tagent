@@ -1779,3 +1779,303 @@ app.get('/api/health/details', async (req, res) => {
 });
 
 // DUPLICATE SERVER INITIALIZATION REMOVED - Server already created and listening above
+
+// ===== DEBUG ENDPOINTS FOR TROUBLESHOOTING =====
+console.log('🔧 PRODUCTION: Adding debug endpoints for troubleshooting...');
+
+// Debug endpoint for live stream status
+app.get('/api/debug/live-stream/:sessionId', async (req, res) => {
+  console.log('🔍 DEBUG: Live stream status requested for:', req.params.sessionId);
+  try {
+    const sessionId = req.params.sessionId;
+    
+    // Check Redis for session data
+    let redisStatus = 'disconnected';
+    let sessionData = null;
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        redisStatus = 'connected';
+        sessionData = await redis.hgetall(`session:${sessionId}`);
+      }
+    } catch (error) {
+      console.warn('⚠️ DEBUG: Redis check failed:', error.message);
+    }
+    
+    // Check if session exists in database
+    let dbSession = null;
+    try {
+      const { getUserSession } = await import('./database.js');
+      dbSession = await getUserSession(sessionId);
+    } catch (error) {
+      console.warn('⚠️ DEBUG: Database check failed:', error.message);
+    }
+    
+    res.json({
+      sessionId,
+      timestamp: new Date().toISOString(),
+      redis: {
+        status: redisStatus,
+        sessionData: sessionData || {}
+      },
+      database: {
+        session: dbSession ? {
+          id: dbSession.id,
+          status: dbSession.status,
+          expiresAt: dbSession.expires_at,
+          paymentVerified: dbSession.payment_verified
+        } : null
+      },
+      liveStream: {
+        activeConnections: liveStreamRelay?.frontendConnections?.size || 0,
+        hasFrontendConnection: liveStreamRelay?.frontendConnections?.has(sessionId) || false
+      }
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Live stream status check failed:', error);
+    res.status(500).json({
+      error: 'Debug check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for Redis frame channels
+app.get('/api/debug/redis-frames', async (req, res) => {
+  console.log('🔍 DEBUG: Redis frame channels check requested');
+  try {
+    const redis = await getRedis();
+    if (!redis) {
+      return res.status(503).json({
+        error: 'Redis not available',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Get all browser frame channels
+    const channels = await redis.pubsub('CHANNELS', 'browser:frames:*');
+    
+    res.json({
+      channels: channels || [],
+      channelCount: channels?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Redis frames check failed:', error);
+    res.status(500).json({
+      error: 'Redis frames check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for WebSocket connections
+app.get('/api/debug/websocket-connections', async (req, res) => {
+  console.log('🔍 DEBUG: WebSocket connections check requested');
+  try {
+    const connections = {
+      liveStreamRelay: {
+        frontendConnections: liveStreamRelay?.frontendConnections?.size || 0,
+        hasRedisSubscriber: !!liveStreamRelay?.redisSubscriber
+      },
+      realtimeAutomation: {
+        // Socket.IO connections are handled internally
+        available: true
+      }
+    };
+    
+    res.json({
+      connections,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: WebSocket connections check failed:', error);
+    res.status(500).json({
+      error: 'WebSocket connections check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for environment variables
+app.get('/api/debug/env', async (req, res) => {
+  console.log('🔍 DEBUG: Environment variables check requested');
+  try {
+    const envVars = {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      REDIS_URL: process.env.REDIS_URL ? '***configured***' : 'not set',
+      REDIS_PUBLIC_URL: process.env.REDIS_PUBLIC_URL ? '***configured***' : 'not set',
+      JWT_SECRET: process.env.JWT_SECRET ? '***configured***' : 'not set',
+      GROQ_API_KEY: process.env.GROQ_API_KEY ? '***configured***' : 'not set',
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '***configured***' : 'not set',
+      DATABASE_URL: process.env.DATABASE_URL ? '***configured***' : 'not set'
+    };
+    
+    res.json({
+      environment: envVars,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ DEBUG: Environment check failed:', error);
+    res.status(500).json({
+      error: 'Environment check failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+console.log('✅ PRODUCTION: Debug endpoints added for troubleshooting');
+
+// ===== COMPREHENSIVE TEST ENDPOINT =====
+console.log('🔧 PRODUCTION: Adding comprehensive test endpoint...');
+
+// Test complete end-to-end flow
+app.get('/api/test-complete-flow', async (req, res) => {
+  console.log('🧪 TEST: Complete flow test requested');
+  try {
+    const testResults = {
+      timestamp: new Date().toISOString(),
+      tests: {}
+    };
+    
+    // Test 1: Redis Connection
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        await redis.ping();
+        testResults.tests.redis = { status: 'connected', message: 'Redis connection successful' };
+      } else {
+        testResults.tests.redis = { status: 'disconnected', message: 'Redis not available' };
+      }
+    } catch (error) {
+      testResults.tests.redis = { status: 'error', message: error.message };
+    }
+    
+    // Test 2: Database Connection
+    try {
+      const { getDatabase } = await import('./database.js');
+      const db = getDatabase();
+      if (db) {
+        const result = await db.query('SELECT 1');
+        testResults.tests.database = { status: 'connected', message: 'Database connection successful' };
+      } else {
+        testResults.tests.database = { status: 'disconnected', message: 'Database not available' };
+      }
+    } catch (error) {
+      testResults.tests.database = { status: 'error', message: error.message };
+    }
+    
+    // Test 3: JWT Utils
+    try {
+      const { generateWebSocketToken, verifyWebSocketToken } = await import('./jwt-utils.js');
+      const testToken = generateWebSocketToken('test-session', 'test-agent');
+      const decoded = verifyWebSocketToken(testToken);
+      testResults.tests.jwt = { 
+        status: 'working', 
+        message: 'JWT generation and verification successful',
+        testToken: testToken.substring(0, 20) + '...'
+      };
+    } catch (error) {
+      testResults.tests.jwt = { status: 'error', message: error.message };
+    }
+    
+    // Test 4: Live Stream Relay
+    try {
+      const hasRelay = !!liveStreamRelay;
+      const hasFrontendConnections = !!liveStreamRelay?.frontendConnections;
+      const hasRedisSubscriber = !!liveStreamRelay?.redisSubscriber;
+      
+      testResults.tests.liveStreamRelay = {
+        status: hasRelay ? 'initialized' : 'not initialized',
+        message: `Relay: ${hasRelay}, Frontend: ${hasFrontendConnections}, Redis: ${hasRedisSubscriber}`,
+        frontendConnections: liveStreamRelay?.frontendConnections?.size || 0
+      };
+    } catch (error) {
+      testResults.tests.liveStreamRelay = { status: 'error', message: error.message };
+    }
+    
+    // Test 5: WebSocket Server
+    try {
+      const hasWebSocketServer = !!liveStreamRelay?.wss;
+      testResults.tests.webSocketServer = {
+        status: hasWebSocketServer ? 'initialized' : 'not initialized',
+        message: `WebSocket server: ${hasWebSocketServer}`
+      };
+    } catch (error) {
+      testResults.tests.webSocketServer = { status: 'error', message: error.message };
+    }
+    
+    // Test 6: Environment Variables
+    const requiredEnvVars = ['NODE_ENV', 'PORT', 'JWT_SECRET'];
+    const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    
+    testResults.tests.environment = {
+      status: missingEnvVars.length === 0 ? 'complete' : 'incomplete',
+      message: missingEnvVars.length === 0 ? 'All required environment variables set' : `Missing: ${missingEnvVars.join(', ')}`,
+      missing: missingEnvVars
+    };
+    
+    // Test 7: API Routes
+    try {
+      const testRoutes = [
+        '/api/health',
+        '/api/debug/env',
+        '/api/debug/websocket-connections'
+      ];
+      
+      const routeTests = [];
+      for (const route of testRoutes) {
+        try {
+          const response = await fetch(`http://localhost:${port}${route}`);
+          routeTests.push({
+            route,
+            status: response.ok ? 'working' : 'error',
+            statusCode: response.status
+          });
+        } catch (error) {
+          routeTests.push({
+            route,
+            status: 'error',
+            error: error.message
+          });
+        }
+      }
+      
+      testResults.tests.apiRoutes = {
+        status: routeTests.every(r => r.status === 'working') ? 'working' : 'partial',
+        message: `API routes test completed`,
+        routes: routeTests
+      };
+    } catch (error) {
+      testResults.tests.apiRoutes = { status: 'error', message: error.message };
+    }
+    
+    // Overall Status
+    const allTests = Object.values(testResults.tests);
+    const workingTests = allTests.filter(test => test.status === 'working' || test.status === 'connected' || test.status === 'initialized' || test.status === 'complete');
+    const totalTests = allTests.length;
+    
+    testResults.overall = {
+      status: workingTests.length === totalTests ? 'all_passing' : 'partial',
+      message: `${workingTests.length}/${totalTests} tests passing`,
+      score: Math.round((workingTests.length / totalTests) * 100)
+    };
+    
+    res.json(testResults);
+  } catch (error) {
+    console.error('❌ TEST: Complete flow test failed:', error);
+    res.status(500).json({
+      error: 'Test failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+console.log('✅ PRODUCTION: Comprehensive test endpoint added');

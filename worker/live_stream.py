@@ -8,6 +8,8 @@ import asyncio
 import websockets
 import json
 import logging
+import redis
+import os
 from datetime import datetime
 
 # Configure logging for live stream
@@ -22,6 +24,10 @@ class LiveBrowserStream:
         self.browser = None
         self.page = None
         self.cdp = None
+        
+        # Redis connection for frame publishing
+        redis_url = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
+        self.redis_client = redis.from_url(redis_url)
         
     async def start(self):
         """Initialize browser and start streaming"""
@@ -111,7 +117,7 @@ class LiveBrowserStream:
     async def _on_frame(self, params):
         """Handle each frame from CDP"""
         try:
-            # Send frame to backend
+            # Create frame message
             frame_data = {
                 'type': 'frame',
                 'sessionId': self.session_id,
@@ -119,8 +125,23 @@ class LiveBrowserStream:
                 'timestamp': params['metadata']['timestamp']
             }
             
-            await self.ws.send(json.dumps(frame_data))
-            logger.debug(f"📤 STREAM: Frame sent for session {self.session_id}")
+            # CRITICAL FIX: Publish frame to Redis for backend to forward
+            try:
+                self.redis_client.publish(
+                    f'browser:frames:{self.session_id}',
+                    json.dumps(frame_data)
+                )
+                logger.debug(f"📤 STREAM: Frame published to Redis for session {self.session_id}")
+            except Exception as redis_error:
+                logger.error(f"❌ STREAM: Redis publish failed: {redis_error}")
+            
+            # Also send to backend WebSocket (fallback)
+            if self.ws:
+                try:
+                    await self.ws.send(json.dumps(frame_data))
+                    logger.debug(f"📤 STREAM: Frame sent to backend WebSocket for session {self.session_id}")
+                except Exception as ws_error:
+                    logger.error(f"❌ STREAM: WebSocket send failed: {ws_error}")
             
             # Acknowledge frame (CRITICAL - must do this!)
             await self.cdp.send('Page.screencastFrameAck', {
