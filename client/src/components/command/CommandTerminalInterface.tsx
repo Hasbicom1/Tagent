@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Terminal, 
   Clock, 
@@ -18,11 +17,7 @@ import {
   Minus,
   Maximize2,
   Bot,
-  Settings,
-  ArrowUp,
-  ArrowDown,
-  Tab,
-  Escape
+  Settings
 } from 'lucide-react';
 
 interface CommandTerminalInterfaceProps {
@@ -94,19 +89,9 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const [fontSize, setFontSize] = useState('text-base');
   const [fontStyle, setFontStyle] = useState('font-mono');
   const [showSettings, setShowSettings] = useState(false);
-  
-  // Enhanced keyboard navigation states
-  const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showKeyboardHints, setShowKeyboardHints] = useState(true);
-  const [blinkingCursor, setBlinkingCursor] = useState(true);
-  
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const cursorBlinkRef = useRef<NodeJS.Timeout | null>(null);
 
   // Focus input on mount and keep focus
   useEffect(() => {
@@ -114,84 +99,6 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
       inputRef.current.focus();
     }
   }, []);
-
-  // Blinking cursor effect
-  useEffect(() => {
-    cursorBlinkRef.current = setInterval(() => {
-      setBlinkingCursor(prev => !prev);
-    }, 500);
-    
-    return () => {
-      if (cursorBlinkRef.current) {
-        clearInterval(cursorBlinkRef.current);
-      }
-    };
-  }, []);
-
-  // Command suggestions based on input
-  useEffect(() => {
-    if (currentInput.trim()) {
-      const input = currentInput.toLowerCase();
-      const availableCommands = ['help', 'hero', 'features', 'pricing', 'start', 'demo', 'contact', 'about'];
-      const filtered = availableCommands.filter(cmd => cmd.startsWith(input));
-      setSuggestions(filtered);
-      setShowCommandSuggestions(filtered.length > 0);
-    } else {
-      setShowCommandSuggestions(false);
-      setSuggestions([]);
-    }
-  }, [currentInput]);
-
-  // Enhanced keyboard navigation handler
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (commandHistory.length > 0) {
-        const newIndex = Math.max(0, historyIndex - 1);
-        setHistoryIndex(newIndex);
-        setCurrentInput(commandHistory[newIndex] || '');
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (commandHistory.length > 0) {
-        const newIndex = Math.min(commandHistory.length, historyIndex + 1);
-        setHistoryIndex(newIndex);
-        setCurrentInput(commandHistory[newIndex] || '');
-      }
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      if (suggestions.length > 0) {
-        setCurrentInput(suggestions[selectedSuggestionIndex]);
-        setShowCommandSuggestions(false);
-      }
-    } else if (e.key === 'Escape') {
-      setCurrentInput('');
-      setShowCommandSuggestions(false);
-      setShowCommandPalette(false);
-    } else if (e.ctrlKey && e.key === 'k') {
-      e.preventDefault();
-      setShowCommandPalette(true);
-    }
-  };
-
-  // Command suggestions based on input
-  useEffect(() => {
-    if (input.trim()) {
-      const availableCommands = [
-        'help', 'hero', 'features', 'pricing', 'specs', 'contact', 'about',
-        'themes', 'clear', 'reset', 'expand', 'reveal all'
-      ];
-      const filtered = availableCommands.filter(cmd => 
-        cmd.toLowerCase().startsWith(input.toLowerCase())
-      );
-      setSuggestions(filtered);
-      setShowCommandSuggestions(filtered.length > 0);
-      setSelectedSuggestionIndex(0);
-    } else {
-      setShowCommandSuggestions(false);
-      setSuggestions([]);
-    }
-  }, [input]);
 
   // Apply theme to CSS variables
   useEffect(() => {
@@ -724,33 +631,9 @@ Ready to change the world? Let's build together!`
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines relative">
-      {/* Scanline Effect Overlay */}
-      <div className="absolute inset-0 pointer-events-none z-10">
-        <div className="scanlines"></div>
-      </div>
-      
-      {/* Keyboard Hints */}
-      <AnimatePresence>
-        {showKeyboardHints && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-4 right-4 z-50 bg-background/90 border border-primary/30 rounded-lg p-3 text-xs"
-          >
-            <div className="space-y-1 text-primary/80">
-              <div>↑↓ Navigate history</div>
-              <div>Tab Autocomplete</div>
-              <div>Ctrl+K Command palette</div>
-              <div>Esc Clear</div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+    <div className="min-h-screen bg-background text-foreground font-mono crt-screen scanlines">
       {/* Terminal at TOP - Fixed Header */}
-      <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 z-50 relative">
+      <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-primary/20 p-4 z-50">
         <Card className="bg-background/90 border-primary/30 terminal-window crt-screen electric-glow">
           <div className="bg-card border-b border-primary/20 p-3">
             <div className="flex items-center justify-between">
@@ -817,7 +700,7 @@ Ready to change the world? Let's build together!`
             </div>
 
             {/* Command Input */}
-            <div className="flex items-center gap-2 relative">
+            <div className="flex items-center gap-2">
               <span className="text-primary">{'>'}</span>
               <input
                 ref={inputRef}
@@ -829,38 +712,10 @@ Ready to change the world? Let's build together!`
                 className="flex-1 bg-transparent border-none outline-none text-primary font-mono placeholder:text-muted-foreground caret-primary"
                 placeholder="Type a command... (try 'help' or 'h')"
                 data-testid="input-command"
-                style={{ textShadow: '0 0 10px currentColor' }}
               />
               <div className="text-xs text-muted-foreground">
                 Press Enter
               </div>
-              
-              {/* Command Suggestions Dropdown */}
-              <AnimatePresence>
-                {showCommandSuggestions && suggestions.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute top-full left-0 right-0 mt-1 bg-background/95 border border-primary/30 rounded-lg shadow-lg z-50"
-                  >
-                    {suggestions.map((suggestion, index) => (
-                      <div
-                        key={suggestion}
-                        className={`px-3 py-2 cursor-pointer hover:bg-primary/10 ${
-                          index === selectedSuggestionIndex ? 'bg-primary/20' : ''
-                        }`}
-                        onClick={() => {
-                          setInput(suggestion);
-                          setShowCommandSuggestions(false);
-                        }}
-                      >
-                        {suggestion}
-                      </div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </div>
           )}
@@ -1238,47 +1093,6 @@ function ContactSection() {
           <div>Built by dreamers who believe $1 can change a life</div>
         </div>
       </div>
-
-      {/* Command Palette Modal */}
-      <AnimatePresence>
-        {showCommandPalette && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setShowCommandPalette(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-background border border-primary/30 rounded-lg shadow-lg w-full max-w-md max-h-96 overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-4 border-b border-primary/20">
-                <h3 className="text-lg font-mono text-primary">Command Palette</h3>
-                <p className="text-sm text-muted-foreground">Press ↑↓ to navigate, Enter to select</p>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {['help', 'hero', 'features', 'pricing', 'start', 'demo', 'contact', 'about', 'themes', 'clear', 'reset'].map((command, index) => (
-                  <div
-                    key={command}
-                    className="px-4 py-2 hover:bg-primary/10 cursor-pointer font-mono text-sm"
-                    onClick={() => {
-                      setInput(command);
-                      setShowCommandPalette(false);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {command}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

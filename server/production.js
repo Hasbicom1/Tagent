@@ -814,13 +814,11 @@ app.get('/api/session-status', async (req, res) => {
                     sessionData.browser_ready === 'true';
     
     return res.json({
-      success: true,
-      sessionId: session,
       status: sessionData.status || 'unknown',
       ready: isReady,
       browserReady: sessionData.browser_ready === 'true',
       workerReady: sessionData.worker_ready === 'true',
-      websocketToken: sessionData.websocket_token, // ⚠️ ADD JWT TOKEN!
+      websocketToken: sessionData.websocket_token || null, // ⚠️ ADD JWT TOKEN!
       timestamp: new Date().toISOString(),
       debug: sessionData // Include full data for debugging
     });
