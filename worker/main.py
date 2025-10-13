@@ -28,7 +28,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Environment variables
-REDIS_URL = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
+# Railway Redis URL priority: REDIS_URL > REDIS_PRIVATE_URL > REDIS_PUBLIC_URL
+REDIS_URL = (
+    os.getenv('REDIS_URL') or 
+    os.getenv('REDIS_PRIVATE_URL') or 
+    os.getenv('REDIS_PUBLIC_URL') or 
+    'redis://localhost:6379'
+)
 PORT = int(os.getenv('PORT', '8080'))
 BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/"
 
@@ -84,10 +90,12 @@ async def provision_loop():
                 job_data = json.loads(job_data_bytes.decode())
                 session_id = job_data['sessionId']
                 agent_id = job_data['agentId']
+                websocket_token = job_data.get('websocketToken')  # Get JWT token from queue
                 logger.info(f"🎯 WORKER: Received job to provision: {session_id}")
+                logger.info(f"🔐 WORKER: JWT token available: {'Yes' if websocket_token else 'No'}")
                 logger.info(f"📊 WORKER: Active streams before: {len(active_streams)}")
                 
-                await start_agent_for_session(session_id)
+                await start_agent_for_session(session_id, websocket_token)
                 
                 logger.info(f"📊 WORKER: Active streams after: {len(active_streams)}")
             else:
@@ -99,15 +107,17 @@ async def provision_loop():
             logger.error(f"❌ WORKER: Error details: {type(e).__name__}: {str(e)}")
             await asyncio.sleep(5)
 
-async def start_agent_for_session(session_id: str):
+async def start_agent_for_session(session_id: str, websocket_token: str = None):
     """Start the live browser automation for a session"""
     logger.info(f"🚀 WORKER: Starting agent for session: {session_id}")
     
     try:
-        # Get JWT token from Redis for WebSocket authentication
-        redis_conn = redis.from_url(REDIS_URL)
-        session_data = redis_conn.hgetall(f"session:{session_id}")
-        websocket_token = session_data.get('websocket_token')
+        # Use JWT token from queue data or fallback to Redis lookup
+        if not websocket_token:
+            logger.info(f"🔍 WORKER: No JWT token in queue data, checking Redis for session {session_id}")
+            redis_conn = redis.from_url(REDIS_URL)
+            session_data = redis_conn.hgetall(f"session:{session_id}")
+            websocket_token = session_data.get('websocket_token')
         
         if not websocket_token:
             logger.warn(f"⚠️ WORKER: No JWT token found for session {session_id}, proceeding without authentication")
@@ -136,15 +146,31 @@ async def start_agent_for_session(session_id: str):
         )
         logger.info(f"✅ WORKER: WebSocket connected to backend")
         
-        # Register with backend
-        register_msg = {
-            "type": "worker_register",
-            "sessionId": session_id,
-            "token": websocket_token
+        # Authenticate with backend using proper WebSocket protocol
+        auth_msg = {
+            "type": "AUTHENTICATE",
+            "sessionToken": websocket_token,
+            "agentId": session_id,
+            "messageId": f"auth_{session_id}_{int(datetime.now().timestamp())}"
         }
-        logger.info(f"📝 WORKER: Registering with backend: {register_msg}")
-        await ws.send(json.dumps(register_msg))
-        logger.info(f"✅ WORKER: Worker registered to backend: {session_id}")
+        logger.info(f"📝 WORKER: Authenticating with backend: {auth_msg}")
+        await ws.send(json.dumps(auth_msg))
+        
+        # Wait for authentication response
+        try:
+            response = await asyncio.wait_for(ws.recv(), timeout=10.0)
+            response_data = json.loads(response)
+            if response_data.get('type') == 'AUTHENTICATED':
+                logger.info(f"✅ WORKER: Authentication successful for session: {session_id}")
+            else:
+                logger.error(f"❌ WORKER: Authentication failed for session {session_id}: {response_data}")
+                raise Exception(f"Authentication failed: {response_data}")
+        except asyncio.TimeoutError:
+            logger.error(f"❌ WORKER: Authentication timeout for session: {session_id}")
+            raise Exception("Authentication timeout")
+        except Exception as auth_error:
+            logger.error(f"❌ WORKER: Authentication error for session {session_id}: {auth_error}")
+            raise
         
         # CRITICAL FIX: Update Redis to mark session as ready
         redis_conn.hset(f"session:{session_id}", mapping={
