@@ -26,6 +26,7 @@ import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables, getDatabase } from './database.js';
 import FreeAIService from '../services/FreeAIService.js';
 import { initQueue, queueBrowserTask, isQueueAvailable } from './queue-simple.js';
+import { getBrowserSession, createBrowserSession } from './browser-automation.js';
 
 // Import REAL implementations (no simulation)
 // Note: Real implementations are available but not imported to avoid startup errors
@@ -1082,12 +1083,22 @@ app.get('/api/automation/:sessionId/status', async (req, res) => {
   }
 });
 
+// Helper function to get or create automation engine
+async function getAutomationEngine(sessionId) {
+  let engine = getBrowserSession(sessionId);
+  if (!engine) {
+    engine = createBrowserSession(sessionId);
+    await engine.initialize();
+  }
+  return engine;
+}
+
 app.post('/api/automation/:sessionId/execute', automationAuthMiddleware, executeLimiter, async (req, res) => {
   console.log('⚡ PRODUCTION: Automation execute requested for:', req.params.sessionId);
   try {
     const engine = await getAutomationEngine(req.params.sessionId);
     const command = req.body.command || req.body.taskDescription || req.body.message || 'open https://example.com';
-    const result = await engine.executeCommand(command);
+    const result = await engine.executeTask(command);
 
     res.json({
       success: true,

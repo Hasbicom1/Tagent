@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Terminal, 
   Zap, 
@@ -16,12 +17,40 @@ import {
   Mail
 } from 'lucide-react';
 
+// Terminal typing effect component
+const TypeWriter = ({ text, delay = 50, className = "" }) => {
+  const [displayText, setDisplayText] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      const timeout = setTimeout(() => {
+        setDisplayText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, delay);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [currentIndex, delay, text]);
+  
+  return <span className={className}>{displayText}</span>;
+};
+
 interface LandingPageProps {
   onStartPayment: () => void;
 }
 
 export function LandingPage({ onStartPayment }: LandingPageProps) {
   const [isActivated, setIsActivated] = useState(false);
+  const [cursorVisible, setCursorVisible] = useState(true);
+
+  // Terminal cursor blinking effect
+  useState(() => {
+    const interval = setInterval(() => {
+      setCursorVisible(prev => !prev);
+    }, 530);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleActivation = () => {
     setIsActivated(true);
@@ -57,33 +86,64 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
         
         <div className="relative max-w-6xl mx-auto px-6 py-20">
           {/* Terminal Window */}
-          <Card className="bg-background/90 border-primary/30 overflow-hidden mb-12 terminal-window crt-screen electric-glow">
-            <div className="bg-card border-b border-primary/20 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-destructive" />
-                  <div className="w-3 h-3 rounded-full bg-chart-3" />
-                  <div className="w-3 h-3 rounded-full bg-chart-2" />
-                  <div className="ml-4 text-sm font-mono text-muted-foreground">
-                    agent_terminal.exe
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <Card className="bg-background/90 border-primary/30 overflow-hidden mb-12 terminal-window crt-screen electric-glow">
+              <div className="bg-card border-b border-primary/20 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <motion.div 
+                      className="w-3 h-3 rounded-full bg-destructive" 
+                      whileHover={{ scale: 1.2 }}
+                    />
+                    <motion.div 
+                      className="w-3 h-3 rounded-full bg-chart-3" 
+                      whileHover={{ scale: 1.2 }}
+                    />
+                    <motion.div 
+                      className="w-3 h-3 rounded-full bg-chart-2" 
+                      whileHover={{ scale: 1.2 }}
+                    />
+                    <div className="ml-4 text-sm font-mono text-muted-foreground">
+                      agent_terminal.exe
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
-                  SECURE_CONNECTION_ACTIVE
+                  <motion.div 
+                    className="text-xs text-muted-foreground font-mono"
+                    animate={{ opacity: [0.7, 1, 0.7] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                  >
+                    SECURE_CONNECTION_ACTIVE
+                  </motion.div>
                 </div>
               </div>
-            </div>
             
             <div className="p-8 space-y-6 min-h-[400px]">
               <div className="space-y-4">
-                <div className="text-primary font-mono text-sm">
+                <motion.div 
+                  className="text-primary font-mono text-sm flex"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                >
                   $ ./initialize_agent_session --premium
-                </div>
+                  <span className={`ml-1 ${cursorVisible ? 'opacity-100' : 'opacity-0'}`}>_</span>
+                </motion.div>
                 <div className="text-muted-foreground font-mono text-sm space-y-1">
-                  <div>Initializing AI Agent UNIVERSAL-1...</div>
-                  <div>Loading neural networks... ████████████ 100%</div>
-                  <div>Establishing secure connection... ✓</div>
-                  <div>Agent status: <span className="text-chart-2">READY</span></div>
+                  <TypeWriter text="Initializing AI Agent UNIVERSAL-1..." delay={40} className="block" />
+                  <TypeWriter text="Loading neural networks... ████████████ 100%" delay={30} className="block" />
+                  <TypeWriter text="Establishing secure connection... ✓" delay={25} className="block" />
+                  <motion.div 
+                    className="text-chart-2 font-bold tracking-wider"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1.5 }}
+                  >
+                    Agent status: READY
+                  </motion.div>
                 </div>
               </div>
 
@@ -95,18 +155,55 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                       AI_FOR_EVERYONE
                     </Badge>
                     
-                    <h1 className="text-4xl lg:text-6xl font-bold tracking-tight phosphor-text">
-                      <span className="text-primary text-5xl lg:text-7xl">AGENT</span>
+                    <motion.h1 
+                      className="text-4xl lg:text-6xl font-bold tracking-tight phosphor-text"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 1.8, duration: 0.8 }}
+                    >
+                      <motion.span 
+                        className="text-primary text-5xl lg:text-7xl"
+                        animate={{ 
+                          textShadow: ["0 0 5px #00ff00", "0 0 15px #00ff00", "0 0 5px #00ff00"] 
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        AGENT
+                      </motion.span>
                       <span className="text-foreground"> FOR </span>
-                      <span className="text-primary text-5xl lg:text-7xl">ALL</span>
+                      <motion.span 
+                        className="text-primary text-5xl lg:text-7xl"
+                        animate={{ 
+                          textShadow: ["0 0 5px #00ff00", "0 0 15px #00ff00", "0 0 5px #00ff00"] 
+                        }}
+                        transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                      >
+                        ALL
+                      </motion.span>
                       <br />
                       <span className="text-foreground">PAY </span>
-                      <span className="text-primary text-5xl lg:text-7xl">$1</span>
+                      <motion.span 
+                        className="text-primary text-5xl lg:text-7xl"
+                        animate={{ 
+                          textShadow: ["0 0 5px #00ff00", "0 0 15px #00ff00", "0 0 5px #00ff00"] 
+                        }}
+                        transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+                      >
+                        $1
+                      </motion.span>
                       <span className="text-foreground"> NOT</span>
                       <br />
-                      <span className="text-primary text-5xl lg:text-7xl">$100</span>
+                      <motion.span 
+                        className="text-primary text-5xl lg:text-7xl"
+                        animate={{ 
+                          textShadow: ["0 0 5px #00ff00", "0 0 15px #00ff00", "0 0 5px #00ff00"] 
+                        }}
+                        transition={{ duration: 2, repeat: Infinity, delay: 1.5 }}
+                      >
+                        $100
+                      </motion.span>
                       <span className="text-foreground">/MONTH</span>
-                    </h1>
+                    </motion.h1>
                   </div>
                   
                   <p className="text-lg text-muted-foreground max-w-3xl mx-auto font-sans">
@@ -116,16 +213,35 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-                    <Button 
-                      size="lg" 
-                      className="text-lg px-8 py-6 font-mono group"
-                      onClick={onStartPayment}
-                      data-testid="button-deploy-agent"
+                    <motion.div
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 2.0 }}
                     >
-                      <Terminal className="w-5 h-5 mr-2" />
-AGENT FOR ALL • $1
-                      <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                    </Button>
+                      <Button 
+                        size="lg" 
+                        className="text-lg px-8 py-6 font-mono group relative overflow-hidden"
+                        onClick={onStartPayment}
+                        data-testid="button-deploy-agent"
+                      >
+                        <motion.span 
+                          className="absolute inset-0 bg-primary/10"
+                          animate={{ 
+                            opacity: [0, 0.5, 0],
+                          }}
+                          transition={{ 
+                            duration: 2, 
+                            repeat: Infinity,
+                            repeatType: "reverse" 
+                          }}
+                        />
+                        <Terminal className="w-5 h-5 mr-2" />
+                        AGENT FOR ALL • $1
+                        <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                      </Button>
+                    </motion.div>
                   </div>
                 </div>
 
@@ -155,67 +271,128 @@ AGENT FOR ALL • $1
                 <div className="border-t border-primary/20 pt-4 space-y-2 text-sm font-mono">
                   <div className="text-primary">$ Agent activation sequence initiated...</div>
                   <div className="text-chart-2">Redirecting to secure payment gateway...</div>
-                  <div className="text-muted-foreground animate-pulse">Please wait...</div>
+                  <motion.div 
+                    className="text-muted-foreground flex items-center"
+                    animate={{ opacity: [1, 0.5, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.2 }}
+                  >
+                    Please wait<motion.span
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ repeat: Infinity, duration: 1, repeatDelay: 0.2 }}
+                    >_</motion.span>
+                  </motion.div>
                 </div>
               )}
             </div>
           </Card>
+          </motion.div>
 
           {/* Core Features */}
           <div className="grid md:grid-cols-3 gap-6 mb-16">
-            <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-primary" />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              whileHover={{ y: -5 }}
+            >
+              <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center"
+                      whileHover={{ rotate: 360 }}
+                      transition={{ duration: 0.6 }}
+                    >
+                      <Clock className="w-5 h-5 text-primary" />
+                    </motion.div>
+                    <div>
+                      <h3 className="font-bold font-mono">24H_SESSION</h3>
+                      <motion.div 
+                        className="text-sm text-muted-foreground font-mono"
+                        animate={{ opacity: [0.7, 1, 0.7] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        --no-limits
+                      </motion.div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold font-mono">24H_SESSION</h3>
-                    <div className="text-sm text-muted-foreground font-mono">--no-limits</div>
-                  </div>
+                  <p className="text-muted-foreground font-sans text-sm">
+                    <strong>True ownership</strong> for 24 hours. No rental fees, no usage surveillance, 
+                    no corporate middlemen extracting profits from <em>your</em> intelligence.
+                  </p>
                 </div>
-                <p className="text-muted-foreground font-sans text-sm">
-                  <strong>True ownership</strong> for 24 hours. No rental fees, no usage surveillance, 
-                  no corporate middlemen extracting profits from <em>your</em> intelligence.
-                </p>
-              </div>
-            </Card>
+              </Card>
+            </motion.div>
             
-            <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Code className="w-5 h-5 text-primary" />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              whileHover={{ y: -5 }}
+            >
+              <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center"
+                      whileHover={{ rotate: 360 }}
+                      transition={{ duration: 0.6 }}
+                    >
+                      <Code className="w-5 h-5 text-primary" />
+                    </motion.div>
+                    <div>
+                      <h3 className="font-bold font-mono">LIVE_EXECUTION</h3>
+                      <motion.div 
+                        className="text-sm text-muted-foreground font-mono"
+                        animate={{ opacity: [0.7, 1, 0.7] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        --verbose
+                      </motion.div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold font-mono">LIVE_EXECUTION</h3>
-                    <div className="text-sm text-muted-foreground font-mono">--verbose</div>
-                  </div>
+                  <p className="text-muted-foreground font-sans text-sm">
+                    <strong>Complete transparency</strong> — no more black-box corporate AI controlling you. 
+                    <em>You</em> watch every decision, <em>you</em> control every action, <em>you</em> own every result.
+                  </p>
                 </div>
-                <p className="text-muted-foreground font-sans text-sm">
-                  <strong>Complete transparency</strong> — no more black-box corporate AI controlling you. 
-                  <em>You</em> watch every decision, <em>you</em> control every action, <em>you</em> own every result.
-                </p>
-              </div>
-            </Card>
+              </Card>
+            </motion.div>
             
-            <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Shield className="w-5 h-5 text-primary" />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+              whileHover={{ y: -5 }}
+            >
+              <Card className="bg-card/50 border-primary/20 p-6 hover-elevate">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center"
+                      whileHover={{ rotate: 360 }}
+                      transition={{ duration: 0.6 }}
+                    >
+                      <Shield className="w-5 h-5 text-primary" />
+                    </motion.div>
+                    <div>
+                      <h3 className="font-bold font-mono">SECURE_ISOLATION</h3>
+                      <motion.div 
+                        className="text-sm text-muted-foreground font-mono"
+                        animate={{ opacity: [0.7, 1, 0.7] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        --sandboxed
+                      </motion.div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold font-mono">SECURE_ISOLATION</h3>
-                    <div className="text-sm text-muted-foreground font-mono">--sandboxed</div>
-                  </div>
+                  <p className="text-muted-foreground font-sans text-sm">
+                    <strong>Your privacy fortress.</strong> Isolated sessions, zero tracking, 
+                    no Big Tech surveillance. What you create is <em>yours alone</em> — not theirs to monetize.
+                  </p>
                 </div>
-                <p className="text-muted-foreground font-sans text-sm">
-                  <strong>Your privacy fortress.</strong> Isolated sessions, zero tracking, 
-                  no Big Tech surveillance. What you create is <em>yours alone</em> — not theirs to monetize.
-                </p>
-              </div>
-            </Card>
+              </Card>
+            </motion.div>
           </div>
         </div>
       </div>

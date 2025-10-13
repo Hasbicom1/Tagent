@@ -1,41 +1,69 @@
 /**
- * Database Module - REAL Implementation
- * Handles database operations for sessions and payments using PostgreSQL
+ * Database Module - REAL Implementation with SQLite Fallback
+ * Handles database operations for sessions and payments using PostgreSQL or SQLite
  */
 
 import { Pool } from 'pg';
 
 // Real PostgreSQL connection pool
 let pool = null;
+let usingSQLite = false;
+let sqliteModule = null;
 
 export async function initializeDatabase() {
-  try {
-    console.log('🔧 REAL Database: Initializing PostgreSQL connection...');
-    
-    // Real PostgreSQL connection
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/onedollaragent',
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+  // First try PostgreSQL
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgresql://')) {
+    try {
+      console.log('🔧 REAL Database: Initializing PostgreSQL connection...');
+      
+      // Real PostgreSQL connection
+      pool = new Pool({
+        connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/onedollaragent',
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      });
 
-    // Test connection
-    const client = await pool.connect();
-    await client.query('SELECT 1');
-    client.release();
+      // Test connection
+      const client = await pool.connect();
+      await client.query('SELECT 1');
+      client.release();
+      
+      console.log('✅ REAL Database: PostgreSQL connected successfully');
+      return { connected: true, pool };
+    } catch (error) {
+      console.error('❌ REAL Database: PostgreSQL connection failed:', error);
+      console.log('🔄 REAL Database: Falling back to SQLite for development...');
+    }
+  }
+
+  // Fallback to SQLite for development
+  try {
+    const sqliteDb = await import('./database-sqlite.js');
+    sqliteModule = sqliteDb;
+    const result = await sqliteDb.initializeDatabase();
     
-    console.log('✅ REAL Database: PostgreSQL connected successfully');
-    return { connected: true, pool };
+    if (result.connected) {
+      usingSQLite = true;
+      console.log('✅ REAL Database: Using SQLite fallback for development');
+      return { connected: true, sqlite: true };
+    } else {
+      throw new Error('SQLite fallback failed');
+    }
   } catch (error) {
-    console.error('❌ REAL Database: Connection failed:', error);
+    console.error('❌ REAL Database: Both PostgreSQL and SQLite failed:', error);
     return { connected: false, error: error.message };
   }
 }
 
 export async function createTables() {
   try {
+    // Use SQLite if available
+    if (usingSQLite && sqliteModule) {
+      return await sqliteModule.createTables();
+    }
+
     if (!pool) {
       throw new Error('Database not initialized');
     }
@@ -229,7 +257,12 @@ export async function createTables() {
 
 export async function getUserSession(sessionId) {
   try {
-  if (!pool) {
+    // Use SQLite if available
+    if (usingSQLite && sqliteModule) {
+      return await sqliteModule.getUserSession(sessionId);
+    }
+
+    if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -253,7 +286,12 @@ export async function getUserSession(sessionId) {
 
 export async function updateSessionStatus(sessionId, status) {
   try {
-  if (!pool) {
+    // Use SQLite if available
+    if (usingSQLite && sqliteModule) {
+      return await sqliteModule.updateSessionStatus(sessionId, status);
+    }
+
+    if (!pool) {
       throw new Error('Database not initialized');
     }
 
@@ -274,6 +312,11 @@ export async function updateSessionStatus(sessionId, status) {
 
 export async function createUserSession(sessionData) {
   try {
+    // Use SQLite if available
+    if (usingSQLite && sqliteModule) {
+      return await sqliteModule.createUserSession(sessionData);
+    }
+
     if (!pool) {
       throw new Error('Database not initialized');
     }
