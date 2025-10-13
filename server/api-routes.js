@@ -256,21 +256,7 @@ router.post('/checkout-success', async (req, res) => {
         console.error('❌ REDIS: Failed to store session in Redis:', redisError.message);
       }
 
-      // CRITICAL FIX: Queue browser job after successful payment (with JWT token)
-      if (isQueueAvailable()) {
-        try {
-          console.log('🚀 QUEUE: Queueing browser job after payment success...');
-          const queueResult = await queueBrowserJobAfterPayment(automationSessionId, uniqueAgentId, websocketToken);
-          console.log('✅ QUEUE: Browser job queued successfully:', queueResult);
-        } catch (queueError) {
-          console.error('❌ QUEUE: Failed to queue browser job:', queueError.message);
-          // Don't fail the checkout, just log the error
-        }
-      } else {
-        console.warn('⚠️ QUEUE: Queue not available, browser job not queued');
-      }
-
-      // ⚠️ CRITICAL FIX: Also add to simple Redis queue for worker
+      // CRITICAL FIX: Use unified queue system - only add to simple Redis queue that worker processes
       try {
         const { getRedis } = await import('./redis-simple.js');
         const redis = await getRedis();
@@ -279,12 +265,17 @@ router.post('/checkout-success', async (req, res) => {
           await redis.rpush('browser:queue', JSON.stringify({
             sessionId: automationSessionId,
             agentId: uniqueAgentId,
-            timestamp: Date.now()
+            websocketToken: websocketToken,
+            timestamp: Date.now(),
+            source: 'checkout-success'
           }));
-          console.log('✅ REDIS QUEUE: Browser job added to simple queue:', automationSessionId);
+          console.log('✅ UNIFIED QUEUE: Browser job added to worker queue:', automationSessionId);
+        } else {
+          console.warn('⚠️ UNIFIED QUEUE: Redis not available, browser job not queued');
         }
       } catch (queueError) {
-        console.error('❌ REDIS QUEUE: Failed to add to simple queue:', queueError.message);
+        console.error('❌ UNIFIED QUEUE: Failed to add to worker queue:', queueError.message);
+        // Don't fail the checkout, just log the error
       }
       
            return res.status(200).json({
