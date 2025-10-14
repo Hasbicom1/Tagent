@@ -6,6 +6,7 @@
  */
 
 import { chromium } from 'playwright';
+import { exec } from 'child_process';
 import { getUserSession } from './database.js';
 
 // Active browser sessions
@@ -29,19 +30,54 @@ export class BrowserAutomationEngine {
         throw new Error('Invalid or expired agent session');
       }
 
-      // Launch browser
-      this.browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
-      });
+      // Helper to install Playwright Chromium if missing
+      const ensureChromiumInstalled = async () => {
+        try {
+          const path = chromium.executablePath();
+          if (path) return true;
+        } catch (_) {}
+        console.log('📦 BROWSER: Installing Playwright Chromium...');
+        await new Promise((resolve, reject) => {
+          exec('npx playwright install chromium', (error, stdout, stderr) => {
+            if (error) {
+              console.error('❌ BROWSER: Playwright install failed:', stderr || error.message);
+              reject(error);
+              return;
+            }
+            console.log('✅ BROWSER: Playwright Chromium installed');
+            resolve(true);
+          });
+        });
+        return true;
+      };
+
+      // Launch browser (retry once after install if missing)
+      const launch = async () => {
+        return chromium.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+          ]
+        });
+      };
+
+      try {
+        this.browser = await launch();
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        if (msg.includes("Executable doesn't exist") || msg.includes('playwright install')) {
+          await ensureChromiumInstalled();
+          this.browser = await launch();
+        } else {
+          throw err;
+        }
+      }
 
       this.page = await this.browser.newPage();
       this.isActive = true;
