@@ -26,27 +26,36 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Install required OS dependencies and Playwright Chromium
+# Install system dependencies for Playwright
 RUN apt-get update && apt-get install -y \
     curl \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libgtk-3-0 \
+    wget \
+    ca-certificates \
     fonts-liberation \
     fonts-noto-color-emoji \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libxss1 \
+    libxtst6 \
+    xvfb \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Playwright with Chromium browser
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npm exec --yes playwright install chromium
-RUN npm exec --yes playwright install-deps chromium
+RUN npx playwright install chromium
+RUN npx playwright install-deps chromium
 
 # Create non-root user for security and install curl for healthcheck
 # Create non-root user for security
