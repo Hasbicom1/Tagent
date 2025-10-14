@@ -31,7 +31,7 @@ export class BrowserAutomationEngine {
 
       // Launch browser
       this.browser = await chromium.launch({
-        headless: false, // Set to true for production
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
