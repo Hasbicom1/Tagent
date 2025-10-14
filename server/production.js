@@ -28,8 +28,7 @@ import { initializeDatabase, createTables, getDatabase } from './database.js';
 // FreeAIService removed to prevent module import errors in Railway deployment
 // If needed, it can be imported dynamically within specific routes
 console.log('✅ PRODUCTION: FreeAIService dependency removed for stable deployment');
-  };
-}
+
 import { initQueue, queueBrowserTask, isQueueAvailable } from './queue-simple.js';
 import { getBrowserSession, createBrowserSession } from './browser-automation.js';
 
