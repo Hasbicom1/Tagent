@@ -47,10 +47,12 @@ RUN apt-get update && apt-get install -y \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install noVNC
+# Install noVNC and websockify
 RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
     && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
-    && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+    && ln -s /opt/novnc/vnc.html /opt/novnc/index.html \
+    && chmod +x /opt/novnc/utils/websockify/websockify.py \
+    && pip install websockify
 
 # Set up working directory
 WORKDIR /app

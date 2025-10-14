@@ -38,6 +38,7 @@ import {
   initializeIdempotencyService,
   getIdempotencyService
 } from "./idempotency";
+import { initializeRedisMonitoring } from './redis-monitoring';
 import SimpleOrchestrator from "./simple-orchestrator";
 
 // Validate environment variables before starting anything
@@ -266,14 +267,38 @@ export function getRedis(): Redis | null {
 }
 
 export async function initializeRedis(): Promise<Redis | null> {
-  // CRITICAL FIX: Use Redis singleton to prevent multiple connections
+  // PRODUCTION REQUIREMENT: Redis is mandatory for Railway deployment
   const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
   
-  console.log('🔧 REDIS: Using Redis singleton for shared connection...');
+  console.log('🔧 REDIS: Initializing Redis for production deployment...');
   debugRedisStatus();
   
   // Store the singleton instance for backward compatibility
   redisInstance = await getSharedRedis();
+  
+  if (!redisInstance) {
+    throw new Error('Redis connection is required for production deployment');
+  }
+
+  // Initialize Redis monitoring for production
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      initializeRedisMonitoring(redisInstance, {
+        healthCheckInterval: 30000, // 30 seconds
+        alertThreshold: {
+          responseTime: 1000, // 1 second
+          errorRate: 0.05, // 5%
+          memoryUsage: 0.8 // 80%
+        },
+        enableAlerts: true
+      });
+      console.log('✅ REDIS MONITOR: Monitoring service initialized for production');
+    } catch (monitorError) {
+      console.warn('⚠️ REDIS MONITOR: Failed to initialize monitoring:', monitorError instanceof Error ? monitorError.message : 'unknown error');
+      // Don't fail the entire initialization if monitoring fails
+    }
+  }
+  
   return redisInstance;
 }
 
@@ -282,29 +307,31 @@ async function initializeRedisSession(): Promise<any> {
     // PRODUCTION REQUIREMENT: Redis is mandatory for all environments on Railway
     const redis = await initializeRedis();
     
-    if (redis) {
-      console.log('✅ SECURITY: Redis connection established for session storage');
+    if (!redis) {
+      throw new Error('Redis connection is required for session management');
+    }
+    
+    console.log('✅ SECURITY: Redis connection established for session storage');
+    
+    // Initialize session security store with additional error handling
+    try {
+      sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
+      console.log('✅ SECURITY: Session security store initialized');
       
-      // Initialize session security store with additional error handling
-      try {
-        sessionSecurityStore = new SessionSecurityStore(redis, DEFAULT_SESSION_SECURITY_CONFIG);
-        console.log('✅ SECURITY: Session security store initialized');
-        
-        // Create Redis session store for production
-        const redisStore = createRedisSessionStore(redis);
-        
-        // Comprehensive error handling for session store
-        redisStore.on('error', (e) => {
-          console.warn('⚠️  SESSION store error (handled):', e.message.substring(0, 100));
-          // Don't crash - session will fallback to memory
-        });
-        
-        console.log('✅ SECURITY: Redis session store created');
-        return redisStore;
-      } catch (storeError) {
-        console.error('❌ SECURITY: Failed to create session security store - Redis required');
-        throw new Error(`Session store creation failed: ${storeError instanceof Error ? storeError.message : 'unknown error'}`);
-      }
+      // Create Redis session store for production
+      const redisStore = createRedisSessionStore(redis);
+      
+      // Comprehensive error handling for session store
+      redisStore.on('error', (e) => {
+        console.warn('⚠️  SESSION store error (handled):', e.message.substring(0, 100));
+        // Don't crash - session will fallback to memory
+      });
+      
+      console.log('✅ SECURITY: Redis session store created');
+      return redisStore;
+    } catch (storeError) {
+      console.error('❌ SECURITY: Failed to create session security store - Redis required');
+      throw new Error(`Session store creation failed: ${storeError instanceof Error ? storeError.message : 'unknown error'}`);
     }
   } catch (error) {
     console.error('❌ SECURITY: Session initialization failed - Redis connectivity required:', error instanceof Error ? error.message : 'unknown error');

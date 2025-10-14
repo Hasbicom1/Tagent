@@ -1,0 +1,63 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy-main:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Railway CLI
+      run: npm install -g @railway/cli
+      
+    - name: Deploy Main Application
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      run: |
+        railway login --token $RAILWAY_TOKEN
+        railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+        railway up --service ${{ secrets.RAILWAY_MAIN_SERVICE_ID }}
+        
+  deploy-worker:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-main
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Railway CLI
+      run: npm install -g @railway/cli
+      
+    - name: Deploy Worker Service
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      run: |
+        railway login --token $RAILWAY_TOKEN
+        railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+        cd worker
+        railway up --service ${{ secrets.RAILWAY_WORKER_SERVICE_ID }}
+
+  test-deployment:
+    runs-on: ubuntu-latest
+    needs: [deploy-main, deploy-worker]
+    
+    steps:
+    - name: Test Main Application Health
+      run: |
+        sleep 30
+        curl -f ${{ secrets.RAILWAY_MAIN_URL }}/health || exit 1
+        
+    - name: Test Worker Service Health
+      run: |
+        sleep 10
+        curl -f ${{ secrets.RAILWAY_WORKER_URL }}/health || exit 1
