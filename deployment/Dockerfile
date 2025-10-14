@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install Playwright with Chromium browser
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npx --yes playwright install --with-deps chromium
+RUN npm exec --yes playwright install --with-deps chromium
 
 # Create non-root user for security and install curl for healthcheck
 # Create non-root user for security
