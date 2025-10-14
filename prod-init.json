@@ -1,0 +1,4 @@
+{
+  "headless": true,
+  "instruction": "open https://google.com"
+}

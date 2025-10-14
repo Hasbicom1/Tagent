@@ -544,7 +544,7 @@ router.post('/api/test-browser-flow', async (req, res) => {
 });
 
 // NEW: Environment variables check endpoint
-router.get('/api/env-check', async (req, res) => {
+router.get('/env-check', async (req, res) => {
   try {
     console.log('🔍 ENV: Checking environment variables...');
     

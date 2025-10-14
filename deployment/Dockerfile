@@ -1,6 +1,6 @@
 # Agent HQ Production Dockerfile
 # Multi-stage build for optimal production image
-FROM node:20-bullseye-slim AS base
+FROM node:20-bullseye AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -43,11 +43,9 @@ RUN apt-get update && apt-get install -y \
     fonts-noto-color-emoji \
   && rm -rf /var/lib/apt/lists/*
 
-# Ensure browsers are installed at a stable path for runtime
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
-RUN mkdir -p $PLAYWRIGHT_BROWSERS_PATH \
-  && npm exec --yes playwright install --with-deps chromium
+# Install Playwright with Chromium browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx --yes playwright install --with-deps chromium
 
 # Create non-root user for security and install curl for healthcheck
 # Create non-root user for security
@@ -70,4 +68,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
-CMD ["node", "dist/index.js"]
+CMD ["npm", "start"]
