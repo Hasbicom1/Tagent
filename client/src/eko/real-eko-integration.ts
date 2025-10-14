@@ -133,13 +133,6 @@ export function isEkoInitialized(): boolean {
 }
 
 /**
- * Check if Eko is initialized
- */
-export function isEkoInitialized(): boolean {
-  return isInitialized && realEko !== null;
-}
-
-/**
  * Get REAL Eko framework instance
  */
 export function getRealEko(): Eko {
