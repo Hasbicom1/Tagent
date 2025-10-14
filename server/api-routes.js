@@ -1254,3 +1254,42 @@ router.use((err, req, res, next) => {
 // NOTE: No 404 handler here - let routes in production.js handle unmatched paths
 
 export default router;
+// AUTH: Issue a simple JWT token for clients needing WebSocket auth
+// Supports POST body and GET query for flexibility
+router.post('/api/auth/token', async (req, res) => {
+  try {
+    const { sessionId, agentId } = req.body || {};
+    const sid = (typeof sessionId === 'string' && sessionId.trim()) ? sessionId.trim() : `anon_${Date.now()}`;
+    const aid = (typeof agentId === 'string' && agentId.trim()) ? agentId.trim() : `anon_${Date.now()}`;
+
+    const token = generateWebSocketToken(sid, aid);
+    return res.status(200).json({
+      token,
+      sessionId: sid,
+      agentId: aid,
+      expiresIn: '24h'
+    });
+  } catch (error) {
+    console.error('❌ AUTH: Token generation failed:', error?.message || error);
+    return res.status(500).json({ error: 'TOKEN_GENERATION_FAILED', message: error?.message || 'Unknown error' });
+  }
+});
+
+router.get('/api/auth/token', async (req, res) => {
+  try {
+    const { sessionId, agentId } = req.query || {};
+    const sid = (typeof sessionId === 'string' && sessionId.trim()) ? sessionId.trim() : `anon_${Date.now()}`;
+    const aid = (typeof agentId === 'string' && agentId.trim()) ? agentId.trim() : `anon_${Date.now()}`;
+
+    const token = generateWebSocketToken(sid, aid);
+    return res.status(200).json({
+      token,
+      sessionId: sid,
+      agentId: aid,
+      expiresIn: '24h'
+    });
+  } catch (error) {
+    console.error('❌ AUTH: Token generation failed (GET):', error?.message || error);
+    return res.status(500).json({ error: 'TOKEN_GENERATION_FAILED', message: error?.message || 'Unknown error' });
+  }
+});
