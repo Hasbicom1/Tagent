@@ -36,9 +36,10 @@ export class BrowserAutomationEngine {
           const path = chromium.executablePath();
           if (path) return true;
         } catch (_) {}
-        console.log('📦 BROWSER: Installing Playwright Chromium...');
+        console.log('📦 BROWSER: Installing Playwright Chromium (npm exec)...');
+        const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || '/ms-browsers' };
         await new Promise((resolve, reject) => {
-          exec('npx playwright install chromium', (error, stdout, stderr) => {
+          exec('npm exec --yes playwright install --with-deps chromium', { env }, (error, stdout, stderr) => {
             if (error) {
               console.error('❌ BROWSER: Playwright install failed:', stderr || error.message);
               reject(error);
@@ -71,7 +72,7 @@ export class BrowserAutomationEngine {
         this.browser = await launch();
       } catch (err) {
         const msg = (err && err.message) ? err.message : String(err);
-        if (msg.includes("Executable doesn't exist") || msg.includes('playwright install')) {
+        if (msg.includes("Executable doesn't exist") || msg.includes('playwright install') || msg.includes('ENOENT')) {
           await ensureChromiumInstalled();
           this.browser = await launch();
         } else {

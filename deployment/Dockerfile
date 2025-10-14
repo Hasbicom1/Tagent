@@ -1,6 +1,6 @@
 # Agent HQ Production Dockerfile
 # Multi-stage build for optimal production image
-FROM node:20-alpine AS base
+FROM node:20-bullseye-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -26,10 +26,33 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
+# Install required OS dependencies and Playwright Chromium
+RUN apt-get update && apt-get install -y \
+    curl \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libgtk-3-0 \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+  && rm -rf /var/lib/apt/lists/*
+
+# Ensure browsers are installed at a stable path for runtime
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
+RUN mkdir -p $PLAYWRIGHT_BROWSERS_PATH \
+  && npm exec --yes playwright install --with-deps chromium
+
 # Create non-root user for security and install curl for healthcheck
-RUN apk add --no-cache curl
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
