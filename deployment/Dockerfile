@@ -65,6 +65,7 @@ RUN addgroup --system --gid 1001 nodejs \
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nextjs:nodejs /app/server ./server
+COPY --from=builder --chown=nextjs:nodejs /app/services ./services
 COPY --from=builder --chown=nextjs:nodejs /app/shared ./shared
 COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
