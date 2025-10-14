@@ -58,7 +58,7 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
     && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
     && ln -s /opt/novnc/vnc.html /opt/novnc/index.html \
     && pip install websockify \
-    && chmod +x /opt/novnc/utils/websockify/websockify.py \
+    && find /opt/novnc -name "websockify.py" -exec chmod +x {} \; \
     && chmod -R 755 /opt/novnc
 
 # Set up working directory
