@@ -89,10 +89,11 @@ RUN mkdir -p /var/log/supervisor \
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Create necessary directories and set permissions
-RUN mkdir -p /tmp/.X99-lock \
-    && chmod 777 /tmp/.X99-lock \
+RUN mkdir -p /tmp \
+    && chmod 1777 /tmp \
     && mkdir -p /var/run/supervisor \
-    && chmod 755 /var/run/supervisor
+    && chmod 755 /var/run/supervisor \
+    && mkdir -p /var/log/supervisor
 
 # Set environment variables
 ENV DISPLAY=:99
