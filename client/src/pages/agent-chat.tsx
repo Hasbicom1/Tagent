@@ -78,7 +78,7 @@ export default function AgentChat() {
          }
         
         // If session doesn't exist or has expired, try to create/recover it
-        const createResponse = await apiRequest('POST', '/api/create-or-recover-session', {
+        const createResponse = await apiRequest('POST', '/api/flow/create-session', {
           sessionId: agentId
         });
         
