@@ -53,11 +53,11 @@ RUN apt-get update && apt-get install -y \
     xvfb \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Playwright with Chromium browser
+# Install Playwright with Chromium browser (as root before switching to nextjs user)
+RUN npm install -g playwright@latest
 RUN npx playwright install chromium
 RUN npx playwright install-deps chromium
 
-# Create non-root user for security and install curl for healthcheck
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
@@ -69,6 +69,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/shared ./shared
 COPY --from=builder --chown=nextjs:nodejs /app/worker ./worker
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --chown=nextjs:nodejs package.json ./
+
+# Set Playwright browser path for the nextjs user
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright && chown -R nextjs:nodejs /ms-playwright
 
 USER nextjs
 
