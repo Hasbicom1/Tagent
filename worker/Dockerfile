@@ -53,14 +53,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install noVNC and websockify with proper permissions - FIXED VERSION
+# Install noVNC and websockify - CORRECTED VERSION
 RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
-    && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
     && ln -s /opt/novnc/vnc.html /opt/novnc/index.html \
     && pip install websockify \
-    && chmod +x /opt/novnc/utils/websockify/websockify.py \
     && chmod -R 755 /opt/novnc \
-    && ls -la /opt/novnc/utils/websockify/websockify.py \
+    && which websockify \
+    && websockify --help \
     && echo "✅ noVNC and websockify installation completed"
 
 # Set up working directory
