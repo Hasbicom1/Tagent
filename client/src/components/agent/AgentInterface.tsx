@@ -9,6 +9,10 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { initializeRealEko, executeWithRealEko } from '@/eko/real-eko-integration';
+import { BrowserView } from '@/components/browser/BrowserView';
+import { ExecutionLog } from '@/components/browser/ExecutionLog';
+import { EkoWorkflowManager } from '@/components/eko/EkoWorkflowManager';
+import { EkoAgentSelector, type EkoAgentType } from '@/components/eko/EkoAgentSelector';
 import { 
   Terminal, 
   Zap, 
@@ -71,6 +75,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
 
   // REAL Eko Framework Integration
   const [isBrowserAutomationActive, setIsBrowserAutomationActive] = useState(false);
+  
+  // Enhanced Eko Framework State Management
+  const [selectedAgent, setSelectedAgent] = useState<EkoAgentType>('browser');
+  const [agentConfig, setAgentConfig] = useState<any>({});
+  const [showWorkflowManager, setShowWorkflowManager] = useState(false);
+  const [currentWorkflow, setCurrentWorkflow] = useState<string>('');
 
   // FIXED: Fetch session info with proper expiry validation
   const { data: sessionInfo, error: sessionError } = useQuery({
@@ -200,12 +210,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
 
   const messages = getCurrentMessages();
 
-  // Send message mutation with REAL Eko framework integration
+  // Send message mutation with enhanced Eko framework integration
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      console.log('🚀 REAL EKO: Processing message:', content);
+      console.log('🚀 EKO FRAMEWORK: Processing message:', content);
       
-      // Check if this requires browser automation (simple keyword detection)
+      // Enhanced keyword detection for browser automation
       const requiresBrowserAutomation = 
         content.toLowerCase().includes('navigate') ||
         content.toLowerCase().includes('click') ||
@@ -213,35 +223,51 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
         content.toLowerCase().includes('scroll') ||
         content.toLowerCase().includes('search') ||
         content.toLowerCase().includes('google') ||
-        content.toLowerCase().includes('browser');
+        content.toLowerCase().includes('browser') ||
+        content.toLowerCase().includes('open') ||
+        content.toLowerCase().includes('visit') ||
+        content.toLowerCase().includes('go to') ||
+        content.toLowerCase().includes('fill') ||
+        content.toLowerCase().includes('submit');
       
       if (requiresBrowserAutomation) {
-        console.log('🌐 REAL EKO: Browser automation required');
+        console.log('🌐 EKO FRAMEWORK: Browser automation required');
         setIsBrowserAutomationActive(true);
         
-        // Execute browser automation with REAL Eko framework
+        // Execute browser automation with enhanced Eko framework
         try {
           const result = await executeWithRealEko(content);
-          console.log('✅ REAL EKO: Browser automation completed:', result);
+          console.log('✅ EKO FRAMEWORK: Browser automation completed:', result);
           
           // Update browser view with automation result
-          setBrowserView(result.result || 'Browser automation completed');
-          setExecutionLog(prev => [...prev, `REAL EKO automation: ${result.result}`]);
+          setBrowserView(result.result || 'Browser automation completed successfully');
+          setExecutionLog(prev => [...prev, 
+            `[${new Date().toLocaleTimeString()}] EKO: ${result.result}`,
+            ...(result.steps || []).map(step => `[${new Date().toLocaleTimeString()}] Step: ${step}`)
+          ]);
           
           return {
             userMessage: content,
-            agentMessage: `I've completed the browser automation using REAL Eko framework: ${result.result}`,
+            agentMessage: `✅ Browser automation completed using Eko framework:\n\n${result.result}\n\n${result.steps ? `Steps executed:\n${result.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}` : ''}`,
             hasExecutableTask: true,
-            taskDescription: 'browser_automation'
+            taskDescription: 'eko_browser_automation'
           };
         } catch (error) {
-          console.error('❌ REAL EKO: Browser automation failed:', error);
+          console.error('❌ EKO FRAMEWORK: Browser automation failed:', error);
           setIsBrowserAutomationActive(false);
-          throw new Error(`REAL Eko browser automation failed: ${error}`);
+          
+          // Provide helpful error message
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          return {
+            userMessage: content,
+            agentMessage: `❌ Browser automation failed: ${errorMessage}\n\nPlease try rephrasing your request or check if the target website is accessible.`,
+            hasExecutableTask: false,
+            taskDescription: null
+          };
         }
       } else {
-        // Regular chat - use existing Groq integration
-        console.log('💬 REAL EKO: Regular chat response');
+        // Regular chat - use existing API with enhanced error handling
+        console.log('💬 EKO FRAMEWORK: Regular chat response');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -252,7 +278,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
           
           if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Neural link transmission failed');
+            throw new Error(error.error || 'Communication failed');
           }
           
           const data = await response.json();
@@ -745,7 +771,44 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             </ScrollArea>
             
             <div className="p-4 border-t border-primary/10 bg-background/50 space-y-4">
-              {/* Minimal command input only */}
+              {/* Eko Agent Selector */}
+              <EkoAgentSelector
+                selectedAgent={selectedAgent}
+                onAgentChange={setSelectedAgent}
+                agentConfig={agentConfig}
+                onConfigChange={setAgentConfig}
+              />
+              
+              {/* Workflow Manager Toggle */}
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => setShowWorkflowManager(!showWorkflowManager)}
+                  variant="outline"
+                  size="sm"
+                  className="font-mono text-xs"
+                >
+                  <Zap className="w-3 h-3 mr-1" />
+                  {showWorkflowManager ? 'HIDE_WORKFLOW' : 'SHOW_WORKFLOW'}
+                </Button>
+                {showWorkflowManager && (
+                  <Input
+                    value={currentWorkflow}
+                    onChange={(e) => setCurrentWorkflow(e.target.value)}
+                    placeholder="Describe your workflow..."
+                    className="flex-1 font-mono text-xs bg-background/50 border-primary/20"
+                  />
+                )}
+              </div>
+              
+              {/* Workflow Manager */}
+              {showWorkflowManager && (
+                <EkoWorkflowManager
+                  workflowDescription={currentWorkflow}
+                  onWorkflowUpdate={setCurrentWorkflow}
+                  selectedAgent={selectedAgent}
+                  agentConfig={agentConfig}
+                />
+              )}
 
               <div className="flex gap-3">
                 <span className="text-primary font-mono text-sm pt-3">$</span>
@@ -798,56 +861,92 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             <div className="flex-1 p-6">
               {browserView ? (
                 <div className="h-full space-y-4">
-                  {/* In-Browser Automation Status */}
-                  <Card className="bg-background border-primary/20 h-72">
-                    <div className="bg-card border-b border-primary/10 p-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-chart-2" />
-                        <div className="w-3 h-3 rounded-full bg-chart-3" />
-                        <div className="w-3 h-3 rounded-full bg-chart-1" />
-                        <div className="ml-3 bg-background/80 px-3 py-1 rounded text-xs font-mono border border-primary/20">
-                          user://browser_automation
-                        </div>
-                        <Badge variant="secondary" className="ml-auto text-xs font-mono">
-                          DIRECT_CONTROL
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="p-6 h-full flex items-center justify-center">
-                      <div className="text-center space-y-3">
-                        <div className="w-16 h-16 bg-chart-2/20 rounded-lg flex items-center justify-center mx-auto">
-                          <Activity className="w-8 h-8 text-chart-2 animate-pulse" />
-                        </div>
-                        <div className="text-sm font-mono text-muted-foreground">
-                          {isBrowserAutomationActive ? 'REAL_EKO_ACTIVE' : 'IN-BROWSER_AUTOMATION_ACTIVE'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {isBrowserAutomationActive ? 'REAL Eko framework controlling browser' : 'AI controls your browser directly'}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                  
-                  {/* Automation Log */}
-                  <Card className="bg-background/80 border-primary/20">
-                    <div className="p-3 border-b border-primary/10 bg-primary/5">
-                      <div className="flex items-center gap-2">
-                        <Code className="w-4 h-4 text-primary" />
-                        <div className="text-sm font-mono font-medium">AUTOMATION_LOG</div>
-                      </div>
-                    </div>
-                    <ScrollArea className="h-40 p-4">
-                      <div className="space-y-1 font-mono text-xs">
-                        {executionLog.map((log, idx) => (
-                          <div key={idx} className="flex gap-3 text-chart-2">
-                            <span className="text-muted-foreground">
-                              [{new Date().toLocaleTimeString()}]
-                            </span>
-                            <span>{log}</span>
+                  {/* LIVE BROWSER STREAMING - VNC Integration */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[600px]">
+                    {/* Live Browser View */}
+                    <Card className="bg-background border-primary/20 flex flex-col">
+                      <div className="bg-card border-b border-primary/10 p-3 flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                          <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                          <div className="w-3 h-3 rounded-full bg-red-500" />
+                          <div className="ml-3 bg-background/80 px-3 py-1 rounded text-xs font-mono border border-primary/20">
+                            live://browser_automation
                           </div>
-                        ))}
+                          <Badge variant="secondary" className="ml-auto text-xs font-mono">
+                            🔴 LIVE_STREAM
+                          </Badge>
+                        </div>
                       </div>
-                    </ScrollArea>
+                      <div className="flex-1 overflow-hidden">
+                        <BrowserView 
+                          agentId={agentId}
+                          sessionId={sessionInfo?.sessionId}
+                          isActive={isExecuting || isBrowserAutomationActive}
+                          enableVNC={true}
+                          showControls={true}
+                        />
+                      </div>
+                    </Card>
+
+                    {/* Real-time Execution Log */}
+                    <Card className="bg-background border-primary/20 flex flex-col">
+                      <div className="bg-card border-b border-primary/10 p-3 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <Terminal className="w-4 h-4 text-green-500" />
+                          <div className="text-sm font-mono font-medium">LIVE_EXECUTION_LOG</div>
+                          <Badge variant="outline" className="ml-auto text-xs font-mono">
+                            {executionLog.length} steps
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <ExecutionLog
+                          agentId={agentId}
+                          sessionId={sessionInfo?.sessionId}
+                          isActive={isExecuting || isBrowserAutomationActive}
+                          steps={executionLog.map((log, idx) => ({
+                            id: `step_${idx}`,
+                            timestamp: new Date(),
+                            action: log,
+                            status: idx === executionLog.length - 1 && isExecuting ? 'running' : 'completed'
+                          }))}
+                        />
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Automation Status Bar */}
+                  <Card className="bg-background/80 border-primary/20">
+                    <div className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className="text-sm font-mono">
+                              {isBrowserAutomationActive ? 'REAL_EKO_FRAMEWORK_ACTIVE' : 'BROWSER_AUTOMATION_ACTIVE'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Eye className="w-4 h-4 text-blue-500" />
+                            <span className="text-sm font-mono">VNC_STREAMING: ENABLED</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-green-500" />
+                            <span className="text-sm font-mono">REAL_TIME: ACTIVE</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs font-mono">
+                            SESSION: {agentId.slice(0, 8)}...
+                          </Badge>
+                          <Badge variant="outline" className="text-xs font-mono">
+                            TIME: {realTimeRemaining}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
                   </Card>
                 </div>
               ) : (

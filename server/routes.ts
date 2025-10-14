@@ -556,6 +556,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/agents', agentsRouter);
   app.use('/api/chat', chatRouter);
   
+  // LLM Proxy routes for secure API key handling
+  try {
+    const llmProxyRoutes = await import('./api/llm/proxy');
+    app.use('/api/llm', llmProxyRoutes.default);
+    console.log('✅ LLM proxy routes registered');
+  } catch (error) {
+    console.warn('⚠️ LLM proxy routes registration failed (non-blocking):', error);
+  }
+  
   // Redis monitoring and metrics routes (production only)
   if (process.env.NODE_ENV === 'production') {
     app.use('/api/redis', redisMetricsRouter);

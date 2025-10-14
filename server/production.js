@@ -770,6 +770,16 @@ try {
 // STEP 10.5: API endpoints are now defined in api-routes.js
 console.log('✅ PRODUCTION: API endpoints defined in api-routes.js');
 
+// STEP 10.6: Add LLM proxy routes for secure API key handling
+try {
+  const llmProxyModule = await import('./api/llm/proxy.js');
+  const llmProxyRoutes = llmProxyModule.default || llmProxyModule;
+  app.use('/api/llm', llmProxyRoutes);
+  console.log('✅ PRODUCTION: LLM proxy routes initialized');
+} catch (error) {
+  console.warn('⚠️ PRODUCTION: LLM proxy routes initialization failed (non-blocking):', error.message);
+}
+
 // Create checkout session endpoint already exists in api-routes.js
 
 // Checkout success endpoint - using existing stripe webhook endpoint

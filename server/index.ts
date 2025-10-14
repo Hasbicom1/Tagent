@@ -275,7 +275,6 @@ export async function initializeRedis(): Promise<Redis | null> {
   
   // Store the singleton instance for backward compatibility
   redisInstance = await getSharedRedis();
-<<<<<<< HEAD
   
   if (!redisInstance) {
     throw new Error('Redis connection is required for production deployment');
@@ -300,8 +299,6 @@ export async function initializeRedis(): Promise<Redis | null> {
     }
   }
   
-=======
->>>>>>> origin/main
   return redisInstance;
 }
 
