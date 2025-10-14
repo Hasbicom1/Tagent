@@ -38,6 +38,7 @@ import {
   initializeIdempotencyService,
   getIdempotencyService
 } from "./idempotency";
+import SimpleOrchestrator from "./simple-orchestrator";
 
 // Validate environment variables before starting anything
 validateEnvironment();
@@ -271,7 +272,9 @@ export async function initializeRedis(): Promise<Redis | null> {
   console.log('🔧 REDIS: Using Redis singleton for shared connection...');
   debugRedisStatus();
   
-  return await getSharedRedis();
+  // Store the singleton instance for backward compatibility
+  redisInstance = await getSharedRedis();
+  return redisInstance;
 }
 
 async function initializeRedisSession(): Promise<any> {
@@ -874,6 +877,25 @@ app.get('/api/csrf-token', (req: Request, res: Response) => {
     })();
 
     console.log('🚀 8. Idempotency service initialized successfully');
+    
+    // Initialize Simple Orchestrator (replaces MCP system)
+    console.log('🚀 8.5. Initializing Simple Orchestrator...');
+    const simpleOrchestrator = new SimpleOrchestrator();
+    
+    // Initialize orchestrator asynchronously to not block server startup
+    (async () => {
+      try {
+        await simpleOrchestrator.initialize();
+        console.log('✅ Simple Orchestrator: Single agent architecture ready');
+        logger.info('✅ ORCHESTRATOR: Simple orchestrator initialized (replaces MCP)');
+      } catch (error) {
+        console.log('⚠️  Simple Orchestrator: Initialization failed:', error instanceof Error ? error.message : String(error));
+        logger.warn('⚠️  ORCHESTRATOR: Initialization failed - automation features may be limited');
+      }
+    })();
+    
+    // Make orchestrator available globally for routes
+    (app as any).orchestrator = simpleOrchestrator;
     
     // CRITICAL: Add Railway health check endpoints BEFORE routes
     console.log('🚀 9. Adding Railway health check endpoints...');

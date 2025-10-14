@@ -1234,7 +1234,8 @@ export function createCSRFProtectionMiddleware() {
       '/api/stripe/webhook',  // Stripe webhooks use their own signature validation
       '/api/csrf-token',      // CSRF token endpoint itself
       '/health',              // Health check endpoints
-      '/api/health'           // API health endpoint
+      '/api/health',          // API health endpoint
+      '/api/browser/command'  // Testing endpoint for SimpleOrchestrator
     ];
     
     // Skip for GET requests (CSRF is for state-changing operations)
