@@ -20,6 +20,7 @@ import { browserAgent } from "./browserAutomation";
 import SimpleOrchestrator from "./simple-orchestrator";
 import agentsRouter from "./routes/agents";
 import chatRouter from "./routes/chat";
+import redisMetricsRouter from "./routes/redis-metrics";
 import {
   createCheckoutSessionSchema,
   checkoutSuccessSchema,
@@ -554,6 +555,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Agents API routes
   app.use('/api/agents', agentsRouter);
   app.use('/api/chat', chatRouter);
+  
+  // Redis monitoring and metrics routes (production only)
+  if (process.env.NODE_ENV === 'production') {
+    app.use('/api/redis', redisMetricsRouter);
+  }
 
   // Create Stripe Checkout session for 24h agent access
   // SECURITY HARDENED: Create checkout session with CSRF protection and validation

@@ -3,6 +3,7 @@ import { pool } from './db';
 import { logger } from './logger';
 import { wsManager } from './websocket';
 import { getQueueStats } from './queue';
+import { getRedisMonitoring } from './redis-monitoring';
 
 interface HealthCheck {
   status: 'healthy' | 'unhealthy';
@@ -120,19 +121,35 @@ export async function healthCheck(req: Request, res: Response): Promise<void> {
     health.status = 'unhealthy';
   }
 
-  // Redis health check (if available)
-  if (process.env.REDIS_URL) {
-    try {
-      // We'll implement this when we add Redis back
-      health.checks.redis = 'healthy';
-    } catch (error) {
-      logger.error({ error }, 'Redis health check failed');
-      health.checks.redis = 'unhealthy';
-      // Don't mark overall as unhealthy for Redis in development
-      if (process.env.NODE_ENV === 'production') {
+  // Redis health check with monitoring integration
+  try {
+    const redisMonitoring = getRedisMonitoring();
+    if (redisMonitoring) {
+      const redisHealth = redisMonitoring.getHealthStatus();
+      health.checks.redis = redisHealth.status === 'healthy' ? 'healthy' : 'unhealthy';
+      
+      if (redisHealth.status !== 'healthy') {
         health.status = 'unhealthy';
       }
+      
+      // Add Redis metrics to health response
+      (health.metrics as any).redis = {
+        connectionStatus: redisHealth.metrics.connectionStatus,
+        responseTime: redisHealth.metrics.responseTime,
+        memoryUsage: redisHealth.metrics.memoryUsage,
+        connectedClients: redisHealth.metrics.connectedClients,
+        errorCount: redisHealth.metrics.errorCount,
+        uptime: redisHealth.metrics.uptime
+      };
+    } else {
+      health.checks.redis = 'unhealthy';
+      health.status = 'unhealthy';
     }
+  } catch (error) {
+    console.error('Redis health check error:', error);
+    logger.error({ error }, 'Redis health check failed');
+    health.checks.redis = 'unhealthy';
+    health.status = 'unhealthy';
   }
 
   // PRODUCTION OPTIMIZATION: Calculate and include response time in health data
