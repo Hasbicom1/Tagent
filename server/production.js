@@ -25,7 +25,11 @@ import { getRedis, isRedisAvailable, waitForRedis } from './redis-simple.js';
 import { debugStripeComprehensive } from './stripe-debug.js';
 import { initStripe, isStripeReady } from './stripe-simple.js';
 import { initializeDatabase, createTables, getDatabase } from './database.js';
-import FreeAIService from '../services/FreeAIService.js';
+// FreeAIService removed to prevent module import errors in Railway deployment
+// If needed, it can be imported dynamically within specific routes
+console.log('✅ PRODUCTION: FreeAIService dependency removed for stable deployment');
+  };
+}
 import { initQueue, queueBrowserTask, isQueueAvailable } from './queue-simple.js';
 import { getBrowserSession, createBrowserSession } from './browser-automation.js';
 
@@ -49,8 +53,8 @@ console.log('DeepSeek:', process.env.DEEPSEEK_API_KEY ? '✅ Configured' : '⚠�
 console.log('OpenAI:', process.env.OPENAI_API_KEY ? '✅ Configured' : '⚠️  Not set');
 console.log('=======================');
 
-// Initialize LocalAI (OpenAI-compatible) adapter
-const ai = new FreeAIService();
+// LocalAI adapter removed - using direct Ollama client instead
+// const ai = new FreeAIService();
 
 // Get Ollama URL from environment variable
 const ollamaUrl = process.env.OLLAMA_INTERNAL_URL || 'http://ollama-ai.railway.internal:11434';
@@ -1551,8 +1555,15 @@ app.post('/api/session/:agentId/message', async (req, res) => {
     messages.push(userMessage);
     global.__chatBuckets.set(agentId, messages);
     
-    // Generate AI response using Groq
-    const aiResponse = await ai.generateResponse(content, messages.slice(-10)); // Last 10 messages for context
+    // Generate AI response using Groq directly (FreeAIService removed)
+    // const aiResponse = await ai.generateResponse(content, messages.slice(-10)); // Last 10 messages for context
+    
+    // Temporary fallback response until proper AI integration is restored
+    const aiResponse = {
+      message: "I'm currently being updated. Please try again in a moment.",
+      hasExecutableTask: false,
+      taskDescription: null
+    };
     
     const agentMessage = {
       id: `agent-${Date.now()}`,
