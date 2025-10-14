@@ -1,0 +1,19 @@
+{
+  "name": "tagent-worker",
+  "version": "1.0.0",
+  "description": "Browser automation worker service with live streaming",
+  "main": "worker.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "dev": "tsx worker.ts"
+  },
+  "dependencies": {
+    "typescript": "^5.0.0",
+    "tsx": "^4.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

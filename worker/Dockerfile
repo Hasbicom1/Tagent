@@ -4,7 +4,7 @@ FROM python:3.11-slim-bookworm
 ARG TARGETPLATFORM
 ARG NODE_MAJOR=20
 
-# Install system dependencies
+# Install system dependencies including Node.js
 RUN apt-get update && apt-get install -y \
     wget \
     netcat-traditional \
@@ -45,41 +45,70 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     fonts-dejavu-extra \
     vim \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install noVNC and websockify
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install noVNC and websockify with proper permissions
 RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
     && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify \
     && ln -s /opt/novnc/vnc.html /opt/novnc/index.html \
+    && pip install websockify \
     && chmod +x /opt/novnc/utils/websockify/websockify.py \
-    && pip install websockify
+    && chmod -R 755 /opt/novnc
 
 # Set up working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install Python dependencies first (for better caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright setup
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
-RUN mkdir -p $PLAYWRIGHT_BROWSERS_PATH
+# Install TypeScript dependencies if needed
+RUN npm install -g typescript tsx
 
-# Install Chromium via Playwright
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 playwright install chromium
+# Playwright setup with proper browser installation
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
+RUN mkdir -p $PLAYWRIGHT_BROWSERS_PATH \
+    && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 playwright install chromium \
+    && playwright install-deps chromium
 
 # Copy application code
 COPY . .
 
+# Install Node.js dependencies if package.json exists
+RUN if [ -f "package.json" ]; then npm install; fi
+
 # Set up supervisor configuration
-RUN mkdir -p /var/log/supervisor
+RUN mkdir -p /var/log/supervisor \
+    && mkdir -p /etc/supervisor/conf.d
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create necessary directories and set permissions
+RUN mkdir -p /tmp/.X99-lock \
+    && chmod 777 /tmp/.X99-lock \
+    && mkdir -p /var/run/supervisor \
+    && chmod 755 /var/run/supervisor
+
+# Set environment variables
+ENV DISPLAY=:99
+ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Expose ports:
 # 8080 - FastAPI worker
-# 6080 - noVNC web interface
-# 5901 - x11vnc direct VNC
+# 6080 - noVNC web interface  
+# 5900 - x11vnc direct VNC
 # 9222 - Chrome debugging (optional)
-EXPOSE 8080 6080 5901 9222
+EXPOSE 8080 6080 5900 9222
 
+# Use exec form for better signal handling
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
