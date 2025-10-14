@@ -271,6 +271,13 @@ function validateRedisUrlFlexibly(): void {
   if (!foundRedisUrl) {
     console.error('❌ RAILWAY 2025: No valid Redis URL found in environment variables');
     console.error('   Checked variables:', redisUrlCandidates.join(', '));
+    
+    // Check if Redis is being skipped for testing
+    if (process.env.SKIP_REDIS === 'true') {
+      console.warn('⚠️  SKIP_REDIS=true detected - bypassing Redis requirement for testing');
+      return;
+    }
+    
     console.error('\n🚨 RAILWAY 2025 REDIS REQUIREMENT: This application requires Redis for:');
     console.error('   • Session management (NO memory fallback in production)');
     console.error('   • Rate limiting coordination');

@@ -192,65 +192,46 @@ export class WebSocketManager {
    */
   private async initializeRedis(): Promise<void> {
     try {
-      // RAILWAY 2025: Use modern Railway Redis URL detection
+      // CRITICAL FIX: Use Redis singleton to prevent connection pool exhaustion
+      const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
+      
+      console.log('🔧 WS: Using Redis singleton for shared connection...');
+      debugRedisStatus();
+      
+      // Get the shared Redis instance
+      this.redis = await getSharedRedis();
+      
+      if (!this.redis) {
+        // Check if Redis is being skipped for testing
+        if (process.env.SKIP_REDIS === 'true') {
+          console.warn('⚠️  WS: SKIP_REDIS=true detected - bypassing Redis requirement for WebSocket coordination');
+          return;
+        }
+        throw new Error('Failed to get shared Redis instance');
+      }
+      
+      // Create a separate subscriber connection for pub/sub
+      // Note: Redis pub/sub requires a dedicated connection
       const { getRailwayRedisUrl } = await import('./railway-redis-2025');
       const redisConfig = getRailwayRedisUrl();
       const redisUrl = redisConfig.url;
       
-      console.log(`✅ RAILWAY 2025 WEBSOCKET: Redis URL found from ${redisConfig.source}`);
-      console.log(`   Service Type: ${redisConfig.serviceType}`);
-      console.log(`   Railway: ${redisConfig.isRailway}`);
-      console.log(`   Internal: ${redisConfig.isInternal}`);
-
-      // Test Redis connection first
-      const testRedis = new Redis(redisUrl, {
+      this.redisSubscriber = new Redis(redisUrl, {
         lazyConnect: true,
-        connectTimeout: 5000,
-        commandTimeout: 3000,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
       });
       
-      // Add error listener to test client
-      testRedis.on('error', (err) => {
-        log(`⚠️  WS: Redis test error: ${err.message}`);
+      // Add error listener to subscriber
+      this.redisSubscriber.on('error', (err) => {
+        log(`⚠️  WS: Redis subscriber error: ${err.message}`);
       });
+      
+      // Subscribe to WebSocket broadcast channel
+      await this.redisSubscriber.subscribe('ws:broadcast');
+      this.redisSubscriber.on('message', this.handleRedisMessage.bind(this));
 
-      try {
-        await testRedis.ping();
-        testRedis.disconnect();
-        log('✅ WS: Redis connection test successful');
-
-        // Create actual connections if test passes
-        this.redis = new Redis(redisUrl, {
-          lazyConnect: true,
-          connectTimeout: 10000,
-          commandTimeout: 5000,
-        });
-        
-        // Add error listener to prevent crashes
-        this.redis.on('error', (err) => {
-          log(`⚠️  WS: Redis client error: ${err.message}`);
-        });
-        
-        this.redisSubscriber = new Redis(redisUrl, {
-          lazyConnect: true,
-          connectTimeout: 10000,
-          commandTimeout: 5000,
-        });
-        
-        // Add error listener to subscriber
-        this.redisSubscriber.on('error', (err) => {
-          log(`⚠️  WS: Redis subscriber error: ${err.message}`);
-        });
-        
-        // Subscribe to WebSocket broadcast channel
-        await this.redisSubscriber.subscribe('ws:broadcast');
-        this.redisSubscriber.on('message', this.handleRedisMessage.bind(this));
-
-        log('✅ WS: Redis coordination initialized');
-      } catch (connectionError) {
-        testRedis.disconnect();
-        throw connectionError;
-      }
+      log('✅ WS: Redis coordination initialized with singleton pattern');
     } catch (error) {
       log(`❌ WS: Redis initialization failed: ${error instanceof Error ? error.message : error}`);
       

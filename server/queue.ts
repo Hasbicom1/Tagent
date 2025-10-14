@@ -21,55 +21,37 @@ let batchTimeout: NodeJS.Timeout | null = null;
 const BATCH_SIZE = 5; // Process up to 5 tasks in a batch
 const BATCH_TIMEOUT = 500; // Flush batch after 500ms
 
-// Helper function to test Redis connectivity with aggressive timeout for Replit
+// Helper function to test Redis connectivity using singleton pattern
 async function testQueueRedisConnection(redisUrl: string, timeoutMs: number = 2000): Promise<boolean> {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const timeout = setTimeout(() => {
       resolve(false);
     }, timeoutMs);
     
-    let testRedis: Redis;
-    
     try {
-      if (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://')) {
-        testRedis = new Redis(redisUrl, {
-          lazyConnect: true,
-          maxRetriesPerRequest: 1,
-          connectTimeout: timeoutMs,
-          commandTimeout: timeoutMs,
-        });
-        
-        // Add error listener to prevent crashes
-        testRedis.on('error', (err) => {
-          console.warn('⚠️  QUEUE: Redis test error:', err.message);
-        });
-      } else {
-        testRedis = new Redis({
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-          password: process.env.REDIS_PASSWORD,
-          db: parseInt(process.env.REDIS_DB || '0'),
-          lazyConnect: true,
-          maxRetriesPerRequest: 1,
-          connectTimeout: timeoutMs,
-          commandTimeout: timeoutMs,
-        });
-        
-        // Add error listener to prevent crashes
-        testRedis.on('error', (err) => {
-          console.warn('⚠️  QUEUE: Redis test error:', err.message);
-        });
+      // CRITICAL FIX: Use Redis singleton to prevent connection pool exhaustion
+      const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
+      
+      console.log('🔧 QUEUE: Using Redis singleton for connection test...');
+      debugRedisStatus();
+      
+      // Get the shared Redis instance
+      const redis = await getSharedRedis();
+      
+      if (!redis) {
+        clearTimeout(timeout);
+        resolve(false);
+        return;
       }
       
-      testRedis.ping()
+      // Test the connection
+      redis.ping()
         .then(() => {
           clearTimeout(timeout);
-          testRedis.disconnect();
           resolve(true);
         })
         .catch(() => {
           clearTimeout(timeout);
-          testRedis.disconnect();
           resolve(false);
         });
     } catch (error) {
@@ -89,6 +71,11 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> 
   
   const redis = await getSharedRedis();
   if (!redis) {
+    // Check if Redis is being skipped for testing
+    if (process.env.SKIP_REDIS === 'true') {
+      console.warn('⚠️  SKIP_REDIS=true detected - bypassing Redis requirement for queue system');
+      return null; // Return null to indicate no Redis connection
+    }
     throw new Error('Redis singleton not available - queue system requires Redis for production deployment');
   }
   
@@ -251,6 +238,12 @@ function scheduleBatchProcessing(): void {
 export async function initializeQueue(): Promise<void> {
   try {
     const connection = await getRedisConnection();
+    
+    // If connection is null (SKIP_REDIS mode), skip queue initialization
+    if (!connection) {
+      console.warn('⚠️  QUEUE: Skipping queue initialization - Redis not available');
+      return;
+    }
 
     console.log('🚀 QUEUE: Initializing Redis BullMQ');
     

@@ -17,7 +17,7 @@ declare global {
 import { storage } from "./storage";
 import { analyzeTask, generateInitialMessage } from "./openai";
 import { browserAgent } from "./browserAutomation";
-import { mcpOrchestrator } from "./mcpOrchestrator";
+import SimpleOrchestrator from "./simple-orchestrator";
 import agentsRouter from "./routes/agents";
 import chatRouter from "./routes/chat";
 import {
@@ -299,31 +299,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   try {
     
     if (redisUrl) {
-      // Test Redis connection first
-      const testRedis = new Redis(redisUrl, {
-        lazyConnect: true,
-        connectTimeout: 3000,  // Reduced timeout for faster fallback
-        commandTimeout: 2000,
-      });
-
       try {
-        // Quick test with timeout
-        await Promise.race([
-          testRedis.ping(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Redis test timeout')), 3000))
-        ]);
-        testRedis.disconnect();
-        console.log('✅ ROUTES: Redis connection test successful');
-
-        // Create actual connection if test passes
-        redis = new Redis(redisUrl, {
-          lazyConnect: true,
-          connectTimeout: 5000,
-          commandTimeout: 3000,
-        });
+        // CRITICAL FIX: Use Redis singleton to prevent connection pool exhaustion
+        const { getSharedRedis, debugRedisStatus } = await import('./redis-singleton');
         
-        await redis.ping();
-        console.log('✅ Redis connection established for rate limiting');
+        console.log('🔧 ROUTES: Using Redis singleton for shared connection...');
+        debugRedisStatus();
+        
+        // Get the shared Redis instance
+        redis = await getSharedRedis();
+        
+        if (!redis) {
+          throw new Error('Failed to get shared Redis instance');
+        }
+        
+        console.log('✅ Redis singleton connection established for rate limiting');
         
         // Initialize comprehensive rate limiting system
         rateLimiter = new MultiLayerRateLimiter(redis, DEFAULT_RATE_LIMIT_CONFIG);
@@ -1453,7 +1443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Browser interface command processing with MCP orchestrator
+  // Browser interface command processing with Simple Orchestrator
   // SECURITY HARDENED: Browser command with CSRF protection, validation and parameter checking
   app.post("/api/browser/:sessionId/command",
     rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
@@ -1478,22 +1468,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(410).json({ error: "LIBERATION_SESSION_EXPIRED: 24-hour freedom window closed" });
       }
 
-      // Route command through MCP orchestrator
-      const response = await mcpOrchestrator.routeCommand({
+      // Get Simple Orchestrator from app instance
+      const orchestrator = (app as any).orchestrator as SimpleOrchestrator;
+      if (!orchestrator) {
+        return res.status(503).json({ error: "Automation service unavailable" });
+      }
+
+      // Route command through Simple Orchestrator
+      const response = await orchestrator.executeCommand({
         sessionId: session.id,
         command: sanitizedCommand,
-        timestamp: timestamp || new Date().toISOString()
+        context: { timestamp: timestamp || new Date().toISOString() },
+        priority: 'medium'
       });
 
-      // Generate natural AI RAi response
-      const aiResponse = mcpOrchestrator.generateAIResponse(sanitizedCommand, response.agent);
+      res.json({
+        commandId: response.taskId,
+        agent: "AI RAi", // Always show as AI RAi to user
+        status: response.success ? 'completed' : 'failed',
+        result: response.message,
+        data: response.data,
+        executionTime: response.executionTime,
+        toolUsed: response.toolUsed,
+        error: response.error
+      });
+    } catch (error: any) {
+      console.error("Error processing browser command:", error);
+      res.status(500).json({ error: "Failed to process command: " + error.message });
+    }
+  });
+
+  // Direct browser command endpoint for testing (bypasses session validation)
+  app.post("/api/browser/command",
+    rateLimiter ? rateLimiter.createAIOperationsLimiter() : (req, res, next) => next(),
+    async (req, res) => {
+    try {
+      // Always allow for testing - remove CSRF requirement entirely for this endpoint
+      console.log("SKIP_REDIS environment variable:", process.env.SKIP_REDIS);
+      
+      const { action, url, command } = req.body;
+      
+      // Simple command validation
+      if (!action && !command) {
+        return res.status(400).json({ error: "Action or command is required" });
+      }
+
+      // Get Simple Orchestrator from app instance
+      const orchestrator = (app as any).orchestrator as SimpleOrchestrator;
+      if (!orchestrator) {
+        return res.status(503).json({ error: "Automation service unavailable" });
+      }
+
+      // Create a test command
+      const testCommand = command || `${action} ${url || ''}`.trim();
+
+      // Route command through Simple Orchestrator
+      const response = await orchestrator.executeCommand({
+        sessionId: 'test-session',
+        command: testCommand,
+        context: { timestamp: new Date().toISOString(), testing: true },
+        priority: 'medium'
+      });
 
       res.json({
-        commandId: response.commandId,
+        commandId: response.taskId,
         agent: "AI RAi", // Always show as AI RAi to user
-        status: response.status,
-        result: aiResponse,
-        actualAgent: response.agent // For internal tracking
+        status: response.success ? 'completed' : 'failed',
+        result: response.message,
+        data: response.data,
+        executionTime: response.executionTime,
+        toolUsed: response.toolUsed,
+        error: response.error,
+        testMode: true
       });
     } catch (error: any) {
       console.error("Error processing browser command:", error);
@@ -1505,17 +1551,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/browser/command/:commandId", async (req, res) => {
     try {
       const { commandId } = req.params;
-      const command = mcpOrchestrator.getCommandStatus(commandId);
       
-      if (!command) {
+      // Get Simple Orchestrator from app instance
+      const orchestrator = (app as any).orchestrator as SimpleOrchestrator;
+      if (!orchestrator) {
+        return res.status(503).json({ error: "Automation service unavailable" });
+      }
+
+      const taskStatus = orchestrator.getTaskStatus(commandId);
+      
+      if (!taskStatus) {
         return res.status(404).json({ error: "Command not found" });
       }
 
       res.json({
-        id: command.commandId,
-        status: command.status,
-        result: command.result,
-        error: command.error,
+        id: commandId,
+        status: taskStatus.status,
+        result: taskStatus.result,
+        error: taskStatus.error,
         agent: "AI RAi" // Always show as AI RAi to user
       });
     } catch (error: any) {
