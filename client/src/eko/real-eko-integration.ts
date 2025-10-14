@@ -6,7 +6,7 @@
  */
 
 import { Eko } from '@eko-ai/eko';
-import { BrowserAgent, FileAgent } from '@eko-ai/eko-web';
+import { BrowserAgent } from '@eko-ai/eko-web';
 import type { LLMs, Agent } from '@eko-ai/eko/types';
 
 // Real Eko framework instance
@@ -74,8 +74,7 @@ export async function initializeRealEko(): Promise<void> {
 
     // Initialize agents following Eko patterns with VNC support
     const agents: Agent[] = [
-      vncBrowserAgent,
-      new FileAgent()
+      vncBrowserAgent
     ];
 
     // Create Eko instance with secure configuration and VNC support
