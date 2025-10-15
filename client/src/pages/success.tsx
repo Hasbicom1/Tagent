@@ -110,7 +110,7 @@ export default function Success() {
         
         console.log(`[POLL ${i}] Session status:`, data);
         
-        if (data.status === 'ready' && data.workerConnected) {
+        if (data.status === 'ready' && data.workerReady) {
           console.log('✅ Worker is ready, redirecting to agent page');
           window.location.href = `/live/agent/${agentId}`;
           return;

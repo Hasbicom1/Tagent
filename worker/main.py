@@ -36,7 +36,7 @@ REDIS_URL = (
     'redis://localhost:6379'
 )
 PORT = int(os.getenv('PORT', '8080'))
-BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/"
+BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/stream/"
 
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager

@@ -68,7 +68,7 @@ export function BrowserStreamViewer({
         console.log(`[POLL ${pollCount}] Session status:`, data);
         setStatus(`Waiting for browser to start... (${data.status})`);
         
-        if (data.status === 'ready' && data.workerConnected) {
+        if (data.status === 'ready' && data.workerReady) {
           console.log('✅ Worker is ready! Starting WebSocket connection...');
           setIsReady(true);
           setStatus('Connected');
@@ -113,7 +113,7 @@ export function BrowserStreamViewer({
     }
 
     // Connect to backend WebSocket for live stream WITH JWT token
-    const wsUrl = `wss://www.onedollaragent.ai/ws/stream/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
+    const wsUrl = `wss://www.onedollaragent.ai/ws/view/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
     console.log('🔌 Connecting to WebSocket with JWT authentication...');
     
     const ws = new WebSocket(wsUrl);

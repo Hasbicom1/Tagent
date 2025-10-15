@@ -10,6 +10,7 @@ import json
 import logging
 import redis
 import os
+import time
 from datetime import datetime
 
 # Configure logging for live stream
@@ -106,6 +107,18 @@ class LiveBrowserStream:
             # Listen for frames
             self.cdp.on('Page.screencastFrame', self._on_frame)
             logger.info("👂 STREAM: Frame listener attached")
+            
+            # CRITICAL FIX: Update Redis session status to mark browser as ready
+            try:
+                self.redis_client.hset(f'session:{self.session_id}', mapping={
+                    'browser_ready': 'true',
+                    'worker_ready': 'true',
+                    'status': 'active',
+                    'stream_started_at': str(int(time.time()))
+                })
+                logger.info(f"✅ STREAM: Redis session status updated - browser ready for session: {self.session_id}")
+            except Exception as redis_error:
+                logger.error(f"❌ STREAM: Failed to update Redis session status: {redis_error}")
             
             logger.info(f"✅ STREAM: Live streaming started successfully for session: {self.session_id}")
             
