@@ -768,6 +768,94 @@ console.log('✅ PRODUCTION: Message route registered');
 // STEP 10: Initialize API routes (NON-BLOCKING)
 console.log('🔧 PRODUCTION: Initializing API routes...');
 
+// CRITICAL: Define session route BEFORE api-routes.js to ensure JWT token is returned
+// FIXED: Session endpoints with proper expiry validation
+app.get('/api/session/:sessionId', async (req, res) => {
+  console.log('📋 PRODUCTION: Session status requested for:', req.params.sessionId);
+  try {
+    // Import database functions
+    const { getUserSession, updateSessionStatus } = await import('./database.js');
+    
+    // Get real session from database
+    const session = await getUserSession(req.params.sessionId);
+    
+    if (!session) {
+      console.log('❌ PRODUCTION: Session not found:', req.params.sessionId);
+      return res.status(404).json({
+        sessionId: req.params.sessionId,
+        status: 'not_found',
+        message: 'Session not found or expired',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // FIXED: Check if session is actually expired
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('❌ PRODUCTION: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
+      
+      // Update session status to expired in database
+      try {
+        await updateSessionStatus(req.params.sessionId, 'expired');
+        console.log('✅ PRODUCTION: Session status updated to expired');
+      } catch (updateError) {
+        console.warn('⚠️ PRODUCTION: Failed to update session status:', updateError.message);
+      }
+      
+      return res.status(410).json({
+        sessionId: req.params.sessionId,
+        status: 'expired',
+        message: 'Session has expired',
+        expiresAt: session.expires_at,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Calculate time remaining in minutes
+    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
+    
+    console.log('✅ PRODUCTION: Session is active, time remaining:', timeRemaining, 'minutes');
+    
+    // CRITICAL FIX: Generate JWT token for WebSocket authentication
+    const jwt = require('jsonwebtoken');
+    const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
+    const jwtPayload = {
+      agentId: req.params.sessionId,
+      sessionId: req.params.sessionId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: tokenExpiration,
+      iss: 'phoenix-agent-system',
+      aud: 'websocket-client'
+    };
+    
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
+    console.log('🔐 PRODUCTION: JWT token generated for WebSocket authentication');
+    
+    res.json({
+      sessionId: req.params.sessionId,
+      agentId: req.params.sessionId, // agentId is same as sessionId
+      status: 'active',
+      isActive: true,
+      expiresAt: session.expires_at,
+      timeRemaining: timeRemaining,
+      paymentVerified: session.payment_verified,
+      token: jwtToken, // CRITICAL: Include JWT token for WebSocket authentication
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ PRODUCTION: Session lookup failed:', error);
+    res.status(500).json({
+      sessionId: req.params.sessionId,
+      status: 'error',
+      message: 'Session lookup failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 try {
   // Use dynamic import for ES Module compatibility
   const routesModule = await import('./api-routes.js');
@@ -849,93 +937,6 @@ app.get('/api/session-status', async (req, res) => {
     return res.status(500).json({
       error: 'Failed to check session status',
       message: error.message
-    });
-  }
-});
-
-// FIXED: Session endpoints with proper expiry validation
-app.get('/api/session/:sessionId', async (req, res) => {
-  console.log('📋 PRODUCTION: Session status requested for:', req.params.sessionId);
-  try {
-    // Import database functions
-    const { getUserSession, updateSessionStatus } = await import('./database.js');
-    
-    // Get real session from database
-    const session = await getUserSession(req.params.sessionId);
-    
-    if (!session) {
-      console.log('❌ PRODUCTION: Session not found:', req.params.sessionId);
-      return res.status(404).json({
-        sessionId: req.params.sessionId,
-        status: 'not_found',
-        message: 'Session not found or expired',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // FIXED: Check if session is actually expired
-    const now = new Date();
-    const expiresAt = new Date(session.expires_at);
-    
-    if (now > expiresAt) {
-      console.log('❌ PRODUCTION: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
-      
-      // Update session status to expired in database
-      try {
-        await updateSessionStatus(req.params.sessionId, 'expired');
-        console.log('✅ PRODUCTION: Session status updated to expired');
-      } catch (updateError) {
-        console.warn('⚠️ PRODUCTION: Failed to update session status:', updateError.message);
-      }
-      
-      return res.status(410).json({
-      sessionId: req.params.sessionId,
-        status: 'expired',
-        message: 'Session has expired',
-      expiresAt: session.expires_at,
-      timestamp: new Date().toISOString()
-    });
-  }
-    
-    // Calculate time remaining in minutes
-    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
-    
-    console.log('✅ PRODUCTION: Session is active, time remaining:', timeRemaining, 'minutes');
-    
-    // CRITICAL FIX: Generate JWT token for WebSocket authentication
-    const jwt = require('jsonwebtoken');
-    const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
-    const jwtPayload = {
-      agentId: req.params.sessionId,
-      sessionId: req.params.sessionId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: tokenExpiration,
-      iss: 'phoenix-agent-system',
-      aud: 'websocket-client'
-    };
-    
-           const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
-    console.log('🔐 PRODUCTION: JWT token generated for WebSocket authentication');
-    
-    res.json({
-      sessionId: req.params.sessionId,
-      agentId: req.params.sessionId, // agentId is same as sessionId
-      status: 'active',
-      isActive: true,
-      expiresAt: session.expires_at,
-      timeRemaining: timeRemaining,
-      paymentVerified: session.payment_verified,
-      token: jwtToken, // CRITICAL: Include JWT token for WebSocket authentication
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ PRODUCTION: Session lookup failed:', error);
-    res.status(500).json({
-      sessionId: req.params.sessionId,
-      status: 'error',
-      message: 'Session lookup failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
     });
   }
 });
