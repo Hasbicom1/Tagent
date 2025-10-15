@@ -50,9 +50,20 @@ class LiveBrowserStream:
                     else 'http://localhost:8080'
                 )
             )
+            # Include a browser-like User-Agent to avoid WAF blocks (e.g., Cloudflare)
+            ua = (
+                os.getenv('STREAMING_UA')
+                or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
             self.ws = await websockets.connect(
                 self.backend_ws_url,
-                additional_headers={'Origin': origin}
+                additional_headers={
+                    'Origin': origin,
+                    'User-Agent': ua,
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache'
+                }
             )
             logger.info(f"✅ STREAM: Connected to backend: {self.backend_ws_url}")
             

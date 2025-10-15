@@ -450,7 +450,7 @@ async def stagehand_task(task_data: Dict[str, Any]):
 
 # Connect agents endpoint for frontend
 @app.post("/start_stream")
-async def start_stream(session_id: str):
+async def start_stream(session_id: str, token: Optional[str] = None):
     """Start live browser stream for session"""
     try:
         # Build WebSocket URL from configured backend base
@@ -464,6 +464,12 @@ async def start_stream(session_id: str):
                 backend_ws_url += f"?token={websocket_token}"
         except Exception:
             pass
+
+        # If token is provided directly, prefer it
+        if token:
+            # Ensure we append correctly if URL already has query params
+            sep = '&' if ('?' in backend_ws_url) else '?'
+            backend_ws_url = f"{backend_ws_url}{sep}token={token}"
 
         stream = LiveBrowserStream(session_id, backend_ws_url)
         await stream.start()
