@@ -475,7 +475,7 @@ router.get('/session-status', async (req, res) => {
 });
 
 // NEW: Test endpoint to verify complete flow
-router.post('/api/test-browser-flow', async (req, res) => {
+router.post('/test-browser-flow', async (req, res) => {
   try {
     console.log('🧪 TEST: Testing complete browser flow...');
     
@@ -815,9 +815,46 @@ router.get('/session/:sessionId', async (req, res) => {
         status: 'not_found'
       });
     }
+
+    // Check if session is expired
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+    
+    if (now > expiresAt) {
+      console.log('❌ API: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
+      return res.status(410).json({
+        error: 'Session has expired',
+        status: 'expired'
+      });
+    }
+
+    // Calculate time remaining in minutes
+    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
+
+    // Generate JWT token for WebSocket authentication
+    const jwt = require('jsonwebtoken');
+    const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
+    const jwtPayload = {
+      agentId: req.params.sessionId,
+      sessionId: req.params.sessionId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: tokenExpiration,
+      iss: 'phoenix-agent-system',
+      aud: 'websocket-client'
+    };
+    
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
+    console.log('🔐 API: JWT token generated for WebSocket authentication');
+
     res.json({
       success: true,
-      session: session,
+      sessionId: req.params.sessionId,
+      agentId: req.params.sessionId,
+      status: 'active',
+      isActive: true,
+      expiresAt: session.expires_at,
+      timeRemaining: timeRemaining,
+      token: jwtToken, // CRITICAL: Include JWT token for WebSocket authentication
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1152,8 +1189,8 @@ router.get('/api/agent/:sessionId/status', async (req, res) => {
   }
 });
 
-// POST /api/create-or-recover-session
-router.post('/api/create-or-recover-session', async (req, res) => {
+// POST /create-or-recover-session (mounted at /api)
+router.post('/create-or-recover-session', async (req, res) => {
   try {
     const { sessionId } = req.body;
     console.log('🔍 API: Create or recover session:', sessionId);
@@ -1256,7 +1293,7 @@ router.use((err, req, res, next) => {
 export default router;
 // AUTH: Issue a simple JWT token for clients needing WebSocket auth
 // Supports POST body and GET query for flexibility
-router.post('/api/auth/token', async (req, res) => {
+router.post('/auth/token', async (req, res) => {
   try {
     const { sessionId, agentId } = req.body || {};
     const sid = (typeof sessionId === 'string' && sessionId.trim()) ? sessionId.trim() : `anon_${Date.now()}`;
