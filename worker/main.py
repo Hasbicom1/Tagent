@@ -8,6 +8,7 @@ REAL LIVE BROWSER STREAMING - 100% FREE
 print("🚀🚀🚀 WORKER VERSION 6.0 - LIVE BROWSER STREAMING 🚀🚀🚀")
 print("🚀 REAL PLAYWRIGHT CDP + LIVE VIDEO STREAMING 🚀")
 import os
+import re
 import asyncio
 import json
 from datetime import datetime
@@ -35,7 +36,44 @@ REDIS_URL = (
     'redis://localhost:6379'
 )
 PORT = int(os.getenv('PORT', '8080'))
-BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "ws://localhost:8080/ws/stream/"
+
+# Build a robust default for backend WebSocket URL
+def _to_ws_url(http_url: str) -> str:
+    if not http_url:
+        return None
+    url = http_url.strip()
+    # convert scheme
+    url = re.sub(r'^https://', 'wss://', url, flags=re.IGNORECASE)
+    url = re.sub(r'^http://', 'ws://', url, flags=re.IGNORECASE)
+    # ensure no trailing slash only for base
+    url = url.rstrip('/')
+    return url
+
+def compute_backend_ws_url() -> str:
+    # Highest priority: explicit WS URL
+    direct = os.getenv('BACKEND_WS_URL')
+    if direct:
+        return direct if direct.endswith('/') else direct + '/'
+    # Fallbacks from HTTP origins
+    candidates = [
+        os.getenv('BACKEND_HTTP_URL'),
+        os.getenv('BACKEND_ORIGIN'),
+        os.getenv('SERVER_PUBLIC_URL'),
+        os.getenv('PUBLIC_URL'),
+        os.getenv('APP_BASE_URL'),
+    ]
+    for cand in candidates:
+        ws_base = _to_ws_url(cand)
+        if ws_base:
+            return f"{ws_base}/ws/stream/"
+    # Production-safe default domain if running in production
+    if os.getenv('NODE_ENV') == 'production' or os.getenv('RAILWAY_ENVIRONMENT') == 'production':
+        return 'wss://www.onedollaragent.ai/ws/stream/'
+    # Local default
+    return 'ws://localhost:8080/ws/stream/'
+
+BACKEND_WS_URL = compute_backend_ws_url()
+logger.info(f"🌐 WORKER: Computed BACKEND_WS_URL base: {BACKEND_WS_URL}")
 
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager
