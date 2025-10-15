@@ -149,7 +149,7 @@ async def start_agent_for_session(session_id: str, websocket_token: str = None):
         # Connect with timeout and proper settings
         ws = await websockets.connect(
             ws_url,
-            extra_headers=headers,
+            additional_headers=headers,
             ping_interval=20,
             ping_timeout=10,
             close_timeout=5

@@ -48,7 +48,7 @@ class LiveBrowserStream:
             )
             self.ws = await websockets.connect(
                 self.backend_ws_url,
-                extra_headers={'Origin': origin}
+                additional_headers={'Origin': origin}
             )
             logger.info(f"✅ STREAM: Connected to backend: {self.backend_ws_url}")
             
