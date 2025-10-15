@@ -18,7 +18,6 @@ import redis
 from rq import Queue, Worker
 import logging
 from live_stream import LiveBrowserStream
-import websockets
 
 # Configure logging
 logging.basicConfig(
@@ -124,74 +123,17 @@ async def start_agent_for_session(session_id: str, websocket_token: str = None):
         else:
             logger.info(f"🔐 WORKER: JWT token found for session {session_id}")
         
-        # Connect to backend WebSocket with JWT token
+        # Build backend WebSocket streaming URL (token optional for worker)
         ws_url = f"{BACKEND_WS_URL}{session_id}"
         if websocket_token:
             ws_url += f"?token={websocket_token}"
-        
-        logger.info(f"🔌 WORKER: Connecting to backend WebSocket: {ws_url}")
-        
-        # Add authentication header with JWT token
-        headers = {}
-        if websocket_token:
-            headers['Authorization'] = f'Bearer {websocket_token}'
-        # Add Origin header required by backend security validation
-        origin = (
-            os.getenv('BACKEND_ORIGIN')
-            or (
-                'https://www.onedollaragent.ai'
-                if (os.getenv('NODE_ENV') == 'production' or os.getenv('RAILWAY_ENVIRONMENT') == 'production')
-                else 'http://localhost:8080'
-            )
-        )
-        headers['Origin'] = origin
-        
-        # Connect with timeout and proper settings
-        ws = await websockets.connect(
+
+        logger.info(
+            "🔌 WORKER: Starting stream without AUTH handshake on relay; URL: %s",
             ws_url,
-            additional_headers=headers,
-            ping_interval=20,
-            ping_timeout=10,
-            close_timeout=5
         )
-        logger.info(f"✅ WORKER: WebSocket connected to backend")
-        
-        # Authenticate with backend using proper WebSocket protocol
-        auth_msg = {
-            "type": "AUTHENTICATE",
-            "sessionToken": websocket_token,
-            "agentId": session_id,
-            "messageId": f"auth_{session_id}_{int(datetime.now().timestamp())}"
-        }
-        logger.info(f"📝 WORKER: Authenticating with backend: {auth_msg}")
-        await ws.send(json.dumps(auth_msg))
-        
-        # Wait for authentication response
-        try:
-            response = await asyncio.wait_for(ws.recv(), timeout=10.0)
-            response_data = json.loads(response)
-            if response_data.get('type') == 'AUTHENTICATED':
-                logger.info(f"✅ WORKER: Authentication successful for session: {session_id}")
-            else:
-                logger.error(f"❌ WORKER: Authentication failed for session {session_id}: {response_data}")
-                raise Exception(f"Authentication failed: {response_data}")
-        except asyncio.TimeoutError:
-            logger.error(f"❌ WORKER: Authentication timeout for session: {session_id}")
-            raise Exception("Authentication timeout")
-        except Exception as auth_error:
-            logger.error(f"❌ WORKER: Authentication error for session {session_id}: {auth_error}")
-            raise
-        
-        # CRITICAL FIX: Update Redis to mark session as ready
-        redis_conn.hset(f"session:{session_id}", mapping={
-            "status": "ready",
-            "workerConnected": "true",
-            "browser_ready": "true",
-            "readyAt": datetime.now().isoformat()
-        })
-        logger.info(f"✅ WORKER: Session {session_id} marked as READY in Redis")
-        
-        # Start your existing live stream logic
+
+        # Start live stream (handles its own WS connect + Redis readiness updates)
         logger.info(f"🎬 WORKER: Starting live browser stream for session: {session_id}")
         stream = LiveBrowserStream(session_id, ws_url)
         active_streams[session_id] = stream

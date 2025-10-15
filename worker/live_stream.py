@@ -125,6 +125,7 @@ class LiveBrowserStream:
                 self.redis_client.hset(f'session:{self.session_id}', mapping={
                     'browser_ready': 'true',
                     'worker_ready': 'true',
+                    'workerConnected': 'true',
                     'status': 'active',
                     'stream_started_at': str(int(time.time()))
                 })
