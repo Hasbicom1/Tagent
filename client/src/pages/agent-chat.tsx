@@ -53,54 +53,57 @@ export default function AgentChat() {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  
-  // Session initialization effect
-  useEffect(() => {
+
+  // Initialize session: validate status, or create/recover, then load messages
+  const initializeSession = async () => {
     if (!agentId) {
       setSessionError("No agent ID provided");
       setIsLoading(false);
       return;
     }
-    
-    console.log("🔍 Initializing session for agent:", agentId);
-    
-    const initializeSession = async () => {
-       try {
-         // Check if session exists and is valid
-         const statusResponse = await apiRequest('GET', `/api/agent/${agentId}/status`);
-         
-         if (statusResponse.ok) {
-           const statusData = await statusResponse.json();
-           console.log("✅ Session initialized successfully:", statusData);
-           setSessionReady(true);
-           loadSessionAndMessages();
-           return;
-         }
-        
-        // If session doesn't exist or has expired, try to create/recover it
-        const createResponse = await apiRequest('POST', '/api/flow/create-session', {
-          sessionId: agentId
-        });
-        
-        if (createResponse.ok) {
-          const createData = await createResponse.json();
-          console.log("✅ Session created/recovered successfully:", createData);
-          setSessionReady(true);
-          loadSessionAndMessages();
-          return;
-        }
-        
-        // If we get here, both attempts failed
-        const errorData = await createResponse.json();
-        throw new Error(errorData.error || "Failed to initialize session");
-        
-      } catch (error: any) {
-        console.error("❌ Session initialization failed:", error);
-        setSessionError(error.message || "Failed to initialize session");
-        setIsLoading(false);
+
+    try {
+      setIsLoading(true);
+      setSessionError(null);
+
+      // Check if session exists and is valid
+      const statusResponse = await apiRequest('GET', `/api/agent/${agentId}/status`);
+
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json();
+        console.log("✅ Session initialized successfully:", statusData);
+        setSessionReady(true);
+        await loadSessionAndMessages();
+        return;
       }
-    };
-    
+
+      // If session doesn't exist or has expired, try to create/recover it
+      const createResponse = await apiRequest('POST', '/api/flow/create-session', {
+        sessionId: agentId
+      });
+
+      if (createResponse.ok) {
+        const createData = await createResponse.json();
+        console.log("✅ Session created/recovered successfully:", createData);
+        setSessionReady(true);
+        await loadSessionAndMessages();
+        return;
+      }
+
+      // If we get here, both attempts failed
+      const errorData = await createResponse.json();
+      throw new Error(errorData.error || "Failed to initialize session");
+
+    } catch (error: any) {
+      console.error("❌ Session initialization failed:", error);
+      setSessionError(error.message || "Failed to initialize session");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Session initialization effect
+  useEffect(() => {
     initializeSession();
   }, [agentId]);
 
@@ -350,7 +353,10 @@ export default function AgentChat() {
         <Card className="p-8 text-center">
           <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Connecting to Agent</h2>
-          <p className="text-muted-foreground">Loading your AI agent session...</p>
+          <p className="text-muted-foreground mb-4">Loading your AI agent session...</p>
+          <Button onClick={() => initializeSession()} data-testid="button-retry-init">
+            Retry
+          </Button>
         </Card>
       </div>
     );
@@ -363,7 +369,14 @@ export default function AgentChat() {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Session Error</h2>
           <p className="text-muted-foreground mb-4">{sessionError}</p>
-          <Button onClick={() => setLocation('/')}>Return Home</Button>
+          <div className="flex items-center gap-3 justify-center">
+            <Button variant="default" onClick={() => initializeSession()} data-testid="button-retry-error">
+              Retry
+            </Button>
+            <Button variant="outline" onClick={() => setLocation('/')}>
+              Return Home
+            </Button>
+          </div>
         </Card>
       </div>
     );
@@ -376,7 +389,12 @@ export default function AgentChat() {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Session Not Found</h2>
           <p className="text-muted-foreground mb-4">Unable to connect to agent session.</p>
-          <Button onClick={() => setLocation('/')}>Return Home</Button>
+          <div className="flex items-center gap-3 justify-center">
+            <Button variant="default" onClick={() => initializeSession()} data-testid="button-retry-notfound">
+              Retry
+            </Button>
+            <Button variant="outline" onClick={() => setLocation('/')}>Return Home</Button>
+          </div>
         </Card>
       </div>
     );
