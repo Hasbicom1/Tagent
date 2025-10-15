@@ -453,8 +453,18 @@ async def stagehand_task(task_data: Dict[str, Any]):
 async def start_stream(session_id: str):
     """Start live browser stream for session"""
     try:
-        backend_ws_url = f"ws://localhost:8080/ws/stream/{session_id}"
-        
+        # Build WebSocket URL from configured backend base
+        backend_ws_url = f"{BACKEND_WS_URL}{session_id}"
+        # Optional: append token from Redis if present for forward compatibility
+        try:
+            redis_conn = redis.from_url(REDIS_URL)
+            session_data = redis_conn.hgetall(f"session:{session_id}")
+            websocket_token = session_data.get('websocket_token')
+            if websocket_token:
+                backend_ws_url += f"?token={websocket_token}"
+        except Exception:
+            pass
+
         stream = LiveBrowserStream(session_id, backend_ws_url)
         await stream.start()
         

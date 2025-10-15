@@ -218,3 +218,26 @@ If you want to stay at $5/month:
 
 **THIS IS THE CORRECT ARCHITECTURE YOU REQUESTED.**
 
+---
+
+## WebSocket Endpoints (Brief)
+
+- Stream relay: `/ws/stream/{sessionId}`
+  - Purpose: low-friction frame relay for live browser streaming
+  - Auth: no token required for worker; backend validates `Origin`
+  - Worker config: set `BACKEND_WS_URL` to the base path (e.g. `wss://www.onedollaragent.ai/ws/stream/`) and the worker appends `{sessionId}` at runtime
+
+- Control plane: `/ws`
+  - Purpose: authenticated messaging (UI ↔ server, future server ↔ worker)
+  - Auth: JWT required via `Authorization: Bearer` and/or `?token=`
+  - Status: deferred — not required for streaming
+
+Recommended environment variables:
+
+```env
+BACKEND_WS_URL=wss://www.onedollaragent.ai/ws/stream/
+BACKEND_ORIGIN=https://www.onedollaragent.ai
+```
+
+More details: see `docs/WEBSOCKETS-ENDPOINTS.md`.
+

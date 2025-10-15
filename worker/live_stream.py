@@ -26,8 +26,12 @@ class LiveBrowserStream:
         self.page = None
         self.cdp = None
         
-        # Redis connection for frame publishing
-        redis_url = os.getenv('REDIS_PUBLIC_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379')
+        # Redis connection for frame publishing (prefer private URL on Railway)
+        redis_url = (
+            os.getenv('REDIS_PRIVATE_URL') or
+            os.getenv('REDIS_PUBLIC_URL') or
+            os.getenv('REDIS_URL', 'redis://localhost:6379')
+        )
         self.redis_client = redis.from_url(redis_url)
         
     async def start(self):
