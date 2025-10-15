@@ -36,7 +36,7 @@ REDIS_URL = (
     'redis://localhost:6379'
 )
 PORT = int(os.getenv('PORT', '8080'))
-BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "wss://www.onedollaragent.ai/ws/stream/"
+BACKEND_WS_URL = os.getenv('BACKEND_WS_URL') or "ws://localhost:8080/ws/stream/"
 
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager
@@ -501,7 +501,7 @@ async def stagehand_task(task_data: Dict[str, Any]):
 async def start_stream(session_id: str):
     """Start live browser stream for session"""
     try:
-        backend_ws_url = f"wss://www.onedollaragent.ai/ws/stream/{session_id}"
+        backend_ws_url = f"ws://localhost:8080/ws/stream/{session_id}"
         
         stream = LiveBrowserStream(session_id, backend_ws_url)
         await stream.start()
