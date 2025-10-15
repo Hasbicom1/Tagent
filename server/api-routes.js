@@ -804,67 +804,67 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// Session endpoints (frontend expects these)
-router.get('/session/:sessionId', async (req, res) => {
-  console.log('🔍 API: Session lookup requested:', req.params.sessionId);
-  try {
-    const session = await getUserSession(req.params.sessionId);
-    if (!session) {
-      return res.status(404).json({
-        error: 'Session not found',
-        status: 'not_found'
-      });
-    }
+// Session endpoints (frontend expects these) - DISABLED: Handled in production.js
+// router.get('/session/:sessionId', async (req, res) => {
+//   console.log('🔍 API: Session lookup requested:', req.params.sessionId);
+//   try {
+//     const session = await getUserSession(req.params.sessionId);
+//     if (!session) {
+//       return res.status(404).json({
+//         error: 'Session not found',
+//         status: 'not_found'
+//       });
+//     }
 
-    // Check if session is expired
-    const now = new Date();
-    const expiresAt = new Date(session.expires_at);
+//     // Check if session is expired
+//     const now = new Date();
+//     const expiresAt = new Date(session.expires_at);
     
-    if (now > expiresAt) {
-      console.log('❌ API: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
-      return res.status(410).json({
-        error: 'Session has expired',
-        status: 'expired'
-      });
-    }
+//     if (now > expiresAt) {
+//       console.log('❌ API: Session expired:', req.params.sessionId, 'expiresAt:', expiresAt);
+//       return res.status(410).json({
+//         error: 'Session has expired',
+//         status: 'expired'
+//       });
+//     }
 
-    // Calculate time remaining in minutes
-    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
+//     // Calculate time remaining in minutes
+//     const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60)));
 
-    // Generate JWT token for WebSocket authentication
-    const jwt = require('jsonwebtoken');
-    const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
-    const jwtPayload = {
-      agentId: req.params.sessionId,
-      sessionId: req.params.sessionId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: tokenExpiration,
-      iss: 'phoenix-agent-system',
-      aud: 'websocket-client'
-    };
+//     // Generate JWT token for WebSocket authentication
+//     const jwt = require('jsonwebtoken');
+//     const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
+//     const jwtPayload = {
+//       agentId: req.params.sessionId,
+//       sessionId: req.params.sessionId,
+//       iat: Math.floor(Date.now() / 1000),
+//       exp: tokenExpiration,
+//       iss: 'phoenix-agent-system',
+//       aud: 'websocket-client'
+//     };
     
-    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
-    console.log('🔐 API: JWT token generated for WebSocket authentication');
+//     const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
+//     console.log('🔐 API: JWT token generated for WebSocket authentication');
 
-    res.json({
-      success: true,
-      sessionId: req.params.sessionId,
-      agentId: req.params.sessionId,
-      status: 'active',
-      isActive: true,
-      expiresAt: session.expires_at,
-      timeRemaining: timeRemaining,
-      token: jwtToken, // CRITICAL: Include JWT token for WebSocket authentication
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ API: Session lookup failed:', error);
-    res.status(500).json({
-      error: 'Session lookup failed',
-      details: error.message
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       sessionId: req.params.sessionId,
+//       agentId: req.params.sessionId,
+//       status: 'active',
+//       isActive: true,
+//       expiresAt: session.expires_at,
+//       timeRemaining: timeRemaining,
+//       token: jwtToken, // CRITICAL: Include JWT token for WebSocket authentication
+//       timestamp: new Date().toISOString()
+//     });
+//   } catch (error) {
+//     console.error('❌ API: Session lookup failed:', error);
+//     res.status(500).json({
+//       error: 'Session lookup failed',
+//       details: error.message
+//     });
+//   }
+// });
 
 // DISABLED: This route is now handled in production.js with Ollama integration
 // router.post('/session/:sessionId/message', async (req, res) => {
