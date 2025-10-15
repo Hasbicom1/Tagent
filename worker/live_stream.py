@@ -33,11 +33,23 @@ class LiveBrowserStream:
     async def start(self):
         """Initialize browser and start streaming"""
         logger.info(f"🎬 STREAM: Starting live browser stream for session: {self.session_id}")
-        
+
         try:
             # Connect to main backend
             logger.info(f"🔌 STREAM: Connecting to backend WebSocket: {self.backend_ws_url}")
-            self.ws = await websockets.connect(self.backend_ws_url)
+            # Add Origin header for security validation (required by backend)
+            origin = (
+                os.getenv('BACKEND_ORIGIN')
+                or (
+                    'https://www.onedollaragent.ai'
+                    if (os.getenv('NODE_ENV') == 'production' or os.getenv('RAILWAY_ENVIRONMENT') == 'production')
+                    else 'http://localhost:8080'
+                )
+            )
+            self.ws = await websockets.connect(
+                self.backend_ws_url,
+                extra_headers={'Origin': origin}
+            )
             logger.info(f"✅ STREAM: Connected to backend: {self.backend_ws_url}")
             
             # Start Playwright with enhanced args for Railway deployment

@@ -135,11 +135,21 @@ async def start_agent_for_session(session_id: str, websocket_token: str = None):
         headers = {}
         if websocket_token:
             headers['Authorization'] = f'Bearer {websocket_token}'
+        # Add Origin header required by backend security validation
+        origin = (
+            os.getenv('BACKEND_ORIGIN')
+            or (
+                'https://www.onedollaragent.ai'
+                if (os.getenv('NODE_ENV') == 'production' or os.getenv('RAILWAY_ENVIRONMENT') == 'production')
+                else 'http://localhost:8080'
+            )
+        )
+        headers['Origin'] = origin
         
         # Connect with timeout and proper settings
         ws = await websockets.connect(
             ws_url,
-            additional_headers=headers,
+            extra_headers=headers,
             ping_interval=20,
             ping_timeout=10,
             close_timeout=5
