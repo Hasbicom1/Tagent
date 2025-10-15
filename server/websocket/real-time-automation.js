@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { RealBrowserEngine } from '../automation/real-browser-engine.js';
 import { RealAIEngine } from '../ai/real-ai-engine.js';
+import { verifyWebSocketToken } from '../jwt-utils.js';
 
 /**
  * REAL-TIME AUTOMATION WEBSOCKET
@@ -42,6 +43,13 @@ export class RealTimeAutomationSocket {
         status: 'connected',
         message: 'Connected to real-time automation system'
       });
+      // Unified typed protocol: expose connection status for client
+      socket.emit('message', {
+        type: 'CONNECTION_STATUS',
+        status: 'connected',
+        timestamp: new Date().toISOString(),
+        messageId: `conn-${Date.now()}`
+      });
       
       // Handle automation requests
       socket.on('requestAutomation', async (data) => {
@@ -66,6 +74,144 @@ export class RealTimeAutomationSocket {
       // Handle navigation requests
       socket.on('navigateTo', async (data) => {
         await this.handleNavigationRequest(socket, data);
+      });
+
+      // Handle unified typed WebSocket protocol over Socket.IO
+      socket.on('message', (data) => {
+        const msg = typeof data === 'string' ? (() => { try { return JSON.parse(data); } catch { return null; } })() : data;
+        if (!msg || typeof msg !== 'object') {
+          console.warn('⚠️ REAL-TIME: Invalid typed message payload:', data);
+          socket.emit('message', {
+            type: 'ERROR',
+            error: 'INVALID_JSON',
+            code: 'INVALID_JSON',
+            timestamp: new Date().toISOString(),
+            messageId: `err-${Date.now()}`
+          });
+          return;
+        }
+
+        const type = msg.type;
+        switch (type) {
+          case 'AUTHENTICATE': {
+            const token = msg.sessionToken;
+            const agentId = msg.agentId;
+            console.log('🔐 REAL-TIME: AUTHENTICATE received', { hasToken: !!token, agentId });
+
+            if (!token || !agentId) {
+              socket.emit('message', {
+                type: 'ERROR',
+                error: 'Valid session token required for authentication',
+                code: !token ? 'MISSING_TOKEN' : 'MISSING_AGENT_ID',
+                timestamp: new Date().toISOString(),
+                messageId: `err-${Date.now()}`
+              });
+              return;
+            }
+
+            try {
+              const payload = verifyWebSocketToken(token);
+              if (!payload || payload.agentId !== agentId) {
+                console.warn('🚫 REAL-TIME: JWT agentId mismatch:', { tokenAgentId: payload?.agentId, agentId });
+                socket.emit('message', {
+                  type: 'ERROR',
+                  error: 'SESSION_PROTOCOL_BREACH: JWT agent validation failed',
+                  code: 'INVALID_TOKEN',
+                  timestamp: new Date().toISOString(),
+                  messageId: `err-${Date.now()}`
+                });
+                return;
+              }
+
+              // Track auth state on socket
+              socket.data = socket.data || {};
+              socket.data.authenticatedAgentId = agentId;
+              socket.data.sessionId = payload.sessionId;
+              socket.data.subscriptions = socket.data.subscriptions || new Set();
+
+              console.log('✅ REAL-TIME: Client authenticated', { socketId: socket.id, agentId, sessionId: payload.sessionId });
+
+              socket.emit('message', {
+                type: 'AUTHENTICATED',
+                timestamp: new Date().toISOString(),
+                messageId: `auth-${Date.now()}`
+              });
+            } catch (err) {
+              console.error('❌ REAL-TIME: JWT verification failed:', err?.message || err);
+              socket.emit('message', {
+                type: 'ERROR',
+                error: 'NEURAL_AUTHENTICATION_FAILED: Liberation protocol access denied',
+                code: 'AUTH_ERROR',
+                details: { message: err?.message },
+                timestamp: new Date().toISOString(),
+                messageId: `err-${Date.now()}`
+              });
+            }
+            break;
+          }
+
+          case 'PING': {
+            socket.emit('message', {
+              type: 'PONG',
+              timestamp: new Date().toISOString(),
+              messageId: `pong-${Date.now()}`
+            });
+            break;
+          }
+
+          case 'SUBSCRIBE': {
+            const { subscriptionType, targetId } = msg || {};
+            console.log('📥 REAL-TIME: SUBSCRIBE', { subscriptionType, targetId });
+
+            socket.data = socket.data || {};
+            socket.data.subscriptions = socket.data.subscriptions || new Set();
+            if (subscriptionType && targetId) {
+              socket.data.subscriptions.add(`${subscriptionType}:${targetId}`);
+            }
+
+            socket.emit('message', {
+              type: 'SUBSCRIBED',
+              subscriptionType,
+              targetId,
+              timestamp: new Date().toISOString(),
+              messageId: `sub-${Date.now()}`
+            });
+            break;
+          }
+
+          case 'UNSUBSCRIBE': {
+            const { subscriptionType, targetId } = msg || {};
+            console.log('📥 REAL-TIME: UNSUBSCRIBE', { subscriptionType, targetId });
+
+            try {
+              socket.data = socket.data || {};
+              if (socket.data.subscriptions && subscriptionType && targetId) {
+                socket.data.subscriptions.delete(`${subscriptionType}:${targetId}`);
+              }
+            } catch (_) {}
+
+            socket.emit('message', {
+              type: 'UNSUBSCRIBED',
+              subscriptionType,
+              targetId,
+              timestamp: new Date().toISOString(),
+              messageId: `unsub-${Date.now()}`
+            });
+            break;
+          }
+
+          default: {
+            console.warn('⚠️ REAL-TIME: Unknown typed message type:', type);
+            socket.emit('message', {
+              type: 'ERROR',
+              error: 'Unknown message type',
+              code: 'UNKNOWN_MESSAGE_TYPE',
+              details: { type },
+              timestamp: new Date().toISOString(),
+              messageId: `err-${Date.now()}`
+            });
+          }
+        }
       });
 
       // NEW: Handle automation session events
@@ -102,6 +248,15 @@ export class RealTimeAutomationSocket {
       socket.on('disconnect', () => {
         console.log(`🔌 REAL-TIME: Client disconnected: ${socket.id}`);
         this.activeSessions.delete(socket.id);
+        // Unified typed protocol: notify disconnection
+        try {
+          socket.emit('message', {
+            type: 'CONNECTION_STATUS',
+            status: 'disconnected',
+            timestamp: new Date().toISOString(),
+            messageId: `conn-${Date.now()}`
+          });
+        } catch (e) {}
       });
     });
     

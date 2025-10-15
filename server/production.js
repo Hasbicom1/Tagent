@@ -819,19 +819,9 @@ app.get('/api/session/:sessionId', async (req, res) => {
     console.log('✅ PRODUCTION: Session is active, time remaining:', timeRemaining, 'minutes');
     
     // CRITICAL FIX: Generate JWT token for WebSocket authentication
-    const jwt = require('jsonwebtoken');
-    const tokenExpiration = Math.floor((expiresAt.getTime()) / 1000);
-    const jwtPayload = {
-      agentId: req.params.sessionId,
-      sessionId: req.params.sessionId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: tokenExpiration,
-      iss: 'phoenix-agent-system',
-      aud: 'websocket-client'
-    };
-    
-    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'dev-secret-key-replace-in-production');
-    console.log('🔐 PRODUCTION: JWT token generated for WebSocket authentication');
+    const { generateWebSocketToken } = await import('./jwt-utils.js');
+    const jwtToken = generateWebSocketToken(req.params.sessionId, req.params.sessionId);
+    console.log('🔐 PRODUCTION: WebSocket token generated (type websocket_auth)');
     
     res.json({
       sessionId: req.params.sessionId,

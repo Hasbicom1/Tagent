@@ -113,7 +113,10 @@ export function BrowserStreamViewer({
     }
 
     // Connect to backend WebSocket for live stream WITH JWT token
-    const wsUrl = `wss://www.onedollaragent.ai/ws/view/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
+    // Use current host and protocol to avoid hardcoded production domain
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws/view/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
     console.log('🔌 Connecting to WebSocket with JWT authentication...');
     
     const ws = new WebSocket(wsUrl);
