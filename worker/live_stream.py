@@ -32,14 +32,20 @@ class LiveBrowserStream:
 
         if redis_url:
             parsed = urlparse(redis_url)
-            self.redis_client = redis.Redis(
-                host=parsed.hostname or 'redis.railway.internal',
-                port=parsed.port or 6379,
-                password=parsed.password,
-                username=parsed.username or 'default',
-                decode_responses=True,
-                socket_connect_timeout=5
-            )
+            # Build connection kwargs per requested spec
+            redis_kwargs = {
+                'host': parsed.hostname or 'redis.railway.internal',
+                'port': parsed.port or 6379,
+                'decode_responses': True,
+            }
+            if parsed.password:
+                redis_kwargs['password'] = parsed.password
+            # Add username if present, otherwise default
+            if parsed.username:
+                redis_kwargs['username'] = parsed.username
+            else:
+                redis_kwargs['username'] = 'default'
+            self.redis_client = redis.Redis(**redis_kwargs)
         else:
             self.redis_client = redis.Redis(
                 host=os.getenv('REDISHOST', 'redis.railway.internal'),
