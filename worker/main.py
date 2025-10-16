@@ -19,6 +19,7 @@ import redis
 from rq import Queue, Worker
 import logging
 from live_stream import LiveBrowserStream
+from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(
@@ -75,6 +76,25 @@ def compute_backend_ws_url() -> str:
 BACKEND_WS_URL = compute_backend_ws_url()
 logger.info(f"🌐 WORKER: Computed BACKEND_WS_URL base: {BACKEND_WS_URL}")
 
+# Redis auth fallback helper
+def _mask_redis_url(url: str) -> str:
+    if '@' in url:
+        return re.sub(r'redis:\/\/[^@]*@', 'redis://***:***@', url)
+    return url
+
+def get_redis_client():
+    password = os.getenv('REDIS_PASSWORD') or os.getenv('RAILWAY_REDIS_PASSWORD')
+    username = os.getenv('REDIS_USERNAME') or os.getenv('RAILWAY_REDIS_USERNAME')
+    masked = _mask_redis_url(REDIS_URL)
+    logger.info(f"🔍 WORKER: Redis config | url: {masked} | hasPassword: {bool(password)} | hasUsername: {bool(username)}")
+    if ('@' in REDIS_URL) or (not password and not username):
+        return redis.from_url(REDIS_URL)
+    parsed = urlparse(REDIS_URL)
+    use_ssl = parsed.scheme == 'rediss'
+    host = parsed.hostname or 'localhost'
+    port = parsed.port or 6379
+    return redis.Redis(host=host, port=port, username=username, password=password, ssl=use_ssl)
+
 # Define lifespan function BEFORE using it
 from contextlib import asynccontextmanager
 
@@ -105,7 +125,7 @@ active_streams = {}
 async def provision_loop():
     """Listen for new sessions to provision"""
     logger.info("🔄 WORKER: Starting provision loop...")
-    redis_conn = redis.from_url(REDIS_URL)
+    redis_conn = get_redis_client()
     
     # Test Redis connection
     try:
@@ -186,7 +206,7 @@ async def start_agent_for_session(session_id: str, websocket_token: str = None):
         
         # Mark session as failed
         try:
-            redis_conn = redis.from_url(REDIS_URL)
+            redis_conn = get_redis_client()
             redis_conn.hset(f"session:{session_id}", mapping={
                 "status": "error",
                 "error": str(e),
@@ -207,7 +227,7 @@ app.add_middleware(
 
 # Redis connection
 try:
-    redis_client = redis.from_url(REDIS_URL)
+    redis_client = get_redis_client()
     task_queue = Queue('browser-automation', connection=redis_client)
     logger.info(f"✅ Connected to Redis: {REDIS_URL[:30]}...")
 except Exception as e:

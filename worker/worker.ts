@@ -17,7 +17,7 @@ import { performance } from 'perf_hooks';
 // Environment configuration
 const config = {
   workerId: process.env.WORKER_ID || `worker-${Math.random().toString(36).substr(2, 9)}`,
-  redisUrl: process.env.REDIS_URL || null, // ✅ Allow null for development mode
+  redisUrl: process.env.REDIS_PRIVATE_URL || process.env.REDIS_URL || null, // ✅ Prefer internal URL; allow null for dev
   maxConcurrentTasks: parseInt(process.env.MAX_CONCURRENT_TASKS || '3'),
   taskTimeout: parseInt(process.env.TASK_TIMEOUT || '300000'), // 5 minutes
   browserType: process.env.BROWSER_TYPE as 'chromium' | 'firefox' | 'webkit' || 'chromium',
@@ -49,11 +49,22 @@ class ContainerWorker {
     // ✅ DEV MODE: Skip Redis in development, connect to server's in-memory queue
     if (config.redisUrl) {
       try {
+        const redisPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD || undefined;
+        const redisUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || undefined;
+
+        this.log('🔍 Worker Redis Config', {
+          url: this.maskRedisUrl(config.redisUrl),
+          hasPassword: !!redisPassword,
+          hasUsername: !!redisUsername,
+        });
+
         // Test Redis connection first
         const testRedis = new Redis(config.redisUrl, {
           lazyConnect: true,
           connectTimeout: 5000,
           commandTimeout: 3000,
+          password: redisPassword,
+          username: redisUsername,
         });
         
         // Don't await the ping here - delay the test until start() method
@@ -66,6 +77,8 @@ class ContainerWorker {
           keepAlive: 30000,
           connectTimeout: 10000,
           commandTimeout: 5000,
+          password: redisPassword,
+          username: redisUsername,
         });
         
         this.log('🔌 Redis client initialized (will test connection on start)');
@@ -161,21 +174,30 @@ class ContainerWorker {
 
     // Handle uncaught errors
     process.on('uncaughtException', (error) => {
-      this.log('💥 Uncaught exception:', error);
+      this.log('💥 Uncaught exception:', { 
+        message: error.message, 
+        stack: error.stack,
+        name: error.name 
+      });
       this.shutdown(1);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      this.log('🚨 Unhandled rejection:', { reason, promise });
+      this.log('🚨 Unhandled rejection:', { 
+        reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : reason, 
+        promise: promise.toString() 
+      });
       this.shutdown(1);
     });
 
     // Redis connection events
-    this.redis.on('connect', () => this.log('🔌 Redis connected'));
-    this.redis.on('ready', () => this.log('✅ Redis ready'));
-    this.redis.on('error', (error) => this.log('❌ Redis error:', error));
-    this.redis.on('close', () => this.log('🔌 Redis connection closed'));
-    this.redis.on('reconnecting', () => this.log('🔄 Redis reconnecting...'));
+    if (this.redis) {
+      this.redis.on('connect', () => this.log('🔌 Redis connected'));
+      this.redis.on('ready', () => this.log('✅ Redis ready'));
+      this.redis.on('error', (error) => this.log('❌ Redis error:', error));
+      this.redis.on('close', () => this.log('🔌 Redis connection closed'));
+      this.redis.on('reconnecting', () => this.log('🔄 Redis reconnecting...'));
+    }
 
     // Task processing events
     this.queueConsumer.on('taskStarted', (taskId) => {
@@ -295,8 +317,10 @@ class ContainerWorker {
       await this.browserEngine.cleanup();
 
       // Close Redis connection
-      this.log('🔌 Closing Redis connection...');
-      await this.redis.quit();
+      if (this.redis) {
+        this.log('🔌 Closing Redis connection...');
+        await this.redis.quit();
+      }
 
       // Close health server
       this.log('🏥 Closing health server...');
@@ -383,12 +407,17 @@ class ContainerWorker {
 }
 
 // Start the worker if this is the main module
-if (process.argv[1] === new URL(import.meta.url).pathname) {
-  const worker = new ContainerWorker();
-  worker.start().catch((error) => {
-    console.error('Failed to start worker:', error);
-    process.exit(1);
-  });
-}
+console.log('🔍 DEBUG: Checking if this is the main module...');
+console.log('import.meta.url:', import.meta.url);
+console.log('process.argv[1]:', process.argv[1]);
+console.log('file:// + process.argv[1]:', `file://${process.argv[1]}`);
+
+// Always start the worker for now to debug
+console.log('🚀 Starting worker...');
+const worker = new ContainerWorker();
+worker.start().catch((error) => {
+  console.error('Failed to start worker:', error);
+  process.exit(1);
+});
 
 export { ContainerWorker };

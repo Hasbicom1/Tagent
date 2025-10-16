@@ -78,23 +78,32 @@ export class QueueConsumer extends EventEmitter {
     try {
       this.log('🚀 Starting queue consumer...', { workerId: this.config.workerId });
 
-      // Create BullMQ worker for consuming tasks
-      this.worker = new Worker(
-        'agent-tasks', // Same queue name as main application
-        this.processJob.bind(this),
-        {
-          connection: this.redis,
-          concurrency: this.config.maxConcurrentTasks,
-          removeOnComplete: { count: 100 },
-          removeOnFail: { count: 50 },
-        }
-      );
+      // Check if Redis is available (production mode)
+      if (this.redis) {
+        // Create BullMQ worker for consuming tasks
+        this.worker = new Worker(
+          'browser-automation', // Align with producer queue name
+          this.processJob.bind(this),
+          {
+            connection: this.redis,
+            concurrency: this.config.maxConcurrentTasks,
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 50 },
+          }
+        );
 
-      // Progress updates are handled via Redis pub/sub only
-      // No separate queue needed - prevents pollution of task queue
-
-      // Setup worker event handlers
-      this.setupWorkerEvents();
+        // Setup worker event handlers
+        this.setupWorkerEvents();
+        this.log('✅ Queue consumer started with Redis connection', {
+          queueName: 'browser-automation',
+          hasPassword: !!(process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD),
+          hasUsername: !!(process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME),
+        });
+      } else {
+        // Development mode - no Redis, no BullMQ worker
+        this.log('💡 DEV MODE: Queue consumer started without Redis (development mode)');
+        this.log('📝 In development mode, tasks will be processed via direct API calls');
+      }
 
       this.isRunning = true;
       this.log('✅ Queue consumer started successfully');

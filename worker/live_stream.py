@@ -9,6 +9,7 @@ import websockets
 import json
 import logging
 import redis
+from urllib.parse import urlparse
 import os
 import time
 from datetime import datetime
@@ -32,7 +33,30 @@ class LiveBrowserStream:
             os.getenv('REDIS_PUBLIC_URL') or
             os.getenv('REDIS_URL', 'redis://localhost:6379')
         )
-        self.redis_client = redis.from_url(redis_url)
+
+        # Env-based auth fallback
+        redis_password = os.getenv('REDIS_PASSWORD') or os.getenv('RAILWAY_REDIS_PASSWORD')
+        redis_username = os.getenv('REDIS_USERNAME') or os.getenv('RAILWAY_REDIS_USERNAME')
+
+        masked_url = redis_url.replace('redis://', 'redis://***:***@') if '@' in redis_url else redis_url
+        logger.info(f"🔍 STREAM: Redis config | url: {masked_url} | hasPassword: {bool(redis_password)} | hasUsername: {bool(redis_username)}")
+
+        if ('@' in redis_url) or (not redis_password and not redis_username):
+            # URL already contains credentials or no env creds provided
+            self.redis_client = redis.from_url(redis_url)
+        else:
+            # Build client with explicit username/password
+            parsed = urlparse(redis_url)
+            use_ssl = parsed.scheme == 'rediss'
+            host = parsed.hostname or 'localhost'
+            port = parsed.port or 6379
+            self.redis_client = redis.Redis(
+                host=host,
+                port=port,
+                username=redis_username,
+                password=redis_password,
+                ssl=use_ssl
+            )
         
     async def start(self):
         """Initialize browser and start streaming"""

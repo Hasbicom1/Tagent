@@ -215,13 +215,30 @@ export class WebSocketManager {
       const { getRailwayRedisUrl } = await import('./railway-redis-2025');
       const redisConfig = getRailwayRedisUrl();
       const redisUrl = redisConfig.url;
+      const redisPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD || undefined;
+      const redisUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || undefined;
+
+      console.log('🔍 WS Redis Subscriber Config', {
+        url: redisUrl.replace(/redis:\/\/[^@]*@/, 'redis://***:***@'),
+        hasPassword: !!redisPassword,
+        hasUsername: !!redisUsername,
+      });
       
       this.redisSubscriber = new Redis(redisUrl, {
         lazyConnect: true,
         connectTimeout: 10000,
         commandTimeout: 5000,
+        password: redisPassword,
+        username: redisUsername,
       });
       
+      // Add connection listeners to subscriber
+      this.redisSubscriber.on('connect', () => {
+        log('🔌 WS: Redis subscriber connected');
+      });
+      this.redisSubscriber.on('ready', () => {
+        log('✅ WS: Redis subscriber ready');
+      });
       // Add error listener to subscriber
       this.redisSubscriber.on('error', (err) => {
         log(`⚠️  WS: Redis subscriber error: ${err.message}`);
@@ -950,8 +967,14 @@ export class WebSocketManager {
         message,
         excludeConnectionId: undefined // Broadcast to all instances
       };
-      
-      await this.redis.publish('ws:broadcast', JSON.stringify(redisMessage));
+      try {
+        await this.redis.publish('ws:broadcast', JSON.stringify(redisMessage));
+        log(`✅ WS: Redis publish ok for ${message.type}`);
+      } catch (err) {
+        log(`❌ WS: Redis publish failed for ${message.type}: ${err}`);
+      }
+    } else {
+      log('⚠️ WS: Redis not configured, broadcast only local instance');
     }
 
     log(`📢 WS: Broadcasted ${message.type} to ${targetConnections.size} connections`);
