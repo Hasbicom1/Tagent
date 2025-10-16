@@ -72,8 +72,25 @@ class SimpleRedisSingleton {
       console.log('🔧 SIMPLE REDIS: Connecting to Redis...');
       console.log(`   URL: ${redisUrl.substring(0, 30)}...`);
       
+      // Inject credentials from env if present and missing in URL
+      try {
+        const u = new URL(redisUrl);
+        const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+        const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPassword ? 'default' : undefined);
+        if (envPassword && !u.password) {
+          if (!u.username && envUsername) {
+            u.username = envUsername;
+          }
+          u.password = envPassword;
+          redisUrl = u.toString();
+        } else if (!u.username && envUsername && u.password) {
+          u.username = envUsername;
+          redisUrl = u.toString();
+        }
+      } catch {}
+      
       // Create Redis client with Railway-optimized configuration
-      this.redis = new Redis(redisUrl, {
+      const clientOptions = {
         retryDelayOnFailover: 100,
         maxRetriesPerRequest: 3,
         lazyConnect: true,
@@ -84,7 +101,15 @@ class SimpleRedisSingleton {
         family: 4, // Force IPv4
         keepAlive: true,
         enableReadyCheck: true
-      });
+      };
+
+      // Provide username/password options as a fallback
+      const envPasswordOpt = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+      const envUsernameOpt = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPasswordOpt ? 'default' : undefined);
+      if (envPasswordOpt) clientOptions.password = envPasswordOpt;
+      if (envUsernameOpt) clientOptions.username = envUsernameOpt;
+
+      this.redis = new Redis(redisUrl, clientOptions);
 
       // Test connection
       await this.redis.ping();

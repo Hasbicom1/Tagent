@@ -126,8 +126,11 @@ export function getRailwayRedisUrl(): RailwayRedisConfig {
       console.log(`✅ RAILWAY 2025: Found ${candidate.source}: ${candidate.key}`);
       console.log(`   URL format: ${url.substring(0, 30)}...`);
       
+      // Ensure authentication credentials are present in the URL if available from env
+      const securedUrl = ensureAuthInRedisUrl(url);
+      
       // Validate Redis URL format with 2025 patterns
-      if (isValidRailwayRedisUrl(url)) {
+      if (isValidRailwayRedisUrl(securedUrl)) {
         const isInternal = url.includes('redis.railway.internal') || 
                           url.includes('localhost') ||
                           url.includes('127.0.0.1');
@@ -138,7 +141,7 @@ export function getRailwayRedisUrl(): RailwayRedisConfig {
         console.log(`   Railway: ${railwayInfo.isRailway}`);
         
         return {
-          url,
+          url: securedUrl,
           source: candidate.source,
           isRailway: railwayInfo.isRailway,
           isInternal,
@@ -203,6 +206,40 @@ function isValidRailwayRedisUrl(url: string): boolean {
 }
 
 /**
+ * Ensure Redis URL includes authentication credentials when available in env.
+ */
+function ensureAuthInRedisUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const hasPassword = !!u.password;
+    const hasUsername = !!u.username;
+
+    const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+    const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || 'default';
+
+    if (hasPassword) {
+      // If password is present but username missing, set default username when applicable
+      if (!hasUsername && envPassword) {
+        u.username = envUsername;
+      }
+      return u.toString();
+    }
+
+    if (!envPassword) {
+      return url; // No credentials available to inject
+    }
+
+    if (!hasUsername) {
+      u.username = envUsername;
+    }
+    u.password = envPassword;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * RAILWAY 2025: Modern Redis client configuration
  */
 export function createRailwayRedisClient(config: RailwayRedisConfig): Redis {
@@ -258,7 +295,7 @@ export function createRailwayRedisClient(config: RailwayRedisConfig): Redis {
     }
   } : {};
   
-  const finalConfig = {
+  const finalConfig: any = {
     ...baseConfig,
     ...serviceConfig,
     ...internalConfig
@@ -273,7 +310,18 @@ export function createRailwayRedisClient(config: RailwayRedisConfig): Redis {
     serviceType: serviceType
   });
   
-  const redis = new Redis(url, finalConfig);
+  // Inject credentials from env into options as a fallback
+  const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+  const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPassword ? 'default' : undefined);
+  if (envPassword) {
+    finalConfig.password = envPassword;
+  }
+  if (envUsername) {
+    finalConfig.username = envUsername;
+  }
+
+  const urlWithAuth = ensureAuthInRedisUrl(url);
+  const redis = new Redis(urlWithAuth, finalConfig);
   
   // RAILWAY 2025: Enhanced error handling with Railway context
   redis.on('error', (error) => {

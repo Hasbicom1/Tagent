@@ -39,7 +39,24 @@ export async function initQueue(redisUrl) {
   try {
     logQueue('INFO', 'Connecting to Redis for task queue...');
     
-    redisConnection = new Redis(redisUrl, {
+    // Inject credentials from env into URL if missing
+    try {
+      const u = new URL(redisUrl);
+      const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+      const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPassword ? 'default' : undefined);
+      if (envPassword && !u.password) {
+        if (!u.username && envUsername) {
+          u.username = envUsername;
+        }
+        u.password = envPassword;
+        redisUrl = u.toString();
+      } else if (!u.username && envUsername && u.password) {
+        u.username = envUsername;
+        redisUrl = u.toString();
+      }
+    } catch {}
+
+    const connectionOptions: any = {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       retryStrategy(times) {
@@ -47,7 +64,15 @@ export async function initQueue(redisUrl) {
         logQueue('DEBUG', `Redis retry attempt ${times}, delay: ${delay}ms`);
         return delay;
       }
-    });
+    };
+
+    // Provide username/password options as a fallback for ioredis
+    const envPasswordOpt = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+    const envUsernameOpt = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPasswordOpt ? 'default' : undefined);
+    if (envPasswordOpt) connectionOptions.password = envPasswordOpt;
+    if (envUsernameOpt) connectionOptions.username = envUsernameOpt;
+
+    redisConnection = new Redis(redisUrl, connectionOptions);
 
     // Add Redis event listeners for debugging
     redisConnection.on('connect', () => {

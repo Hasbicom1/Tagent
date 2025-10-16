@@ -55,7 +55,8 @@ export function getRedisUrl(): RedisConfig {
       console.log(`   URL format: ${url.substring(0, 20)}...`);
       
       // Validate Redis URL format
-      if (isValidRedisUrl(url)) {
+      const securedUrl = ensureAuthInUrl(url);
+      if (isValidRedisUrl(securedUrl)) {
         const isInternal = url.includes('redis.railway.internal') || url.includes('localhost');
         
         console.log(`   Source: ${candidate.source}`);
@@ -63,7 +64,7 @@ export function getRedisUrl(): RedisConfig {
         console.log(`   Railway: ${isRailway}`);
         
         return {
-          url,
+          url: securedUrl,
           source: candidate.source,
           isRailway,
           isInternal
@@ -104,6 +105,37 @@ function isValidRedisUrl(url: string): boolean {
   ];
   
   return redisPatterns.some(pattern => pattern.test(url));
+}
+
+// Ensure Redis URL includes credentials if available
+function ensureAuthInUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const hasPassword = !!u.password;
+    const hasUsername = !!u.username;
+
+    const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+    const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || 'default';
+
+    if (hasPassword) {
+      if (!hasUsername && envPassword) {
+        u.username = envUsername;
+      }
+      return u.toString();
+    }
+
+    if (!envPassword) {
+      return url;
+    }
+
+    if (!hasUsername) {
+      u.username = envUsername;
+    }
+    u.password = envPassword;
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -166,7 +198,7 @@ export function createRedisClient(config: RedisConfig): Redis {
     }
   } : {};
   
-  const finalConfig = {
+  const finalConfig: any = {
     ...baseConfig,
     ...railwayConfig,
     ...internalConfig
@@ -180,7 +212,18 @@ export function createRedisClient(config: RedisConfig): Redis {
     lazyConnect: finalConfig.lazyConnect
   });
   
-  const redis = new Redis(url, finalConfig as any);
+  // Inject credentials from env into options as a fallback
+  const envPassword = process.env.REDIS_PASSWORD || process.env.RAILWAY_REDIS_PASSWORD;
+  const envUsername = process.env.REDIS_USERNAME || process.env.RAILWAY_REDIS_USERNAME || (envPassword ? 'default' : undefined);
+  if (envPassword) {
+    finalConfig.password = envPassword;
+  }
+  if (envUsername) {
+    finalConfig.username = envUsername;
+  }
+
+  const urlWithAuth = ensureAuthInUrl(url);
+  const redis = new Redis(urlWithAuth, finalConfig as any);
   
   // Enhanced error handling
   redis.on('error', (error) => {
