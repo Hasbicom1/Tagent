@@ -33,11 +33,12 @@ class LiveBrowserStream:
         if redis_url:
             parsed = urlparse(redis_url)
             self.redis_client = redis.Redis(
-                host=parsed.hostname,
+                host=parsed.hostname or 'redis.railway.internal',
                 port=parsed.port or 6379,
                 password=parsed.password,
                 username=parsed.username or 'default',
-                decode_responses=True
+                decode_responses=True,
+                socket_connect_timeout=5
             )
         else:
             self.redis_client = redis.Redis(
