@@ -56,7 +56,7 @@ export async function initQueue(redisUrl) {
       }
     } catch {}
 
-    const connectionOptions: any = {
+    const connectionOptions = {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       retryStrategy(times) {
