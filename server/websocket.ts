@@ -224,13 +224,16 @@ export class WebSocketManager {
         hasUsername: !!redisUsername,
       });
       
-      this.redisSubscriber = new Redis(redisUrl, {
-        lazyConnect: true,
-        connectTimeout: 10000,
-        commandTimeout: 5000,
-        password: redisPassword,
-        username: redisUsername,
-      });
+      const redis_url = process.env.REDIS_PRIVATE_URL || process.env.REDIS_URL;
+      const pubSubClient = redis_url
+        ? new Redis(redis_url)
+        : new Redis({
+            host: process.env.REDISHOST,
+            port: parseInt(process.env.REDISPORT || '6379'),
+            password: process.env.REDIS_PASSWORD,
+            username: process.env.REDISUSER || 'default'
+          });
+      this.redisSubscriber = pubSubClient;
       
       // Add connection listeners to subscriber
       this.redisSubscriber.on('connect', () => {
