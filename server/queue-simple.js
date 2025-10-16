@@ -331,3 +331,62 @@ export async function queueBrowserJobAfterPayment(sessionId, agentId, websocketT
   }
 }
 
+// Minimal compatibility exports used by api-routes.js
+// These mirror the shape expected by routes without refactoring the queue system
+export const TaskPriority = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH'
+};
+
+export const TaskType = {
+  BROWSER_AUTOMATION: 'BROWSER_AUTOMATION',
+  SESSION_START: 'SESSION_START',
+  SESSION_END: 'SESSION_END'
+};
+
+// Lightweight addTask wrapper mapping known task types to simple-queue jobs
+export async function addTask(type, payload, priority = TaskPriority.MEDIUM, delay = 0) {
+  logQueue('INFO', 'addTask called', { type, sessionId: payload?.sessionId, agentId: payload?.agentId });
+
+  if (!taskQueue) {
+    logQueue('ERROR', 'Queue not initialized - cannot add task');
+    throw new Error('Queue not initialized');
+  }
+
+  const jobName =
+    type === TaskType.BROWSER_AUTOMATION ? 'automation' :
+    type === TaskType.SESSION_START ? 'browser_launch' :
+    type === TaskType.SESSION_END ? 'session_end' : 'automation';
+
+  const priorityValue =
+    priority === TaskPriority.HIGH ? 1 :
+    priority === TaskPriority.MEDIUM ? 5 : 10;
+
+  const data = {
+    type,
+    payload,
+    sessionId: payload?.sessionId,
+    agentId: payload?.agentId,
+    timestamp: new Date().toISOString(),
+    source: 'api-routes'
+  };
+
+  const jobOptions = {
+    priority: priorityValue,
+    delay: delay || 0,
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3
+  };
+
+  try {
+    const job = await taskQueue.add(jobName, data, jobOptions);
+    logQueue('SUCCESS', 'Task added', { type, jobId: job.id, jobName });
+    return job.id;
+  } catch (error) {
+    logQueue('ERROR', 'Failed to add task', { error: error.message, type });
+    throw error;
+  }
+}
+

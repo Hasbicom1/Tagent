@@ -185,8 +185,8 @@ router.post('/checkout-success', async (req, res) => {
       });
     }
 
-    // Import task queue functions
-    const { addTask, TaskType, TaskPriority } = await import('./server/queue.js');
+    // Import task queue functions (use simple queue implementation)
+    const { addTask, TaskType, TaskPriority } = await import('./queue-simple.js');
 
     // Verify payment with Stripe
     const { default: Stripe } = await import('stripe');
