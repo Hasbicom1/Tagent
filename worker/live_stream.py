@@ -31,10 +31,13 @@ class LiveBrowserStream:
         redis_url = os.getenv('REDIS_PRIVATE_URL') or os.getenv('REDIS_URL')
 
         if redis_url:
-            self.redis_client = redis.from_url(
-                redis_url,
-                decode_responses=True,
-                username='default'
+            parsed = urlparse(redis_url)
+            self.redis_client = redis.Redis(
+                host=parsed.hostname,
+                port=parsed.port or 6379,
+                password=parsed.password,
+                username=parsed.username or 'default',
+                decode_responses=True
             )
         else:
             self.redis_client = redis.Redis(
