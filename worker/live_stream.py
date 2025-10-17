@@ -32,6 +32,13 @@ class LiveBrowserStream:
 
         if redis_url:
             parsed = urlparse(redis_url)
+            # Debug: show parsed URL components
+            print(f"[REDIS DEBUG] Parsed URL:")
+            print(f"  hostname: {parsed.hostname}")
+            print(f"  port: {parsed.port}")
+            print(f"  username: {parsed.username}")
+            print(f"  password: {'***' if parsed.password else None}")
+
             # Build connection kwargs per requested spec
             redis_kwargs = {
                 'host': parsed.hostname or 'redis.railway.internal',
@@ -40,11 +47,13 @@ class LiveBrowserStream:
             }
             if parsed.password:
                 redis_kwargs['password'] = parsed.password
-            # Add username if present, otherwise default
-            if parsed.username:
-                redis_kwargs['username'] = parsed.username
-            else:
-                redis_kwargs['username'] = 'default'
+
+            # CRITICAL: Always set username (Railway requires 'default')
+            redis_kwargs['username'] = parsed.username if parsed.username else 'default'
+
+            print(f"[REDIS DEBUG] Final kwargs keys: {list(redis_kwargs.keys())}")
+            print(f"[REDIS DEBUG] Username being used: {redis_kwargs.get('username')}")
+
             self.redis_client = redis.Redis(**redis_kwargs)
         else:
             # Fallback to individual environment variables
