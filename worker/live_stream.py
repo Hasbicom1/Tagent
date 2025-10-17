@@ -47,13 +47,34 @@ class LiveBrowserStream:
                 redis_kwargs['username'] = 'default'
             self.redis_client = redis.Redis(**redis_kwargs)
         else:
+            # Fallback to individual environment variables
+            redis_host = os.getenv('REDISHOST', 'redis.railway.internal')
+            redis_port = int(os.getenv('REDISPORT', '6379'))
+            redis_password = os.getenv('REDIS_PASSWORD')
+            redis_username = 'default'  # Railway Redis requires username
+            
+            print(f"[REDIS] Using individual env vars:")
+            print(f"  Host: {redis_host}")
+            print(f"  Port: {redis_port}")
+            print(f"  Has Password: {bool(redis_password)}")
+            print(f"  Username: {redis_username}")
+            
             self.redis_client = redis.Redis(
-                host=os.getenv('REDISHOST', 'redis.railway.internal'),
-                port=int(os.getenv('REDISPORT', '6379')),
-                password=os.getenv('REDIS_PASSWORD'),
-                username='default',
-                decode_responses=True
+                host=redis_host,
+                port=redis_port,
+                password=redis_password,
+                username=redis_username,
+                decode_responses=True,
+                socket_connect_timeout=5
             )
+            
+            # Test connection
+            try:
+                self.redis_client.ping()
+                print(f"✅ [REDIS] Fallback connection successful")
+            except Exception as e:
+                print(f"❌ [REDIS] Fallback connection failed: {e}")
+                raise
         
     async def start(self):
         """Initialize browser and start streaming"""
