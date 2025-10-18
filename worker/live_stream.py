@@ -51,10 +51,27 @@ class LiveBrowserStream:
             # CRITICAL: Always set username (Railway requires 'default')
             redis_kwargs['username'] = parsed.username if parsed.username else 'default'
 
+            # Fallback: inject password from env if missing in URL
+            if 'password' not in redis_kwargs or not redis_kwargs['password']:
+                env_pw = os.getenv('REDIS_PASSWORD') or os.getenv('RAILWAY_REDIS_PASSWORD')
+                if env_pw:
+                    redis_kwargs['password'] = env_pw
+                    print("[REDIS DEBUG] Injected password from env due to missing URL password")
+
             print(f"[REDIS DEBUG] Final kwargs keys: {list(redis_kwargs.keys())}")
             print(f"[REDIS DEBUG] Username being used: {redis_kwargs.get('username')}")
+            masked_url = redis_url.replace('redis://', '').split('@')
+            masked_url = f"redis://***:***@{masked_url[1]}" if len(masked_url) > 1 else "redis://***"
+            print(f"[REDIS DEBUG] URL-based config: {masked_url}")
 
             self.redis_client = redis.Redis(**redis_kwargs)
+            # Test connection early to surface auth errors
+            try:
+                self.redis_client.ping()
+                print("✅ [REDIS] URL-based connection successful")
+            except Exception as e:
+                print(f"❌ [REDIS] URL-based connection failed: {e}")
+                raise
         else:
             # Fallback to individual environment variables
             redis_host = os.getenv('REDISHOST', 'redis.railway.internal')
