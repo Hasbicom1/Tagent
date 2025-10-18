@@ -71,7 +71,15 @@ export class WebSocketManager {
     try {
       // Initialize Redis connections if enabled
       if (this.config.enableRedisSync) {
-        await this.initializeRedis();
+        try {
+          await this.initializeRedis();
+        } catch (err) {
+          log(`⚠️  WS: Redis coordination unavailable, running single-instance mode: ${err instanceof Error ? err.message : err}`);
+          // Disable Redis sync so downstream code won’t use subscriber
+          this.config.enableRedisSync = false;
+          this.redisSubscriber = null;
+          this.redis = this.redis || null;
+        }
       }
 
       // Initialize rate limiter with Redis connection
