@@ -226,12 +226,22 @@ export class WebSocketManager {
       
       const redis_url = process.env.REDIS_PRIVATE_URL || process.env.REDIS_URL;
       const pubSubClient = redis_url
-        ? new Redis(redis_url)
+        ? new Redis(redis_url, {
+            // Ensure auth even if URL lacks credentials
+            password: redisPassword,
+            username: redisUsername || (redisPassword ? 'default' : undefined),
+            lazyConnect: true,
+            connectTimeout: 10000,
+            commandTimeout: 5000,
+          })
         : new Redis({
             host: process.env.REDISHOST,
             port: parseInt(process.env.REDISPORT || '6379'),
             password: process.env.REDIS_PASSWORD,
-            username: process.env.REDISUSER || 'default'
+            username: process.env.REDISUSER || 'default',
+            lazyConnect: true,
+            connectTimeout: 10000,
+            commandTimeout: 5000,
           });
       this.redisSubscriber = pubSubClient;
       
@@ -589,6 +599,18 @@ export class WebSocketManager {
 
       // CRITICAL SECURITY FIX: Validate JWT payload contains correct agentId
       const payload = jwtValidation.payload;
+      // Enforce correct token type for WebSocket authentication
+      if (!payload || payload.type !== 'websocket_auth') {
+        logSecurityEvent('session_hijacking', {
+          reason: 'jwt_type_invalid',
+          connectionId: ws.connectionId,
+          agentId,
+          tokenType: payload?.type
+        });
+        log(`🚫 WS: Authentication failed - JWT token type invalid for agent ${agentId} [${ws.connectionId}]`);
+        this.sendError(ws, 'SESSION_PROTOCOL_BREACH: JWT type invalid', 'INVALID_TOKEN');
+        return;
+      }
       if (!payload || payload.agentId !== agentId) {
         logSecurityEvent('session_hijacking', {
           reason: 'jwt_agent_mismatch',
