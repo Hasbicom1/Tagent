@@ -48,8 +48,12 @@ class LiveBrowserStream:
             if parsed.password:
                 redis_kwargs['password'] = parsed.password
 
-            # CRITICAL: Always set username (Railway requires 'default')
-            redis_kwargs['username'] = parsed.username if parsed.username else 'default'
+            # Username handling: use URL username or env override; no default fallback
+            env_user = os.getenv('REDIS_USERNAME') or os.getenv('RAILWAY_REDIS_USERNAME')
+            if parsed.username:
+                redis_kwargs['username'] = parsed.username
+            elif env_user:
+                redis_kwargs['username'] = env_user
 
             # Fallback: inject password from env if missing in URL
             if 'password' not in redis_kwargs or not redis_kwargs['password']:
@@ -77,19 +81,19 @@ class LiveBrowserStream:
             redis_host = os.getenv('REDISHOST', 'redis.railway.internal')
             redis_port = int(os.getenv('REDISPORT', '6379'))
             redis_password = os.getenv('REDIS_PASSWORD')
-            redis_username = 'default'  # Railway Redis requires username
+            redis_username = os.getenv('REDIS_USERNAME') or os.getenv('RAILWAY_REDIS_USERNAME')
             
             print(f"[REDIS] Using individual env vars:")
             print(f"  Host: {redis_host}")
             print(f"  Port: {redis_port}")
             print(f"  Has Password: {bool(redis_password)}")
-            print(f"  Username: {redis_username}")
+            print(f"  Username: {redis_username or 'N/A'}")
             
             self.redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
-                username=redis_username,
+                username=redis_username if redis_username else None,
                 decode_responses=True,
                 socket_connect_timeout=5
             )
