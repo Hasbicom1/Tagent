@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { useLocation } from 'wouter';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -59,8 +60,8 @@ const CHE_ASCII = `
  @@@@@@@@@@@@@@@@@@%=%+
  @@@@@@@@@@@@@@@@@%.%*%
   @@@@@@@@@@@@@@-.. #*@
-    @@@@@@@@@@@@#%#+#:
-      @@@@@@@@@@@@@
+    @@@@@@@@@@#%#+#:
+      @@@@@@@@@@@
       [REVOLUTION]
      {AI FOR ALL}
 `;
@@ -92,6 +93,7 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [, setLocation] = useLocation();
 
   // Focus input on mount and keep focus
   useEffect(() => {
@@ -394,12 +396,13 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
       setTextReady(false);
       setCustomColor('');
       setShowSettings(false);
-      
-      // Start matrix effect
+
+      // Play matrix effect briefly, then keep user on the page
       setTimeout(() => {
         setMatrixEffect(false);
         setShowColorChoice(true);
-      }, 2000);
+        setTextReady(false);
+      }, 1200);
     };
 
     const handleSettingsClick = (e: React.MouseEvent) => {
@@ -414,6 +417,107 @@ export function CommandTerminalInterface({ onStartPayment }: CommandTerminalInte
         typewriterIntervalRef.current = null;
       }
 
+      const texts = {
+        project: `$ ./announce_project --whitelist
+// 🚀 PROJECT ANNOUNCEMENT 🚀
+// ==========================
+
+🎉 BREAKING: Revolutionary AI Platform Launched!
+// =============================================
+
+🔥 EXCLUSIVE WHITELIST ACCESS 🔥
+// =============================
+• Early access to cutting-edge AI technology
+• Priority support and exclusive features
+• Limited spots available - first come, first served
+• Join the future of AI before everyone else
+
+💎 PREMIUM FEATURES UNLOCKED
+// ==========================
+• Advanced AI agent capabilities
+• Real-time browser automation
+• Multi-modal AI interactions
+• Enterprise-grade security
+
+🚀 GET STARTED NOW
+// ================
+Ready to revolutionize your workflow? Join the whitelist today!`,
+        concept: `$ ./explain_concept --ai-revolution
+// 🧠 CONCEPT EXPLANATION 🧠
+// =========================
+
+🌟 THE AI REVOLUTION IS HERE
+// ===========================
+We're not just building another AI tool - we're creating a movement.
+
+💡 CORE PHILOSOPHY
+// ================
+• AI should be accessible to everyone
+• Technology should empower, not exclude
+• Community-driven innovation
+
+🚀 WHY IT MATTERS
+// ================
+AI should be affordable, transparent, and human-centered.
+We believe in a future where AI empowers everyone.`,
+        collaboration: `$ ./collaborate --dream-team
+// 🤝 COLLABORATION INVITATION 🤝
+// ==============================
+
+🌟 JOIN THE DREAM TEAM
+// ====================
+We're not just building a product - we're building a community.
+
+👥 WHO WE'RE LOOKING FOR
+// ======================
+• Visionaries who see AI's potential
+• Builders who want to create impact
+• Dreamers who believe in accessibility
+• Innovators who think differently
+
+🚀 COLLABORATION OPPORTUNITIES
+// ============================
+• Technical partnerships
+• Community building
+• Content creation
+• Feedback and testing
+• Strategic advisory
+
+💫 TOGETHER WE BUILD
+// =================
+The future of AI is collaborative. Join us in making AI
+accessible to everyone, everywhere, for just $1.
+
+Ready to change the world? Let's build together!`
+      };
+
+      setTypewriterText(texts[activePopup as keyof typeof texts] || '');
+      setShowSkipButton(false);
+      
+      let index = 0;
+      typewriterIntervalRef.current = setInterval(() => {
+        setTypewriterText(texts[cardType as keyof typeof texts].slice(0, index + 1));
+        index++;
+        
+        if (index >= texts[cardType as keyof typeof texts].length) {
+          if (typewriterIntervalRef.current) {
+            clearInterval(typewriterIntervalRef.current);
+            typewriterIntervalRef.current = null;
+          }
+          setShowSkipButton(true);
+        }
+      }, 30);
+    };
+
+    const skipTypewriter = () => {
+      if (typewriterIntervalRef.current) {
+        clearInterval(typewriterIntervalRef.current);
+        typewriterIntervalRef.current = null;
+      }
+      setShowSkipButton(false);
+      setTextReady(true);
+
+      // Immediately reveal full text without redirect
       const texts = {
         project: `$ ./announce_project --whitelist
 // 🚀 PROJECT ANNOUNCEMENT 🚀
@@ -499,22 +603,9 @@ accessible to everyone, everywhere, for just $1.
 Ready to change the world? Let's build together!`
       };
 
-      setTypewriterText(texts[activePopup as keyof typeof texts] || '');
-      setShowSkipButton(false);
-      
-      let index = 0;
-      typewriterIntervalRef.current = setInterval(() => {
-        setTypewriterText(texts[cardType as keyof typeof texts].slice(0, index + 1));
-        index++;
-        
-        if (index >= texts[cardType as keyof typeof texts].length) {
-          if (typewriterIntervalRef.current) {
-            clearInterval(typewriterIntervalRef.current);
-            typewriterIntervalRef.current = null;
-          }
-          setShowSkipButton(true);
-        }
-      }, 30);
+      if (activePopup) {
+        setTypewriterText(texts[activePopup as keyof typeof texts] || '');
+      }
     };
 
     const skipTypewriter = () => {
@@ -524,6 +615,10 @@ Ready to change the world? Let's build together!`
       }
       setShowSkipButton(false);
       setTextReady(true);
+      const routeMap: Record<string, string> = { project: '/classic', concept: '/live', collaboration: '/browser-chat' };
+      if (activePopup) {
+        setLocation(routeMap[activePopup] || '/classic');
+      }
     };
 
     const handleColorSelect = (color: string) => {
