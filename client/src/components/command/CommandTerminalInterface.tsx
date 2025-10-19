@@ -608,18 +608,7 @@ Ready to change the world? Let's build together!`
       }
     };
 
-    const skipTypewriter = () => {
-      if (typewriterIntervalRef.current) {
-        clearInterval(typewriterIntervalRef.current);
-        typewriterIntervalRef.current = null;
-      }
-      setShowSkipButton(false);
-      setTextReady(true);
-      const routeMap: Record<string, string> = { project: '/classic', concept: '/live', collaboration: '/browser-chat' };
-      if (activePopup) {
-        setLocation(routeMap[activePopup] || '/classic');
-      }
-    };
+
 
     const handleColorSelect = (color: string) => {
       setCustomColor(color);
