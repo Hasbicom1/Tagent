@@ -24,6 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import AboutDetailPage from "@/pages/about-detail";
+import AboutCLIPage from "@/pages/about-cli";
 
 // Component to handle successful Stripe Checkout return
 function CheckoutSuccess() {
@@ -287,8 +289,21 @@ function Router() {
       <Route path="/browser/:sessionId" component={({ params }) => (
         <BrowserInterface sessionId={params.sessionId} />
       )} />
-      <Route path="/payment" component={() => (
-        <PaymentFlow onPaymentSuccess={() => {}} />
+      <Route path="/about/:section" component={({ params }) => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AboutDetailPage section={params.section} />
+        </div>
+      )} />
+      <Route path="/about-cli" component={() => (
+        <div>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          <AboutCLIPage />
+        </div>
       )} />
       <Route path="/" component={() => (
         <div>
