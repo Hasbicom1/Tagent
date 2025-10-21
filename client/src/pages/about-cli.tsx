@@ -21,7 +21,7 @@ const ASCII_BG = `
 interface CLIWindowProps {
   title: string;
   subtitle: string;
-  lines: string[];
+  lines: readonly string[];
   filename: string;
 }
 

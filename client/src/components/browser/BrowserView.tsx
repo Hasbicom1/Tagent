@@ -138,9 +138,8 @@ export function BrowserView({
             <div className="h-full w-full bg-gray-900 rounded-b-lg overflow-hidden">
               <VNCClient
                 agentId={agentId}
-                sessionId={sessionId}
+                sessionId={sessionId || agentId}
                 autoConnect={true}
-                onStatusChange={handleStatusChange}
               />
             </div>
           ) : (

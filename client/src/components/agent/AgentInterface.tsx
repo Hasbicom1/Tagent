@@ -242,13 +242,12 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
           // Update browser view with automation result
           setBrowserView(result.result || 'Browser automation completed successfully');
           setExecutionLog(prev => [...prev, 
-            `[${new Date().toLocaleTimeString()}] EKO: ${result.result}`,
-            ...(result.steps || []).map(step => `[${new Date().toLocaleTimeString()}] Step: ${step}`)
+            `[${new Date().toLocaleTimeString()}] EKO: ${result.result}`
           ]);
           
           return {
             userMessage: content,
-            agentMessage: `✅ Browser automation completed using Eko framework:\n\n${result.result}\n\n${result.steps ? `Steps executed:\n${result.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}` : ''}`,
+            agentMessage: `✅ Browser automation completed using Eko framework:\n\n${result.result}`,
             hasExecutableTask: true,
             taskDescription: 'eko_browser_automation'
           };
@@ -772,12 +771,10 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
             
             <div className="p-4 border-t border-primary/10 bg-background/50 space-y-4">
               {/* Eko Agent Selector */}
-              <EkoAgentSelector
-                selectedAgent={selectedAgent}
-                onAgentChange={setSelectedAgent}
-                agentConfig={agentConfig}
-                onConfigChange={setAgentConfig}
-              />
+          <EkoAgentSelector
+            selectedAgent={selectedAgent}
+            onAgentChange={setSelectedAgent}
+          />
               
               {/* Workflow Manager Toggle */}
               <div className="flex items-center gap-2">
@@ -802,12 +799,7 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
               
               {/* Workflow Manager */}
               {showWorkflowManager && (
-                <EkoWorkflowManager
-                  workflowDescription={currentWorkflow}
-                  onWorkflowUpdate={setCurrentWorkflow}
-                  selectedAgent={selectedAgent}
-                  agentConfig={agentConfig}
-                />
+                <EkoWorkflowManager workflow={currentWorkflow} />
               )}
 
               <div className="flex gap-3">
@@ -883,8 +875,6 @@ export function AgentInterface({ agentId, timeRemaining: initialTimeRemaining }:
                           agentId={agentId}
                           sessionId={sessionInfo?.sessionId}
                           isActive={isExecuting || isBrowserAutomationActive}
-                          enableVNC={true}
-                          showControls={true}
                         />
                       </div>
                     </Card>

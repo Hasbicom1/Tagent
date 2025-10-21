@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 // Terminal typing effect component
-const TypeWriter = ({ text, delay = 50, className = "" }) => {
+const TypeWriter = ({ text, delay = 50, className = "" }: { text: string; delay?: number; className?: string }) => {
   const [displayText, setDisplayText] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
   
@@ -45,7 +45,7 @@ export function LandingPage({ onStartPayment }: LandingPageProps) {
   const [cursorVisible, setCursorVisible] = useState(true);
 
   // Terminal cursor blinking effect
-  useState(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setCursorVisible(prev => !prev);
     }, 530);

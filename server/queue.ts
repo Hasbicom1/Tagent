@@ -74,7 +74,7 @@ const getRedisConnection = async (): Promise<{ connection: ConnectionOptions }> 
     // Check if Redis is being skipped for testing
     if (process.env.SKIP_REDIS === 'true') {
       console.warn('⚠️  SKIP_REDIS=true detected - bypassing Redis requirement for queue system');
-      return null; // Return null to indicate no Redis connection
+      return null as any; // Return null to indicate no Redis connection
     }
     throw new Error('Redis singleton not available - queue system requires Redis for production deployment');
   }

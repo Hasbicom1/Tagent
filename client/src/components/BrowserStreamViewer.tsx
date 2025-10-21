@@ -6,8 +6,10 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import RFB from '@novnc/novnc/core/rfb';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
+
+// @ts-ignore - noVNC types not available
+import RFB from '@novnc/novnc/core/rfb';
 
 interface BrowserStreamViewerProps {
   sessionId: string;

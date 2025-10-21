@@ -7,7 +7,7 @@
 
 import { Eko } from '@eko-ai/eko';
 import { BrowserAgent } from '@eko-ai/eko-web';
-import type { LLMs, Agent } from '@eko-ai/eko/types';
+import type { LLMs } from '@eko-ai/eko/types';
 
 // Real Eko framework instance
 let realEko: Eko | null = null;
@@ -29,11 +29,12 @@ export async function initializeRealEko(): Promise<void> {
     // FREE Lovable AI configuration - NO API KEYS NEEDED!
     const llms: LLMs = {
       default: {
-        provider: "openai",
+        provider: "openai" as const,
         model: "google/gemini-2.5-flash",
+        apiKey: "dummy",
         config: {
           baseURL: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lovable-ai-chat`,
-          headers: {
+          defaultHeaders: {
             "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
           }
@@ -41,32 +42,11 @@ export async function initializeRealEko(): Promise<void> {
       }
     };
 
-    // Initialize VNC-enabled BrowserAgent with proper display configuration
-    const vncBrowserAgent = new BrowserAgent({
-      // Configure browser to connect to VNC-enabled instances
-      browserConfig: {
-        headless: false, // Required for VNC visibility
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-software-rasterizer'
-        ]
-      },
-      // VNC integration settings
-      vncConfig: {
-        enabled: true,
-        displayEnv: process.env.DISPLAY || ':99', // Default VNC display
-        streamingEnabled: true,
-        realTimeUpdates: true
-      }
-    });
+    // Initialize VNC-enabled BrowserAgent
+    const vncBrowserAgent = new BrowserAgent();
 
     // Initialize agents following Eko patterns with VNC support
-    const agents: Agent[] = [
-      vncBrowserAgent
-    ];
+    const agents = [vncBrowserAgent];
 
     // Create Eko instance with secure configuration and VNC support
     realEko = new Eko({ llms, agents });
@@ -125,8 +105,10 @@ export function isEkoInitialized(): boolean {
 /**
  * Get REAL Eko framework instance
  */
-export function getRealEko(): Eko {
-  return initializeRealEko();
+export async function getRealEko(): Promise<Eko> {
+  await initializeRealEko();
+  if (!realEko) throw new Error('Eko not initialized');
+  return realEko;
 }
 
 export default { initializeRealEko, executeWithRealEko, getRealEko };

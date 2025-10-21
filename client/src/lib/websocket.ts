@@ -135,7 +135,9 @@ export class WebSocketClient {
           this.setState(WSConnectionState.CONNECTED);
           this.reconnectAttempts = 0;
           this.processMessageQueue();
-          this.emit('connected', { connectionId: this.socket!.id });
+          if (this.socket?.id) {
+            this.emit('connected', { connectionId: this.socket.id });
+          }
           this.log('✅ Socket.IO connected');
           resolve();
         });
@@ -642,7 +644,7 @@ export class WebSocketClient {
   private handleDisconnection(code: number, reason: string): void {
     this.log(`WebSocket disconnected: ${code} - ${reason}`);
     this.stopHeartbeat();
-    this.ws = null;
+    this.socket = null;
     this.setState(WSConnectionState.DISCONNECTED);
     this.emit('disconnected', { reason: reason || 'Connection closed' });
 

@@ -324,7 +324,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log('✅ Multi-layer rate limiting and session security initialized');
       } catch (connectionError) {
-        testRedis.disconnect();
         throw connectionError;
       }
     } else {
@@ -1573,17 +1572,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Automation service unavailable" });
       }
 
-      const taskStatus = orchestrator.getTaskStatus(commandId);
+      const status = await getTaskStatus(commandId);
       
-      if (!taskStatus) {
+      if (!status) {
         return res.status(404).json({ error: "Command not found" });
       }
 
       res.json({
         id: commandId,
-        status: taskStatus.status,
-        result: taskStatus.result,
-        error: taskStatus.error,
+        status: status?.status || 'pending',
+        result: status?.result || null,
+        error: status?.error || null,
         agent: "AI RAi" // Always show as AI RAi to user
       });
     } catch (error: any) {
