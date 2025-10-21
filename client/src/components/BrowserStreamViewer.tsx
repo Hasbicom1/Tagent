@@ -1,11 +1,12 @@
 /**
  * LIVE BROWSER STREAMING VIEWER
  * 
- * REAL LIVE BROWSER STREAMING using Playwright CDP
- * Users see actual browser automation in real-time
+ * VNC-BASED LIVE BROWSER STREAMING using noVNC RFB client
+ * Users see actual browser automation in real-time via VNC
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import RFB from '@novnc/novnc/core/rfb';
 import { useRealtimeTaskStatus } from '@/hooks/use-realtime-task-status';
 
 interface BrowserStreamViewerProps {
@@ -19,10 +20,9 @@ export function BrowserStreamViewer({
   agentId,
   workerUrl = 'https://worker-production-6480.up.railway.app' 
 }: BrowserStreamViewerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const vncContainerRef = useRef<HTMLDivElement>(null);
+  const rfbRef = useRef<RFB | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [fps, setFps] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('Initializing...');
@@ -41,10 +41,10 @@ export function BrowserStreamViewer({
   } = useRealtimeTaskStatus(agentId, sessionId);
 
   useEffect(() => {
-    console.log('[LIVE_STREAM] Session ID:', sessionId);
-    console.log('[LIVE_STREAM] Agent ID:', agentId);
+    console.log('[VNC_STREAM] Session ID:', sessionId);
+    console.log('[VNC_STREAM] Agent ID:', agentId);
     
-    // CRITICAL FIX: Poll session status until worker is ready
+    // Poll session status until worker is ready
     pollSessionStatus();
     
     // Connect to WebSocket for real-time automation commands
@@ -53,9 +53,16 @@ export function BrowserStreamViewer({
     }
     
     setIsLoading(false);
-  }, [sessionId, agentId, workerUrl]);
 
-  // CRITICAL FIX: Poll session status until worker is ready
+    return () => {
+      // Cleanup VNC connection
+      if (rfbRef.current) {
+        rfbRef.current.disconnect();
+        rfbRef.current = null;
+      }
+    };
+  }, [sessionId, agentId]);
+
   const pollSessionStatus = async () => {
     let pollCount = 0;
     const MAX_POLLS = 30; // 60 seconds max wait time
@@ -69,12 +76,12 @@ export function BrowserStreamViewer({
         setStatus(`Waiting for browser to start... (${data.status})`);
         
         if (data.status === 'ready' && data.workerReady) {
-          console.log('✅ Worker is ready! Starting WebSocket connection...');
+          console.log('✅ Worker is ready! Starting VNC connection...');
           setIsReady(true);
           setStatus('Connected');
           
-          // NOW connect WebSocket
-          initializeLiveStream();
+          // NOW connect to VNC
+          initializeVNCStream();
         } else if (data.status === 'error') {
           console.error('❌ Worker setup failed');
           setError('Failed to initialize AI agent. Please try again.');
@@ -102,101 +109,72 @@ export function BrowserStreamViewer({
     poll();
   };
 
-  const initializeLiveStream = () => {
+  const initializeVNCStream = () => {
     // Get JWT token from session storage
     const jwtToken = sessionStorage.getItem('websocket_token');
     
     if (!jwtToken) {
-      console.error('❌ No JWT token available for WebSocket authentication');
+      console.error('❌ No JWT token available for VNC authentication');
       setError('Authentication token missing. Please refresh the page.');
       return;
     }
 
-    // Connect to backend WebSocket for live stream WITH JWT token
-    // Use current host and protocol to avoid hardcoded production domain
+    // Connect to VNC proxy endpoint
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/view/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
-    console.log('🔌 Connecting to WebSocket with JWT authentication...');
+    const wsUrl = `${protocol}//${host}/ws/vnc/${sessionId}?token=${encodeURIComponent(jwtToken)}`;
+    console.log('🔌 Connecting to VNC proxy with JWT authentication:', wsUrl);
     
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    
-    let frameCount = 0;
-    let lastTime = Date.now();
-    
-    ws.onopen = () => {
-      console.log('✅ WebSocket connected with JWT authentication');
-      setIsConnected(true);
-    };
-    
-    ws.onmessage = (event) => {
-      try {
-        const frame = JSON.parse(event.data);
-        console.log('📸 Frame received:', { type: frame.type, hasData: !!frame.data, sessionId: frame.sessionId });
-        
-        if (frame.type === 'frame' && frame.data) {
-          // Render frame on canvas
-          const canvas = canvasRef.current;
-          if (!canvas) {
-            console.warn('⚠️ Canvas not available');
-            return;
-          }
-          
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            console.warn('⚠️ Canvas context not available');
-            return;
-          }
-          
-          // Create image from Base64 JPEG
-          const img = new Image();
-          img.onload = () => {
-            // Set canvas size to match image
-            canvas.width = img.width;
-            canvas.height = img.height;
-            
-            // Draw frame
-            ctx.drawImage(img, 0, 0);
-            console.log('✅ Frame rendered on canvas');
-            
-            // Calculate FPS
-            frameCount++;
-            const now = Date.now();
-            if (now - lastTime >= 1000) {
-              setFps(frameCount);
-              frameCount = 0;
-              lastTime = now;
-            }
-          };
-          
-          img.onerror = (error) => {
-            console.error('❌ Failed to load image:', error);
-          };
-          
-          img.src = `data:image/jpeg;base64,${frame.data}`;
-        } else {
-          console.log('📨 Non-frame message received:', frame);
+    const vncContainer = vncContainerRef.current;
+    if (!vncContainer) {
+      console.error('❌ VNC container not found');
+      setError('VNC container missing');
+      return;
+    }
+
+    try {
+      // Create noVNC RFB client
+      const rfb = new RFB(vncContainer, wsUrl, {
+        credentials: { password: '' }, // No password needed for this setup
+        wsProtocols: ['binary'],
+        shared: true,
+        scaleViewport: true,
+        resizeSession: true,
+        qualityLevel: 6,
+        compressionLevel: 2
+      });
+
+      rfbRef.current = rfb;
+
+      // Handle VNC connection events
+      rfb.addEventListener('connect', () => {
+        console.log('✅ VNC connected successfully');
+        setIsConnected(true);
+        setStatus('Live');
+      });
+
+      rfb.addEventListener('disconnect', (e: any) => {
+        console.log('❌ VNC disconnected:', e.detail);
+        setIsConnected(false);
+        if (!e.detail.clean) {
+          setError('Connection lost. Attempting to reconnect...');
         }
-        
-      } catch (err) {
-        console.error('❌ Frame render error:', err);
-      }
-    };
-    
-    ws.onerror = (error) => {
-      console.error('❌ WebSocket error:', error);
-      setIsConnected(false);
-    };
-    
-    ws.onclose = () => {
-      console.log('❌ Disconnected from live stream');
-      setIsConnected(false);
-    };
-    
-    return () => {
-      ws.close();
-    };
+      });
+
+      rfb.addEventListener('securityfailure', (e: any) => {
+        console.error('❌ VNC security failure:', e.detail);
+        setError('Authentication failed');
+      });
+
+      rfb.addEventListener('credentialsrequired', () => {
+        console.error('❌ VNC credentials required');
+        setError('VNC credentials required');
+      });
+
+    } catch (err) {
+      console.error('❌ Failed to create VNC connection:', err);
+      setError('Failed to connect to live browser');
+    }
   };
 
   if (error) {
@@ -232,32 +210,30 @@ export function BrowserStreamViewer({
         <div className="flex items-center gap-4">
           <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`} />
           <span className="text-sm font-medium text-white">
-            {isConnected ? '🔴 LIVE' : '⚫ Offline'}
+            {isConnected ? '🔴 LIVE VNC' : '⚫ Offline'}
           </span>
-          <span className="text-xs text-gray-400">{fps} FPS</span>
         </div>
         <span className="text-xs text-gray-500">
           Session: {sessionId.substring(0, 16)}...
         </span>
       </div>
       
-      {/* Live Browser Canvas */}
-      <div className="flex-1 relative bg-black overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full object-contain"
-          style={{ imageRendering: 'auto' }}
-        />
-        
+      {/* VNC Display Container */}
+      <div 
+        ref={vncContainerRef}
+        id="vnc-container" 
+        className="flex-1 relative bg-black overflow-hidden"
+        style={{ width: '100%', height: '100%' }}
+      >
         {!isConnected && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center text-white">
-              <div className="text-6xl mb-4">📺</div>
+              <div className="text-6xl mb-4">🖥️</div>
               <div className="text-xl font-bold mb-2">
                 Connecting to Live Browser...
               </div>
               <div className="text-gray-400">
-                AI agents will appear here
+                VNC stream will appear here
               </div>
             </div>
           </div>
@@ -266,7 +242,7 @@ export function BrowserStreamViewer({
       
       {/* Footer */}
       <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 text-xs text-gray-500">
-        💡 100% FREE live browser streaming powered by Playwright CDP
+        💡 ZERO-COST live browser via VNC (noVNC client)
       </div>
     </div>
   );

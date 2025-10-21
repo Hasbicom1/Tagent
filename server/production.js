@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import { RealTimeAutomationSocket } from './websocket/real-time-automation.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { LiveStreamRelay } from './live-stream-relay.js';
+import { VNCWebSocketProxy } from './websocket/vnc-proxy.js';
 // WebSocketManager removed - using Socket.IO only for now
 import express from 'express';
 import { createRequire } from 'module';
@@ -1645,9 +1646,22 @@ async function initializeServer() {
   const liveStreamRelay = new LiveStreamRelay(server);
   console.log('📹 Live stream relay initialized');
 
+  // Initialize VNC WebSocket Proxy
+  const vncProxy = new VNCWebSocketProxy(
+    process.env.WORKER_VNC_HOST || 'worker.railway.internal',
+    parseInt(process.env.WORKER_VNC_PORT || '6080', 10)
+  );
+  console.log('🖥️ VNC WebSocket proxy initialized');
+
   // Handle WebSocket upgrades for live streaming
   server.on('upgrade', (request, socket, head) => {
     try {
+      // VNC proxy connections (PRIORITY 1 - handle first)
+      if (vncProxy.handleUpgrade(request, socket, head)) {
+        console.log('✅ VNC proxy handled upgrade');
+        return;
+      }
+
       // Worker stream connections
       if (liveStreamRelay.handleUpgrade(request, socket, head)) {
         return;

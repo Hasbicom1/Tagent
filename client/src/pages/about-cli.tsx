@@ -90,7 +90,7 @@ export default function AboutCLIPage() {
         "$ git clone https://github.com/agentforall/dreams.git",
         "$ cd dreams && npm i && npm run dev",
         "$ tlc invite --role=visionary --impact=high",
-        "$ curl -X POST https://api.agentforall.ai/join --data '{team:"dream"}'",
+        "$ curl -X POST https://api.agentforall.ai/join --data '{\"team\":\"dream\"}'",
         "$ tlc connect --community --feedback --build",
       ],
       filename: "about_collaboration.sh",

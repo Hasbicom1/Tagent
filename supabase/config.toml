@@ -1,0 +1,4 @@
+project_id = "oejyssijtvnyzydnwzfj"
+
+[functions.lovable-ai-chat]
+verify_jwt = false

@@ -26,25 +26,16 @@ export async function initializeRealEko(): Promise<void> {
   try {
     console.log('🚀 REAL EKO: Initializing framework with VNC support...');
     
-    // Secure LLM configuration using backend proxy
+    // FREE Lovable AI configuration - NO API KEYS NEEDED!
     const llms: LLMs = {
       default: {
         provider: "openai",
-        model: "gpt-4o",
+        model: "google/gemini-2.5-flash",
         config: {
-          baseURL: "/api/llm/proxy", // Backend proxy endpoint
+          baseURL: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lovable-ai-chat`,
           headers: {
-            "X-Client-Request": "true"
-          }
-        }
-      },
-      groq: {
-        provider: "openai", 
-        model: "llama-3.1-70b-versatile",
-        config: {
-          baseURL: "/api/llm/groq-proxy", // Groq backend proxy
-          headers: {
-            "X-Client-Request": "true"
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
           }
         }
       }
